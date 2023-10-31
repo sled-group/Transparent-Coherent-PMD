@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "travel-benchmark"
+version = "0.1.0"
+description = "Development code for Tiered Reasoning for Action-Video Equivalence (TRAVEl) benchmark."
+authors = ["shanestorks <shanestorks@gmail.com>"]
+readme = "README.md"
+packages = [{include = "travel_benchmark"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+torch = "^2.1.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
