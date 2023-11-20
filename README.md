@@ -9,3 +9,10 @@ export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 poetry install
 poetry shell
 ```
+
+For Jupyter notebook support, run this when the `travel` environment is activated:
+```
+python -m ipykernel install --user --name=travel
+```
+
+Then use the `travel` kernel in Jupyter.
