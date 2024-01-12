@@ -1,4 +1,4 @@
-# TRAVEl-Benchmark
+# TRAVEl
 
 Development code for work on creating the **T**iered **R**easoning for **A**ction-**V**ideo **E**quiva**l**ence (**TRAVEl**) benchmark.
 
