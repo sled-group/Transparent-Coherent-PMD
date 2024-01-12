@@ -7,7 +7,7 @@ Development code for work on creating **T**iered **R**easoning for **A**ction-**
 Clone the repo and initialize submodules:
 
 ```
-git clone git@github.com:shanestorks/TRAVEl-Benchmark.git
+git clone git@github.com:shanestorks/TRAVEl.git
 git submodule init
 git submodule update
 ```
