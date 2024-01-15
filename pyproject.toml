@@ -16,7 +16,7 @@ matplotlib = "^3.8.2"
 pytorchvideo = "^0.1.5"
 torchvision = "^0.15.1"
 transformers = "^4.28.1"
-video-blip = {git = "https://github.com/yukw777/EILEV.git", rev = "57a899930f3ad74a6c77e1cbb1007f5ad38bdc22"}
+eilev = {git = "https://github.com/yukw777/EILEV.git", rev = "8730937412334f7d17c48f13115b22d48e8280e2"}
 
 [build-system]
 requires = ["poetry-core"]

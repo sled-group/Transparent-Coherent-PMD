@@ -23,7 +23,7 @@ poetry install
 poetry shell
 ```
 
-After setup, activate the environment by running `poetry shell`. For Jupyter notebook support, run this when the `travel` environment is activated:
+For Jupyter notebook support, run this when the `travel` environment is activated (i.e., after running `poetry shell`):
 ```
 python -m ipykernel install --user --name=travel
 ```
