@@ -1,14 +1,13 @@
 [tool.poetry]
 name = "travel"
 version = "0.1.0"
-description = "Development code for Tiered Reasoning for Action-Video Equivalence (TRAVEl) benchmark."
+description = "Development code for Tiered Reasoning for Action-Video Equivalence (TRAVEl) project."
 authors = ["shanestorks <shanestorks@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
 torch = "2.0.0"
-video-blip = {path = "VideoBLIP-internal"}
 numpy = "^1.26.2"
 pandas = "^2.1.3"
 jupyter = "^1.0.0"
@@ -17,7 +16,7 @@ matplotlib = "^3.8.2"
 pytorchvideo = "^0.1.5"
 torchvision = "^0.15.1"
 transformers = "^4.28.1"
-
+video-blip = {git = "https://github.com/yukw777/EILEV.git", rev = "57a899930f3ad74a6c77e1cbb1007f5ad38bdc22"}
 
 [build-system]
 requires = ["poetry-core"]
