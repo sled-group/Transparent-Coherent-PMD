@@ -7,16 +7,15 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-torch = "2.0.0"
+torch = "1.13"
 numpy = "^1.26.2"
 pandas = "^2.1.3"
 jupyter = "^1.0.0"
 ipykernel = "^6.26.0"
 matplotlib = "^3.8.2"
 pytorchvideo = "^0.1.5"
-torchvision = "^0.15.1"
+torchvision = "^0.14"
 transformers = "^4.28.1"
-eilev = {git = "https://github.com/yukw777/EILEV.git", rev = "8730937412334f7d17c48f13115b22d48e8280e2"}
 
 [build-system]
 requires = ["poetry-core"]
