@@ -14,7 +14,7 @@ ipykernel = "^6.26.0"
 matplotlib = "^3.8.2"
 pytorchvideo = "^0.1.5"
 torchvision = "^0.14"
-transformers = "4.31.0"
+transformers = "^4.36.0"
 ipywidgets = "^8.1.1"
 accelerate = "^0.26.1"
 bitsandbytes = "^0.42.0"
@@ -24,6 +24,8 @@ opencv-python = "^4.9.0.80"
 einops = "^0.7.0"
 decord = "^0.6.0"
 sentencepiece = "^0.1.99"
+spacy = "3.7.2"
+en_core_web_sm = {url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz"}
 
 [build-system]
 requires = ["poetry-core"]
