@@ -26,6 +26,7 @@ decord = "^0.6.0"
 sentencepiece = "^0.1.99"
 spacy = "3.7.2"
 en_core_web_sm = {url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz"}
+scikit-learn = "^1.4.0"
 
 [build-system]
 requires = ["poetry-core"]
