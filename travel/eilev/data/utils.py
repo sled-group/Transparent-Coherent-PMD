@@ -1,3 +1,5 @@
+# This file was adapted from EILEV: https://github.com/yukw777/EILEV/blob/main/eilev/data/utils.py
+
 import random
 import re
 import string
@@ -71,7 +73,7 @@ def clean_narration_text(narration_text: str) -> str:
     cleaned = narration_text.strip()
 
     # replace "#C C" with "The camera wearer"
-    cleaned = re.sub(C_REGEX, "The camera wearer", cleaned).strip()
+    cleaned = re.sub(C_REGEX, "Someone", cleaned).strip()
 
     # remove <|eos|>
     cleaned = re.sub(EOS_REGEX, "", cleaned).strip()

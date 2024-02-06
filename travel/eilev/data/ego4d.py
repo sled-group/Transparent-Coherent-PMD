@@ -1,3 +1,5 @@
+# This file was adapted from EILEV: https://github.com/yukw777/EILEV/blob/main/eilev/data/ego4d.py
+
 import json
 import os
 from collections.abc import Callable
@@ -8,16 +10,39 @@ from pytorchvideo.data import LabeledVideoDataset
 
 from travel.eilev.data.utils import C_REGEX, NarratedActionClipSampler
 
+# Some verbs would not be expected in the task-oriented mistake detection setting, so we can filter them out
+EGO4D_IGNORE_VERBS = ['scroll', # Scrolling on phone, tablet, etc.
+                     'touch', # Touching an object
+                     'walk', # Walking around, sometimes to a destination
+                     'give', # Usually handing an object to someone else
+                     'read', # Reading a book
+                     'drive_(ride,_drive)', # (Mostly) driving vehicles, sometimes driving nails or other parts into something else
+                     'pet', # Petting animals
+                     'climb', # Climbing stairs, walls, rocks, etc.
+                     'play', # Playing games and instruments
+                     'point', # Aiming hands and objects at something else
+                     'consume_(taste,_sip,_eat,_drink)', # Eating and drinking
+                     'search', # Looking for objects (typically followed by picking something up)
+                     'enter', # Entering rooms or buildings
+                     'watch', # Watching videos and movies
+                     'park', # Parking a vehicle
+                     'talk_(talk,_interact,_converse)', # Talking with others
+                     'sit', # (Most often) a person sitting on something
+                     'feed', # Feeding animals
+                     'cross', # People crossing over things
+                     'kick'] # Kicking objects with foot - usually not related to any task
 
-def filter_action(action: dict[str, Any]) -> bool:
+def filter_action(action: dict[str, Any], previous_action: dict[str, Any]=None) -> bool:
     """Return True if the given action should be used, False otherwise."""
     return (
         not action["is_rejected"]
         and action["is_valid_action"]
         and action["critical_frames"] is not None
+        and action["structured_verb"] not in EGO4D_IGNORE_VERBS # Omit clips with non-task actions
+        and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
+        and (previous_action is None or not ((action['structured_verb'], action['structured_noun']) == (previous_action['structured_verb'], previous_action['structured_noun']))) # Filter out clips where the same action is being performed over and over
         and C_REGEX.match(action["narration_text"]) is not None
     )
-
 
 def get_structured_noun(action: dict) -> str | None:
     if action["frames"] is None:
@@ -34,8 +59,20 @@ def get_structured_noun(action: dict) -> str | None:
                 return box["structured_noun"]
     return None
 
+# TODO: adapt below into a preprocessing method for actions - don't just add structures, but also combine repetitive actions
+def add_structured_nouns(actions: list[dict]) -> list[dict]:
+    for action_idx, action in enumerate(actions):
+        action['structured_noun'] = get_structured_noun(action)
+        
+    for action_idx, action in enumerate(actions):
+        structured_action = (action['structured_verb'], action['structured_noun'])
+        action['previous_occurrences'] = sum([1 if structured_action == (previous_action['structured_verb'], previous_action['structured_noun']) else 0 for previous_action in actions[:action_idx - 1]])
+        action['future_occurrences'] = sum([1 if structured_action == (future_action['structured_verb'], future_action['structured_noun']) else 0 for future_action in actions[action_idx + 1:]])
+    return actions
+
 
 class Ego4dFHOMainDataset(LabeledVideoDataset):
+    """Class to store data from Ego4D. Some domain-specific filtering steps are performed for egocentric mistake detection."""
     def __init__(
         self,
         annotation_path: str,
@@ -77,16 +114,6 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                 item = transform(item)
             return item
 
-        # for video_uid in split_data["videos"]:
-        #     print(video_dict[video_uid]['video_metadata'].keys())
-        #     for interval in video_dict[video_uid]["annotated_intervals"]:
-        #         for action in interval["narrated_actions"]:
-        #             print(action.keys())
-        #             print(action['critical_frames'])
-        #             print(action['clip_critical_frames'])
-        #             break
-        #         break
-        #     break
         super().__init__(
             [
                 (
@@ -94,17 +121,22 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                     {
                         "narrated_actions": [
                             {
+                                "pre_45": action["critical_frames"]["pre_45"],
+                                "pre_30": action["critical_frames"]["pre_30"],
+                                "pre_15": action["critical_frames"]["pre_15"],
                                 "pre_frame": action["critical_frames"]["pre_frame"],
                                 "pnr_frame": action["critical_frames"]["pnr_frame"],
                                 "post_frame": action["critical_frames"]["post_frame"],
                                 "fps": video_dict[video_uid]["video_metadata"]["fps"],
                                 "narration_text": action["narration_text"],
                                 "structured_verb": action["structured_verb"],
-                                "structured_noun": get_structured_noun(action),
+                                "structured_noun": action["structured_noun"],
+                                "previous_occurrences": action["previous_occurrences"],
+                                "future_occurrences": action["future_occurrences"]
                             }
                             for interval in video_dict[video_uid]["annotated_intervals"]
-                            for action in interval["narrated_actions"]
-                            if filter_action(action)
+                            for action_idx, action in enumerate(add_structured_nouns(interval["narrated_actions"]))
+                            if filter_action(action, previous_action=interval["narrated_actions"][action_idx - 1] if action_idx > 0 else None)
                         ],
                         "video_uid": video_uid,
                         "video_metadata": video_dict[video_uid]["video_metadata"],
