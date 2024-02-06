@@ -282,20 +282,9 @@ class NarratedActionClipSampler(ClipSampler):
         if self._current_clip_index == len(self.sample_clip_indices):
             is_last_clip = True
 
-        # sample a clip 8 seconds around narration_time_sec
-        # if narration_time_sec is less than 4 seconds, we start from 0
-        clip_start_sec = max(
-            Fraction(narrated_action["narration_timestamp_sec"])
-            - self._clip_duration / 2,
-            0,
-        )
-
-        # add 8 seconds to clip_start_sec
-        # if clip_end_sec goes over the video duration, adjust clip_start_sec
-        clip_end_sec = clip_start_sec + self._clip_duration
-        if clip_end_sec > video_duration:
-            clip_end_sec = video_duration
-            clip_start_sec = clip_end_sec - self._clip_duration
+        # Take pre and post frames to define the video clip
+        clip_start_sec = narrated_action['pre_frame'] / narrated_action['fps']
+        clip_end_sec = narrated_action['post_frame'] / narrated_action['fps']
 
         if is_last_clip:
             self.reset()

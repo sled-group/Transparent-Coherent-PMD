@@ -14,6 +14,7 @@ def filter_action(action: dict[str, Any]) -> bool:
     return (
         not action["is_rejected"]
         and action["is_valid_action"]
+        and action["critical_frames"] is not None
         and C_REGEX.match(action["narration_text"]) is not None
     )
 
@@ -76,6 +77,16 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                 item = transform(item)
             return item
 
+        # for video_uid in split_data["videos"]:
+        #     print(video_dict[video_uid]['video_metadata'].keys())
+        #     for interval in video_dict[video_uid]["annotated_intervals"]:
+        #         for action in interval["narrated_actions"]:
+        #             print(action.keys())
+        #             print(action['critical_frames'])
+        #             print(action['clip_critical_frames'])
+        #             break
+        #         break
+        #     break
         super().__init__(
             [
                 (
@@ -83,9 +94,10 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                     {
                         "narrated_actions": [
                             {
-                                "narration_timestamp_sec": action[
-                                    "narration_timestamp_sec"
-                                ],
+                                "pre_frame": action["critical_frames"]["pre_frame"],
+                                "pnr_frame": action["critical_frames"]["pnr_frame"],
+                                "post_frame": action["critical_frames"]["post_frame"],
+                                "fps": video_dict[video_uid]["video_metadata"]["fps"],
                                 "narration_text": action["narration_text"],
                                 "structured_verb": action["structured_verb"],
                                 "structured_noun": get_structured_noun(action),
