@@ -1,0 +1,16 @@
+The recipe step is "Spoon the mixture from the bowl onto the bread". To visually verify that this step is complete, what are 2 questions we could ask about an image of a target object and their expected answers?
+Target object: bread
+1. Is there mixture on the bread? Yes
+2. Is there any bread without mixture on top of it? No
+
+ The recipe step is "Roll the tortilla into a thin, log shape about 1 inch thick. Make sure no filling leaks out.". To visually verify that this step is complete, what are 2 questions we could ask about an image of a target object and their expected answers?
+ Target object: tortilla
+ 1. Is the tortilla in a thin log shape? Yes
+ 2. Is there any filling leaking out of the tortilla? No'
+
+The recipe step is "Fold the coffee filter into quarters". To visually verify that this step is complete, what are 2 questions we could ask about an image of a target object and their expected answers?
+Target object: coffee filter
+1. Is the coffee filter in a quarter circle? Yes
+2. Is the coffee filter folded? Yes
+   
+The recipe step is "In a bowl, add the cut cherry tomatoes". To visually verify that this step is complete, what are 2 questions we could ask about an image of a target object and their expected answers?
