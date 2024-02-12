@@ -122,13 +122,3 @@ def generate_vqg_prompt(example: MistakeDetectionExample, n_demonstrations: int=
     examples = [generate_vqg_example(demo) for demo in VQG_DEMONSTRATIONS[:n_demonstrations]]
     examples += [generate_vqg_prompt(example.procedure_description)]
     return "\n\n".join(examples)
-
-class VisualQuestionGenerator(nn.Module):
-    def __init__(self, 
-                 hf_model_name: str):
-        self.lm = pipeline("text-generation", 
-                  model=hf_model_name, 
-                  token="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", 
-                  model_kwargs={"load_in_8bit": True})
-        
-        # TODO: is this even needed?
