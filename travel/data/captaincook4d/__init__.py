@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from travel.constants import DATA_CACHE_DIR
 from travel.data.captaincook4d.constants import VIDEO_DIR, ANNOTATIONS_DIR, DATA_SPLITS
-from travel.data import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
+from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
 from travel.data.utils import generate_float_series
 from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY
 

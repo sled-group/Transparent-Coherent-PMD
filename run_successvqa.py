@@ -8,11 +8,10 @@ import torch
 from tqdm import tqdm
 
 from travel.constants import DATA_CACHE_DIR, MODEL_CACHE_DIR, RESULTS_DIR
-from travel.model import MISTAKE_DETECTION_STRATEGIES, HEURISTIC_TARGET_FRAMES_PROPORTION
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, HEURISTIC_TARGET_FRAMES_PROPORTION, generate_det_curve
 from travel.model.vqa import VQAOutputs, VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
-from travel.data import MistakeDetectionTasks, get_cutoff_time_by_proportion
+from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
 from travel.data.captaincook4d import CaptainCook4DDataset
-from travel.data.captaincook4d.constants import ANNOTATIONS_DIR, VIDEO_DIR, ERROR_CATEGORIES
 
 os.environ['HF_HOME'] = MODEL_CACHE_DIR
 from transformers import AutoProcessor, AutoModelForVision2Seq
@@ -91,12 +90,13 @@ for example in tqdm(eval_dataset, "running inference on clips"):
         
     vqa_outputs.append(this_vqa_outputs)
 
-# TODO: add DET curve to evaluator based on confidence - improve heuristic approach better?
+# TODO: improve heuristic evaluator to be softer and incorporate answer probabilities
 # TODO: save VQAOutputs - what is the best way to do this?
 evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_dataset.examples, vqa_outputs)
 metrics = evaluator.get_mistake_detection_metrics()
-print("Mistake Detection Metrics:")
-pprint(metrics)
+print("Mistake Detection Metrics (Detection Threshold=0.5):")
+print(metrics.keys())
+pprint(metrics[0.5])
 
 # Save results, config file (which may have some parameters that vary over time), and command-line arguments
 timestamp = datetime.datetime.now()
@@ -106,6 +106,10 @@ os.makedirs(this_results_dir)
 
 metrics_filename = f"metrics_{args.mistake_detection_strategy}_{args.eval_partition}.json"
 json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"))
+
+# TODO: improve appearance of DET curve and set consistent gridlines/axes ticks
+det_filename = f"det_{args.mistake_detection_strategy}_{args.eval_partition}.pdf"
+generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 with open(os.path.join(this_results_dir, "args.json"), 'w') as f:

@@ -2,8 +2,7 @@ from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
 import torch.nn as nn
 
-from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
-from travel.data import MistakeDetectionExample
+from travel.data.mistake_detection import MistakeDetectionExample
 from travel.model.vqa import VQAResponse
 
 @dataclass_json
