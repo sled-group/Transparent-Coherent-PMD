@@ -3,15 +3,14 @@ from PIL import Image
 from tqdm import tqdm
 from typing import Any, Optional
 
-from travel.data.captaincook4d.constants import VIDEO_DIR, ANNOTATIONS_DIR
+from travel.data.captaincook4d.constants import VIDEO_DIR, ANNOTATIONS_DIR, DATA_SPLITS
 from travel.data import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
 from travel.data.utils import generate_float_series
-from travel.data.utils.video import get_video, extract_frames
+from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY
 
 class CaptainCook4DDataset(MistakeDetectionDataset):
-    # TODO: adjust this class and superclass to handle "yielding" examples for better efficiency
-    # TODO: adjust this class and superclass to handle data partitions
     def __init__(self, 
+                 data_split: str,
                  debug_n_examples_per_class: Optional[int]):
         """
         Method to initialize and load CaptainCook4D dataset.
@@ -19,13 +18,17 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         :param kwargs: Task-specific arguments for dataset compilation.
         """
         super().__init__(self, 
+                         data_split,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
-    def load_examples(self, 
+    # TODO: don't load videos on init? Instead can just load annotations and frame times, then load actual frames when accessing specific items
+    def load_examples(self,
+                      data_split: str,
                       debug_n_examples_per_class: Optional[int]) -> list[MistakeDetectionExample]:
 
-        # Pick a sample video from CaptainCook4D
-        all_video_files = os.listdir(VIDEO_DIR)
+        # Sample videos from CaptainCook4D
+        all_video_ids = DATA_SPLITS[data_split]
+        all_video_files = [os.path.join(VIDEO_DIR, f"{vid}_360p.mp4") for vid in all_video_ids]
         video_paths = [f for f in all_video_files if f.endswith('.mp4')]
         STEP_ANNOTATIONS = json.load(open(os.path.join(ANNOTATIONS_DIR, "annotation_json/complete_step_annotations.json"), "r"))
         ERROR_ANNOTATIONS = json.load(open(os.path.join(ANNOTATIONS_DIR, "annotation_json/error_annotations.json"), "r"))
@@ -36,7 +39,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         success_examples = []
         error_examples = []
         all_examples = []
-        for sample_video_path in tqdm(video_paths):
+        for sample_video_path in tqdm(video_paths, desc="loading captaincook4d videos"):
             sample_video_id = "_".join(sample_video_path.split('_')[:2])
             sample_video_path = os.path.join(VIDEO_DIR, sample_video_path)
             try:
@@ -58,8 +61,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
                     adjusted_start = step['start_time'] + min(step_duration * 0.05, 0.5) # Adjust the start time to be later by a maximum of 0.5 seconds
                     adjusted_end = step['end_time'] - min(step_duration * 0.3, 3) # Adjust the end time to be earlier by a maximum of 3 seconds
-                    SAMPLE_FREQUENCY = 4.0
-                    times = generate_float_series(adjusted_start, adjusted_end, SAMPLE_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
+                    times = generate_float_series(adjusted_start, adjusted_end, FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
                     frames = extract_frames(sample_video, times)
                     frames = [Image.fromarray(frame) for frame in frames]
 

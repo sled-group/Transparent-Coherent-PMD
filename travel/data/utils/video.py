@@ -1,5 +1,11 @@
 import cv2
 import numpy as np
+import yaml
+
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+
+FRAME_SAMPLING_FREQUENCY = config["data"]["video_frame_sampling_frequency"]
 
 def get_video(video_path: str) -> cv2.VideoCapture:
     """

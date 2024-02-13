@@ -4,13 +4,22 @@ from enum import Enum
 from PIL import Image
 import torch
 
-VQA_PROMPT_TEMPLATES = {
+SUCCESSVQA_PROMPT_TEMPLATES = {
+    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nThe current goal is "{step}". Did the person successfully do this? (yes/no) ASSISTANT: '
+}
+
+VQG2VQA_PROMPT_TEMPLATES = {
     "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} (yes/no) ASSISTANT: "
 }
 
 class VQAResponse(Enum):
     No = 0
     Yes = 1
+
+def get_vqa_response_token_ids(processor):
+    responses = {response: processor.tokenize(response.name, add_special_tokens=False)['input_ids'][0] for response in VQAResponse}
+    for token_id in responses.values():
+        assert type(token_id) == int, "Getting response tokens for members of VQAResponse failed."
 
 @dataclass_json
 @dataclass
@@ -21,7 +30,7 @@ class VQAOutputs:
     prompt: str
     expected_answer: VQAResponse
     response_token_ids: dict[VQAResponse, int]
-    logits: torch.FloatTensor # (# questions, vocab size) 
+    logits: torch.FloatTensor # (vocab size) 
     answer_probs: dict[VQAResponse, float] = field(default_factory=list)
     predicted_answer: VQAResponse = VQAResponse["No"]
 

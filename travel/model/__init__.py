@@ -8,9 +8,10 @@ import torch
 from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq
 from typing import Union
+import yaml
 
 from travel.constants import DATA_CACHE_DIR
-from travel.data import MistakeDetectionExample
+from travel.data import MistakeDetectionExample, get_cutoff_time_by_proportion
 from travel.model.vqa import VQAOutputs, VQAResponse, VQA_PROMPT_TEMPLATES
 from travel.model.vqg import VQGOutputs
 
@@ -70,6 +71,7 @@ class MistakeDetectionEvaluator:
 
         for frame_outputs in self.vqa_outputs:
             assert len(frame_outputs) == 1, "get_logits_errors expects one frame per example."
+            assert frame_outputs[0].logits is not None, "get_logits_errors expects VQAOutputs to have logits"
         
         vqa_outputs_flat = [outputs[0] for outputs in self.vqa_outputs]
         
@@ -94,16 +96,15 @@ class MistakeDetectionEvaluator:
         return (predicted_logits - target_logits).float()
         
         # NOTE: possible problem: the target_logits imply that in mistake cases, all expected answers should be violated. This may incentivize models to create duplicate questions that ultimately are incomplete.
+        # Can use an argmax instead to incentivize at least one question having errors
+
+# TODO: consider replacing this strategy to use last N frames - but this has to be informed by the sampling frequency of frames, which is another important variable.
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+HEURISTIC_TARGET_FRAMES_PROPORTION = int(config["mistake_detection_strategies"]["heuristic"]["target_frames_proportion"]) # Use last N% of frames for heuristic mistake detection
 
 class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
     """Heuristic mistake detection evaluator which simply takes a majority vote over the last `mistake_frames_proportion` proportion of video frames."""
-
-    def __init__(self,
-                 examples: list[MistakeDetectionExample],
-                 vqa_outputs: list[list[list[VQAOutputs]]],
-                 mistake_frames_proportion = 0.1):
-        super().__init__(examples, vqa_outputs)
-        self.mistake_frames_proportion = mistake_frames_proportion
         
     def check_mistakes(self) -> list[bool]:
         """
@@ -126,12 +127,12 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 this_mistake_predictions.append(predicted_mistake)
             mistake_predictions.append(this_mistake_predictions)
             
-        # Heuristic: for last 10% of frames (based on step duration), take majority prediction of mistake/success
+        # Heuristic: for last n% of frames (based on step duration), take majority prediction of mistake/success
         # In the future, can prompt LLaMA again for this information?
         agg_preds = []
         for mistake_pred, example in zip(mistake_predictions, self.examples):
             if len(mistake_pred) > 0:
-                cutoff_time = max(example.frame_times) - ((max(example.frame_times) - min(example.frame_times)) * self.mistake_frames_proportion)
+                cutoff_time = get_cutoff_time_by_proportion(example, HEURISTIC_TARGET_FRAMES_PROPORTION)
                 mistake_pred_cut = [pred for pred, ft in zip(mistake_pred, example.frame_times) if ft >= cutoff_time]
                 if len(mistake_pred_cut) == 0:
                     mistake_pred_cut = [mistake_pred[-1]]
@@ -256,4 +257,6 @@ class FrameVQAMistakeDetectionScorer(MistakeDetectionScorer):
             logits_errors = evaluator.get_logits_errors()
             return logits_errors
         
-        
+MISTAKE_DETECTION_STRATEGIES = {
+    "heuristic": HeuristicMistakeDetectionEvaluator
+}
