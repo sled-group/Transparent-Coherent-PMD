@@ -12,7 +12,7 @@ import yaml
 
 from travel.constants import DATA_CACHE_DIR
 from travel.data import MistakeDetectionExample, get_cutoff_time_by_proportion
-from travel.model.vqa import VQAOutputs, VQAResponse, VQA_PROMPT_TEMPLATES
+from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES
 from travel.model.vqg import VQGOutputs
 
 @dataclass_json
@@ -120,8 +120,6 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 predicted_mistake = False
                 # Check all questions for this frame to decide if there's a mistake
                 for output in frame_outputs:
-                    print(output.predicted_answer, output.expected_answer)
-                    pprint(output)
                     if output.predicted_answer != output.expected_answer:
                         predicted_mistake = True
                 this_mistake_predictions.append(predicted_mistake)
@@ -209,7 +207,7 @@ class FrameVQAMistakeDetectionScorer(MistakeDetectionScorer):
         assert len(examples_parallel) == len(questions) == len(answers) == len(frames) == n_examples * n_questions_per_frame
         mistake_labels = [example.mistake for example in examples_parallel]
              
-        prompt_template = VQA_PROMPT_TEMPLATES[self.model_name]
+        prompt_template = VQG2VQA_PROMPT_TEMPLATES[self.model_name]
         prompts = [prompt_template.format(question=question) for question in questions]
         
         response_tokens = {}

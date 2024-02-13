@@ -16,10 +16,11 @@ class VQAResponse(Enum):
     No = 0
     Yes = 1
 
-def get_vqa_response_token_ids(processor):
-    responses = {response: processor.tokenize(response.name, add_special_tokens=False)['input_ids'][0] for response in VQAResponse}
+def get_vqa_response_token_ids(tokenizer):
+    responses = {response: tokenizer(response.name, add_special_tokens=False)['input_ids'][0] for response in VQAResponse}
     for token_id in responses.values():
         assert type(token_id) == int, "Getting response tokens for members of VQAResponse failed."
+    return responses
 
 @dataclass_json
 @dataclass

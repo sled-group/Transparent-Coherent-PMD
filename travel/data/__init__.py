@@ -34,11 +34,11 @@ class MistakeDetectionDataset:
         return len(self.examples)
 
     def __getitem__(self, index):
-        # TODO: populate frames here
+        # TODO: populate frames here?
         return self.examples[index]
     
     def __iter__(self):
-        return self.examples
+        return iter(self.examples)
 
     def load_examples(self, data_split: str, **kwargs: dict[str, Any]) -> list[MistakeDetectionExample]:
         raise NotImplementedError("Subclass should implement dataset loading procedure.")
