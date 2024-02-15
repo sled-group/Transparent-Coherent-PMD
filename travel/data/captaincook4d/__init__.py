@@ -23,6 +23,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
     # TODO: don't load videos on init? Instead can just load annotations and frame times, then load actual frames when accessing specific items
+    # TODO: or just consider parallelizing
     def load_examples(self,
                       data_split: str,
                       debug_n_examples_per_class: Optional[int] = None) -> list[MistakeDetectionExample]:
