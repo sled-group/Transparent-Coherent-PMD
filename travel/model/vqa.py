@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from dataclasses_json import dataclass_json
 from enum import Enum
 from PIL import Image
@@ -12,7 +12,7 @@ VQG2VQA_PROMPT_TEMPLATES = {
     "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} (yes/no) ASSISTANT: "
 }
 
-class VQAResponse(Enum):
+class VQAResponse(int, Enum):
     No = 0
     Yes = 1
 
@@ -22,10 +22,10 @@ def get_vqa_response_token_ids(tokenizer):
         assert type(token_id) == int, "Getting response tokens for members of VQAResponse failed."
     return responses
 
-@dataclass_json
 @dataclass
 class VQAOutputs:
     """Dataclass to hold all VLM outputs from visual question answering (VQA)."""
+    example_id: str
     procedure_id: int
     frame: Image
     prompt: str
@@ -47,3 +47,12 @@ class VQAOutputs:
         
         this_probs = this_probs.numpy()
         self.answer_probs = {response_type: this_probs[response_type.value] for response_type in VQAResponse}
+
+    def asdict(self):
+        """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""
+        return_dict = {
+            k: v for k, v in asdict(self).items() if k not in ["frame", "response_token_ids", "logits"]
+        }
+        for response in return_dict['answer_probs']:
+            return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
+        return return_dict

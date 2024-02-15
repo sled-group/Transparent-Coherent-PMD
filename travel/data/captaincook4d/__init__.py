@@ -25,12 +25,12 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
     # TODO: don't load videos on init? Instead can just load annotations and frame times, then load actual frames when accessing specific items
     def load_examples(self,
                       data_split: str,
-                      debug_n_examples_per_class: Optional[int]) -> list[MistakeDetectionExample]:
+                      debug_n_examples_per_class: Optional[int] = None) -> list[MistakeDetectionExample]:
 
         # TODO: When loading CaptainCook4D at least a few videos cannot be successfully loaded. Need to look into this at some point
 
         # Check if we already loaded data before
-        cache_fname = f"captaincook4d_freq{FRAME_SAMPLING_FREQUENCY}" 
+        cache_fname = f"captaincook4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}" 
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
         cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname + ".pkl")
@@ -50,7 +50,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
             success_examples = []
             error_examples = []
             all_examples = []
-            for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos"):
+            for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos", total=len(all_video_ids)):
                 try:
                     sample_video = get_video(sample_video_path)
                 except:
@@ -58,7 +58,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                     continue
 
                 # Load step annotations for it and display precondition/effect frames
-                for step in STEP_ANNOTATIONS[sample_video_id]["steps_errors"]:
+                for step_idx, step in enumerate(STEP_ANNOTATIONS[sample_video_id]["steps_errors"]):
                     try:
                         # Extract some keyframes for the action
                         step_duration = step['end_time'] - step['start_time']
@@ -77,30 +77,25 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         verb, procedure_description = step['description'].split("-")[0], "-".join(step['description'].split("-")[1:])
 
                         if "errors" in step and len(step["errors"]) > 0:               
-                            mistake_type = step['errors'][0]["tag"]
+                            mistake_type = step['errors'][0]["tag"] # TODO: group mistake types across evaluation datasets into consistent types? doesn't really matter
                             mistake_description = step['errors'][0]['description']
                             # altered_procedure_description = step['modified_description'] # NOTE: can use this later if needed
-
-                            # Start with only errors specific to a single step, not related to quantities
-                            # Preparation error involves the wrong object(s)
-                            # Technique error involves action being performed the wrong way
-                            if mistake_type not in ["Preparation Error", "Technique Error"]:
-                                continue
 
                             if len(step['errors']) > 1:
                                 print("Warning: Some error information discarded from only using the first annotated error.")            
 
                             error_examples.append(
                                 MistakeDetectionExample(
-                                    "captaincook4d",
-                                    sample_video_id,
-                                    step_id,
-                                    frames,
-                                    [time - min(times) for time in times],
-                                    procedure_description,
-                                    True,
-                                    mistake_type,
-                                    mistake_description
+                                    task_name=MistakeDetectionTasks.CaptainCook4D,
+                                    video_id=sample_video_id,
+                                    procedure_id=step_id,
+                                    example_id=f"{sample_video_id}_{step_idx}",
+                                    frames=frames,
+                                    frame_times=[time - min(times) for time in times],
+                                    procedure_description=procedure_description,
+                                    mistake=True,
+                                    mistake_type=mistake_type,
+                                    mistake_description=mistake_description
                                 )
                             )
                             all_examples.append(error_examples[-1])
@@ -108,17 +103,17 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         else:
                             success_examples.append(
                                 MistakeDetectionExample(
-                                    MistakeDetectionTasks.CaptainCook4D,
-                                    sample_video_id,
-                                    step_id,
-                                    frames,
-                                    [time - min(times) for time in times],
-                                    procedure_description,
-                                    False
+                                    task_name=MistakeDetectionTasks.CaptainCook4D,
+                                    video_id=sample_video_id,
+                                    procedure_id=step_id,
+                                    example_id=f"{sample_video_id}_{step_idx}",
+                                    frames=frames,
+                                    frame_times=[time - min(times) for time in times],
+                                    procedure_description=procedure_description,
+                                    mistake=False
                                 )
                             )        
                             all_examples.append(success_examples[-1])
-                            # pprint(success_examples[-1])
                     except:
                         print(f"Warning: Video {sample_video_id} step {step_id} could not be processed!")
                         continue
