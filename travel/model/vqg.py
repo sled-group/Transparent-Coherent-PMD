@@ -31,47 +31,59 @@ class VQGOutputs:
                 print(f"Warning: Question '{question}' doesn't appear to be a question.")
 
 # List of examples to use for in-context learning for VQG
-# TODO: Recipe steps come from CaptainCook4D - use some held out source of recipe steps - also change number of questions?              
+# TODO: add more?
 VQG_DEMONSTRATIONS = [
     VQGOutputs(
         procedure_id=-1,
-        procedure_description="Spoon the mixture from the bowl onto the bread",
-        target_object="bread",
+        procedure_description='Remove pears from syrup and cool.',
+        target_object='pears',
         questions=[
-            "Is there mixture on the bread?",
-            "Is there any bread without mixture on top of it?"
+            "Are any pears in the syrup?",
+            "Are the pears on a cool surface?"
         ],
         answers_str=[
-            "Yes",
-            "No"
+            "No",
+            "Yes"
         ]
     ),
     VQGOutputs(
         procedure_id=-1,
-        procedure_description="Roll the tortilla into a thin, log shape about 1 inch thick. Make sure no filling leaks out.",
-        target_object="tortilla",
+        procedure_description='Cut each tortilla with 2 1/2-inch cutter into 3 rounds, making 4 dozen mini tortillas.',
+        target_object='tortillas',
         questions=[
-            "Is the tortilla in a thin log shape?",
-            "Is there any filling leaking out of the tortilla?"
-        ],
-        answers_str=[
-            "Yes",
-            "No"
-        ]
-    ),   
-    VQGOutputs(
-        procedure_id=-1,
-        procedure_description="Fold the coffee filter into quarters",
-        target_object="coffee filter",
-        questions=[
-            "Is the coffee filter folded?",
-            "Is the coffee filter in a quarter circle shape?"
+            "Are there 4 dozen small tortillas?",
+            "Are the tortillas about 2 1/2 inches?"
         ],
         answers_str=[
             "Yes",
             "Yes"
         ]
-    ),         
+    ),
+    VQGOutputs(
+        procedure_id=-1,
+        procedure_description='In a medium bowl combine all ingredients excluding the cheese.',
+        target_object='bowl',
+        questions=[
+            "Are there several ingredients in the bowl?",
+            "Is there cheese in the bowl?"
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),    
+    VQGOutputs(
+        procedure_id=-1,
+        procedure_description='Place hash brown patties in a single layer in a greased 9 x 13 inch baking dish',
+        target_object='baking dish',
+        questions=[
+            "Are there any hash brown patties stacked on top of each other in the baking dish?",
+            "Is the baking dish greased?"
+        ],
+        answers_str=[
+            "No",
+            "Yes"
+        ]   
 ]
 
 VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} questions we could ask about an image of a target object and their expected answers?\n'

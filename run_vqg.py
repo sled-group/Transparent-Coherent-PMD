@@ -16,7 +16,9 @@ os.environ['HF_HOME'] = MODEL_CACHE_DIR
 from transformers import pipeline
 from transformers.pipelines.pt_utils import KeyDataset
 
-# TODO: source recipe step demonstrations from another dataset, not CaptainCook4D
+# TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name?
+# TODO: does there need to be a single target object for VQG?
+# TODO: increase number of questions to 3?
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks])
