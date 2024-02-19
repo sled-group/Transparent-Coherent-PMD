@@ -99,7 +99,7 @@ def generate_vqg_example(vqg_output: VQGOutputs) -> str:
     :param vqg_output: VQGOutputs object for VQG example.
     :return: String including a full demonstration of a prompt and several questions and expected answers for generating visual verification questions.
     """
-    return VQG_EXAMPLE_TEMPLATE.format(recipe_step=vqg_output.procedure_description,
+    return VQG_EXAMPLE_TEMPLATE.format(instruction_step=vqg_output.procedure_description,
                                        n_questions = len(vqg_output.questions),
                                        target_object=vqg_output.target_object,
                                        question_list="\n".join([VQG_QUESTION_TEMPLATE.format(

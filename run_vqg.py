@@ -16,6 +16,8 @@ os.environ['HF_HOME'] = MODEL_CACHE_DIR
 from transformers import pipeline
 from transformers.pipelines.pt_utils import KeyDataset
 
+# TODO: source recipe step demonstrations from another dataset, not CaptainCook4D
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks])
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
@@ -25,11 +27,17 @@ parser.add_argument("--debug", action="store_true", help="Pass this argument to 
 args = parser.parse_args()
 
 # Load LM
+if torch.cuda.is_available():
+    device = "cuda"
+else:
+    device = "cpu"
+print(f"Loading LM on {device}...")
 lm = pipeline("text-generation", 
               model=args.lm_name, 
-              token=HF_TOKEN, 
-              model_kwargs={"load_in_8bit": True})
+              token=HF_TOKEN,
+              device=device)
 lm.tokenizer.padding_side = "left"
+lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
 
 prompts = []
 if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
@@ -50,6 +58,7 @@ with torch.no_grad():
                         max_new_tokens=64, 
                         return_full_text=False, 
                         truncation="do_not_truncate"),
+                    desc="running VQG",
                     total=len(prompts)):
         inp = prompts[prompt_idx]
 
@@ -86,7 +95,7 @@ with torch.no_grad():
 
 # Save VQG outputs, config, and args
 timestamp = datetime.datetime.now()
-this_results_dir = f"VQG"
+this_results_dir = f"VQG" # Can change this name later if we have other approaches for VQG besides prompting LM with ICL
 if args.debug:
     this_results_dir += f"_debug"
 this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
@@ -95,7 +104,7 @@ os.makedirs(this_results_dir)
 
 vqg_outputs_filename = f"vqg_outputs.json"
 json.dump({k: v.to_dict() for k, v in vqg_outputs.items()}, 
-          open(os.path.join(this_results_dir, vqg_outputs_filename)),
+          open(os.path.join(this_results_dir, vqg_outputs_filename), "w"),
           indent=4)
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
