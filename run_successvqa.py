@@ -44,13 +44,14 @@ vlm_processor.tokenizer.padding_side = "left"
 prompt_template = SUCCESSVQA_PROMPT_TEMPLATES[args.vlm_name]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
-# TODO: perform inference in batches?
+# Load cached VLM outputs
 vqa_cache_fname = os.path.join(DATA_CACHE_DIR, f"vqa_outputs_{args.vlm_name.replace('/','_')}.json")
 if os.path.exists(vqa_cache_fname):
     vqa_cache = pickle.load(open(vqa_cache_fname, "rb"))
 else:
     vqa_cache = {}
 
+# Run SuccessVQA inference
 vqa_outputs = []
 for example in tqdm(eval_dataset, "running inference on clips"):
     this_vqa_outputs = []

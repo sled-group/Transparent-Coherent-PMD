@@ -3,7 +3,7 @@ cache:
   model_cache_dir: "/scratch/chaijy_root/chaijy0/sstorks/.cache/huggingface"
   results_dir: "saved_results"
 data:
-  video_frame_sampling_frequency: 4
+  video_frame_sampling_frequency: 2
   captaincook4d:
     annotations_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/annotations"
     video_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/data/captain_cook_4d/hololens/sync/pv"
