@@ -82,7 +82,7 @@ VQG_QUESTION_TEMPLATE = "{question_number}. {question} {answer}"
 
 def generate_vqg_prompt(instruction_step: str) -> str:
     """
-    Returns a prompt for VQG, i.e., to come after several in-context demonstrations.
+    Returns a prompt for VQG, i.e., for zero-shot inference or to come after several in-context demonstrations.
 
     :param instruction_step: Recipe or instruction step to generate instructions for. Should usually be a sentence in imperative form.
     :param n_questions: Number of questions expected for generation.
@@ -109,15 +109,15 @@ def generate_vqg_example(vqg_output: VQGOutputs) -> str:
                                        ) for question_idx, (question, answer) in enumerate(zip(vqg_output.questions, vqg_output.answers))]))
 
 # TODO: later may need to account for chat-based prompts
-def generate_vqg_prompt(example: MistakeDetectionExample, n_demonstrations: int=3) -> str:
+def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3) -> str:
     """
     Returns a prompt for VQG including in-context demonstrations.
 
-    :param example: MistakeDetectionExample object to generate from.
+    :param procedure_description: String description of a procedure (e.g., recipe step) to generate visual questions for.
     :param n_demonstrations: Number of in-context demonstrations to include from `VQG_DEMONSTRATIONS`.
     """
     assert n_demonstrations <= len(VQG_DEMONSTRATIONS), f"Requested {n_demonstrations} in-context demonstrations for VQG, but only {len(VQG_DEMONSTRATIONS)} are available in travel.model.vqg.VQG_DEMONSTRATIONS."
 
     examples = [generate_vqg_example(demo) for demo in VQG_DEMONSTRATIONS[:n_demonstrations]]
-    examples += [generate_vqg_prompt(example.procedure_description)]
+    examples += [generate_vqg_prompt(procedure_description)]
     return "\n\n".join(examples)

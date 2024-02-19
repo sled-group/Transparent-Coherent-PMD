@@ -33,7 +33,7 @@ class MistakeDetectionOutputs:
     def __post_init__(self):
         assert len(self.frame_times) == len(self.mistake_probs), "`MistakeDetectionOutputs` expects `frame_times` and `mistake_probs` to be the same length, i.e., the number of frames used to detect the mistake."
 
-    def asdict(self):
+    def to_dict(self):
         """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""
         return_dict = asdict(self)
         return_dict['frame_times'] = [float(round(ft, 3)) for ft in return_dict['frame_times']]
@@ -369,14 +369,14 @@ def compile_mistake_detection_preds(dataset: MistakeDetectionDataset,
     :param dataset: Mistake detection dataset used for evaluation.
     :param vqa_outputs: Ragged list of VQA outputs; shape should correspond to (# examples, # frames, # questions per frame)
     """
-    compiled_preds = {example.example_id: {"example": example.asdict()} for example in dataset}
+    compiled_preds = {example.example_id: {"example": example.to_dict()} for example in dataset}
     for example_outputs in vqa_outputs:
         example_id = example_outputs[0][0].example_id
-        compiled_preds[example_id]["vqa"] = [[question_output.asdict() for question_output in frame_outputs] for frame_outputs in example_outputs]
+        compiled_preds[example_id]["vqa"] = [[question_output.to_dict() for question_output in frame_outputs] for frame_outputs in example_outputs]
     for threshold in mistake_detection_preds:
         for pred in mistake_detection_preds[threshold]:
             example_id = pred.example_id
             if "mistake_detection" not in compiled_preds[example_id]:
                 compiled_preds[example_id]["mistake_detection"] = {}
-            compiled_preds[example_id]["mistake_detection"][threshold] = pred.asdict()
+            compiled_preds[example_id]["mistake_detection"][threshold] = pred.to_dict()
     return compiled_preds

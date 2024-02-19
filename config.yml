@@ -1,3 +1,4 @@
+hf_token: "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"
 cache:
   data_cache_dir: "cache_dir"
   model_cache_dir: "/scratch/chaijy_root/chaijy0/sstorks/.cache/huggingface"

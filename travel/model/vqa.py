@@ -48,7 +48,7 @@ class VQAOutputs:
         this_probs = this_probs.numpy()
         self.answer_probs = {response_type: this_probs[response_type.value] for response_type in VQAResponse}
 
-    def asdict(self):
+    def to_dict(self):
         """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""
         return_dict = {
             k: v for k, v in asdict(self).items() if k not in ["frame", "response_token_ids", "logits"]
