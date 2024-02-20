@@ -20,6 +20,9 @@ class VQGOutputs:
     
     def __post_init__(self):
         """Validation steps to ensure every QA-pair is valid and every question has an answer."""
+        # Clear answers (they may already populated if loading from a file, but need to double check that answers can be parsed to VQAResponse)
+        self.answers = []
+
         for answer in self.answers_str:
             try: 
                 self.answers.append(VQAResponse[answer])
@@ -169,6 +172,6 @@ def load_vqg_outputs(path: str) -> dict[int, VQGOutputs]:
     
     :param path: Path to directory to load json file from (a directory that includes a vqg_outputs.json in it).
     """
-    vqg_outputs = json.load(open(os.path.join(path, vqg_outputs.json), "r"))
-    vqg_outputs = {k: VQGOutputs.from_dict(v) for k, v in vqg_outputs.items()}
+    vqg_outputs = json.load(open(os.path.join(path, "vqg_outputs.json"), "r"))
+    vqg_outputs = {int(k): VQGOutputs.from_dict(v) for k, v in vqg_outputs.items()}
     return vqg_outputs

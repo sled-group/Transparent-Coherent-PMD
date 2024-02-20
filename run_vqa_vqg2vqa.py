@@ -58,15 +58,8 @@ vqg_outputs = load_vqg_outputs(args.vqg_directory)
 
 # TODO: incorporate filtering based on whether target object is present?
 
-prompt_template = "USER: <image>\n{question} (yes/no) ASSISTANT: "
-NO_ID = vlm_processor.tokenizer("No", add_special_tokens=False)['input_ids'][0]
-YES_ID = vlm_processor.tokenizer("Yes", add_special_tokens=False)['input_ids'][0]
-RESPONSE_TOKEN_IDS = {
-    VQAResponse["No"]: NO_ID, 
-    VQAResponse["Yes"]: YES_ID
-}
-
 # Run VQA inference on questions generated in VQG
+# TODO: this is pretty slow - can we optimize it without adding batching? maybe use hf pipeline code?
 vqa_outputs = []
 with torch.no_grad():
     # for example in tqdm(filtered_examples):
@@ -98,13 +91,14 @@ with torch.no_grad():
 
                 frame_vqa_outputs.append(
                     VQAOutputs(
+                        example.example_id,
                         step_id,
                         frame,
                         prompt,
                         expected_answer,
-                        RESPONSE_TOKEN_IDS,
+                        response_token_ids,
                         logits,        
-                    )
+                    )               
                 )
             example_vqa_outputs.append(frame_vqa_outputs)
 

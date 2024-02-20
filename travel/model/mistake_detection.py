@@ -80,6 +80,8 @@ class MistakeDetectionEvaluator:
         
         combined_preds = {}
         metrics = {}
+        best_metrics = None
+        best_threshold = None
         for threshold in MISTAKE_DETECTION_THRESHOLDS:
             pred_objects = self.check_mistakes(threshold)
             preds = [pred.final_mistake_prediction for pred in pred_objects]
@@ -99,7 +101,14 @@ class MistakeDetectionEvaluator:
 
             combined_preds[threshold] = pred_objects
             metrics[threshold] = this_metrics
-            
+
+            # Save best metrics based on which threshold minimizes FPR and FNR
+            if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
+                best_metrics = this_metrics
+                best_threshold = threshold
+
+        metrics['best_metrics'] = best_metrics
+        metrics['best_threshold'] = best_threshold
         return combined_preds, metrics
     
     # TODO: this can only handle one frame per example - smooth this over later
@@ -313,6 +322,7 @@ MISTAKE_DETECTION_STRATEGIES = {
     "heuristic": HeuristicMistakeDetectionEvaluator
 }
 
+# TODO: accept multiple sets of metrics as input for comparison; also add a legend where each curve has a name (e.g., SuccessVQA)
 def generate_det_curve(metrics: dict[float, dict[str, float]], save_path: str):
     """
     Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`. A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point to set the threshold in the bottom left corner.
