@@ -70,7 +70,7 @@ class MistakeDetectionEvaluator:
         """
         raise NotImplementedError("Subclass should define the strategy to check for mistakes.")
     
-    def evaluate_mistake_detection(self) -> tuple[dict[float, ], dict[float, dict[str, float]]]:
+    def evaluate_mistake_detection(self) -> tuple[dict[float, list[MistakeDetectionOutputs]], dict[Union[float, str], dict[str, float]]]:
         """
         Calculates mistake detection evaluation metrics for this class instance's `examples` and `vqa_outputs`.
 
@@ -323,13 +323,16 @@ MISTAKE_DETECTION_STRATEGIES = {
 }
 
 # TODO: accept multiple sets of metrics as input for comparison; also add a legend where each curve has a name (e.g., SuccessVQA)
-def generate_det_curve(metrics: dict[float, dict[str, float]], save_path: str):
+def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_path: str):
     """
     Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`. A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point to set the threshold in the bottom left corner.
 
     :param metrics: `metrics` object returned by `evaluate_mistake_detection()`.
     :param save_path: Path to save the PDF of the DET curve.
     """
+    # Some of the keys in the metrics file may not be floats (for thresholds), e.g., a "best_metrics" key is also saved here
+    metrics = {k: v for k, v in metrics.items() if type(k) == float}
+
     # Gather FPR and FNR from metrics
     false_positive_rates = [round(1.0 - metrics[threshold]['false_positive_rate'], 3) for threshold in metrics]
     false_negative_rates = [round(1.0 - metrics[threshold]['false_negative_rate'], 3) for threshold in metrics]
