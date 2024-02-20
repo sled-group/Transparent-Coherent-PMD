@@ -37,7 +37,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname + ".pkl")
 
         if os.path.exists(cache_fname):
-            error_examples, success_examples = pickle.load(open(cache_fname, "rb"))
+            error_examples, success_examples, all_examples = pickle.load(open(cache_fname, "rb"))
         else:
             # Sample videos from CaptainCook4D
             all_video_ids = DATA_SPLITS[data_split]
@@ -129,7 +129,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
                 sample_video.release()
         
-            pickle.dump((error_examples, success_examples), open(cache_fname, "wb"))
+            pickle.dump((error_examples, success_examples, all_examples), open(cache_fname, "wb"))
             
         if debug_n_examples_per_class is not None:
             return error_examples[:debug_n_examples_per_class] + success_examples[:debug_n_examples_per_class]

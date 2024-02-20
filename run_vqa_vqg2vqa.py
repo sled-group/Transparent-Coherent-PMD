@@ -47,7 +47,7 @@ prompt_template = VQG2VQA_PROMPT_TEMPLATES[args.vlm_name]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
 # Load cached VLM outputs
-vqa_cache_fname = os.path.join(DATA_CACHE_DIR, f"vqa_from_vqg_{args.vlm_name.replace('/','_')}.json")
+vqa_cache_fname = os.path.join(DATA_CACHE_DIR, f"vqa_vqg2vqa_{args.vlm_name.replace('/','_')}.json")
 if os.path.exists(vqa_cache_fname):
     vqa_cache = pickle.load(open(vqa_cache_fname, "rb"))
 else:
