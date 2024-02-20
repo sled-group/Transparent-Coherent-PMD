@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
+import os
 import json
 import torch.nn as nn
 
@@ -168,4 +169,6 @@ def load_vqg_outputs(path: str) -> dict[int, VQGOutputs]:
     
     :param path: Path to directory to load json file from (a directory that includes a vqg_outputs.json in it).
     """
-    
+    vqg_outputs = json.load(open(os.path.join(path, vqg_outputs.json), "r"))
+    vqg_outputs = {k: VQGOutputs.from_dict(v) for k, v in vqg_outputs.items()}
+    return vqg_outputs
