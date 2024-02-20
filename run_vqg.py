@@ -7,7 +7,7 @@ import torch
 from tqdm import tqdm
 
 from travel.constants import MODEL_CACHE_DIR, RESULTS_DIR, HF_TOKEN
-from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGOutputs
+from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGOutputs, save_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.captaincook4d.constants import RECIPE_STEPS
@@ -23,7 +23,7 @@ from transformers.pipelines.pt_utils import KeyDataset
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks])
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-parser.add_argument("--n_demonstrations", type=int, default=3, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
+parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 # parser.add_argument("--n_questions_to_generate", type=int, default=2, choices=range(1, len(VQG_DEMONSTRATIONS[0].questions) + 1), help="Number of questions to generate per procedure.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
@@ -56,8 +56,8 @@ vqg_outputs = {}
 prompt_idx = 0
 with torch.no_grad():
     for out in tqdm(lm(KeyDataset(prompts, "prompt"), 
-                        batch_size=32, 
-                        max_new_tokens=64, 
+                        batch_size=8, 
+                        max_new_tokens=128, 
                         return_full_text=False, 
                         truncation="do_not_truncate"),
                     desc="running VQG",
@@ -76,8 +76,9 @@ with torch.no_grad():
         
         # Parse reported target object and questions and answers
         try:
+            # TODO: move question parsing logic to external code file
             target_object = text_fixed.split("\n")[0].split("Target object: ")[1].strip()
-            questions_answers = [(q_a.split("?")[0].strip() + "?", q_a.split("?")[1].strip()) for q_a in text_fixed.split("\n")[1:3]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
+            questions_answers = [(q_a.split("? (yes/no)")[0].strip() + "?", q_a.split("? (yes/no)")[1].strip()) for q_a in text_fixed.split("\n")[1:3]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
             questions = [q[2:].strip() for q, _ in questions_answers]          
             answers = [a for _, a in questions_answers]
             output = VQGOutputs(procedure_id,
@@ -104,10 +105,7 @@ this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_
 this_results_dir = os.path.join(RESULTS_DIR, "vqg", this_results_dir)
 os.makedirs(this_results_dir)
 
-vqg_outputs_filename = f"vqg_outputs.json"
-json.dump({k: v.to_dict() for k, v in vqg_outputs.items()}, 
-          open(os.path.join(this_results_dir, vqg_outputs_filename), "w"),
-          indent=4)
+save_vqg_outputs(vqg_outputs, this_results_dir)
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

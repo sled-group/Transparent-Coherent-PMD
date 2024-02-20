@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
+import json
 import torch.nn as nn
 
 from travel.data.mistake_detection import MistakeDetectionExample
@@ -83,14 +84,28 @@ VQG_DEMONSTRATIONS = [
         answers_str=[
             "No",
             "Yes"
-        ]   
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=-1,
+        procedure_description='In a bowl, beat eggs, milk, salt and mustard.',
+        target_object='bowl',
+        questions=[
+            "Does the bowl contain eggs, milk, salt, and mustard?",
+            "Is the bowl mixed?"
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    )    
 ]
 
 VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} questions we could ask about an image of a target object and their expected answers?\n'
 VQG_EXAMPLE_TEMPLATE = VQG_PROMPT_TEMPLATE + \
                        "Target object: {target_object}\n" + \
                        "{question_list}"
-VQG_QUESTION_TEMPLATE = "{question_number}. {question} {answer}"
+VQG_QUESTION_TEMPLATE = "{question_number}. {question} (yes/no) {answer}"
 
 def generate_vqg_prompt(instruction_step: str) -> str:
     """
@@ -133,3 +148,24 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
     examples = [generate_vqg_example(demo) for demo in VQG_DEMONSTRATIONS[:n_demonstrations]]
     examples += [generate_vqg_prompt(procedure_description)]
     return "\n\n".join(examples)
+
+def save_vqg_outputs(vqg_outputs: dict[int, VQGOutputs], path: str):
+    """
+    Saves dict of VQGOutputs created by `run_vqg.py`.
+    
+    :param vqg_outputs: Dictionary mapping procedure ID int to VQGOutputs.
+    :param path: Path to save json file (directory).
+    """
+    if not os.path.exists(path):
+        os.makedirs(path)
+    json.dump({k: v.to_dict() for k, v in vqg_outputs.items()}, 
+              open(os.path.join(path, "vqg_outputs.json"), "w"),
+              indent=4)    
+
+def load_vqg_outputs(path: str) -> dict[int, VQGOutputs]:
+    """
+    Loads dict of VQGOutputs created by `run_vqg.py`.
+    
+    :param path: Path to directory to load json file from (a directory that includes a vqg_outputs.json in it).
+    """
+    
