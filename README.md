@@ -11,6 +11,7 @@ git clone git@github.com:shanestorks/TRAVEl.git
 ```
 
 In some environments, you may have issues getting Poetry to use the correct Python interpreter. In this case, you can specify which one to use by:
+
 ```
 poetry env use /path/to/desired/python
 ```
@@ -29,7 +30,10 @@ poetry install
 poetry shell
 ```
 
+Note that the same CUDA installation must be available whenever you activate the environment using `poetry shell`.
+
 For Jupyter notebook support, run this when the `travel` environment is activated (i.e., after running `poetry shell`):
+
 ```
 python -m ipykernel install --user --name=travel
 ```

@@ -21,6 +21,23 @@ from travel.model.vqg import VQGOutputs
 
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
 
+def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str, float]:
+    this_metrics = {}
+    this_metrics['accuracy'] = accuracy_score(labels, preds)
+    this_metrics['precision'] = precision_score(labels, preds)
+    this_metrics['recall'] = recall_score(labels, preds)
+    this_metrics['f1'] = f1_score(labels, preds)
+
+    cm = confusion_matrix(labels, preds)
+    TN, FP, FN, TP = cm.ravel()
+    FPR = FP / (FP + TN)
+    FNR = FN / (TP + FN)
+    this_metrics['false_positive_rate'] = FPR
+    this_metrics['false_negative_rate'] = FNR
+
+    return this_metrics
+
+
 @dataclass
 class MistakeDetectionOutputs:
     """Class to hold mistake detection outputs for individual frames. If using full video clips for VQA, just use a placeholder time."""
@@ -86,19 +103,7 @@ class MistakeDetectionEvaluator:
             pred_objects = self.check_mistakes(threshold)
             preds = [pred.final_mistake_prediction for pred in pred_objects]
 
-            this_metrics = {}
-            this_metrics['accuracy'] = accuracy_score(labels, preds)
-            this_metrics['precision'] = precision_score(labels, preds)
-            this_metrics['recall'] = recall_score(labels, preds)
-            this_metrics['f1'] = f1_score(labels, preds)
-
-            cm = confusion_matrix(labels, preds)
-            TN, FP, FN, TP = cm.ravel()
-            FPR = FP / (FP + TN)
-            FNR = FN / (TP + FN)
-            this_metrics['false_positive_rate'] = FPR
-            this_metrics['false_negative_rate'] = FNR
-
+            this_metrics = mistakea_detection_metrics(labels, preds)
             combined_preds[threshold] = pred_objects
             metrics[threshold] = this_metrics
 

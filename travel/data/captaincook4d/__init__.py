@@ -13,20 +13,23 @@ from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FR
 class CaptainCook4DDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
-                 debug_n_examples_per_class: Optional[int]):
+                 load_videos: bool=True,
+                 debug_n_examples_per_class: Optional[int]=None):
         """
         Method to initialize and load CaptainCook4D dataset.
 
         :param kwargs: Task-specific arguments for dataset compilation.
         """
         super().__init__(data_split,
+                         load_videos,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
     # TODO: don't load videos on init? Instead can just load annotations and frame times, then load actual frames when accessing specific items
     # TODO: or just consider parallelizing
     def load_examples(self,
                       data_split: str,
-                      debug_n_examples_per_class: Optional[int] = None) -> list[MistakeDetectionExample]:
+                      load_videos: bool=True,
+                      debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
 
         # TODO: When loading CaptainCook4D at least a few videos cannot be successfully loaded. Need to look into this at some point
 
@@ -36,7 +39,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
             cache_fname += f"_debug{debug_n_examples_per_class}"
         cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname + ".pkl")
 
-        if os.path.exists(cache_fname):
+        if os.path.exists(cache_fname) and load_videos:
             error_examples, success_examples, all_examples = pickle.load(open(cache_fname, "rb"))
         else:
             # Sample videos from CaptainCook4D
@@ -69,11 +72,15 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         if step_duration < 0.1:
                             continue
 
-                        adjusted_start = step['start_time'] + min(step_duration * 0.05, 0.5) # Adjust the start time to be later by a maximum of 0.5 seconds
-                        adjusted_end = step['end_time'] - min(step_duration * 0.3, 3) # Adjust the end time to be earlier by a maximum of 3 seconds
-                        times = generate_float_series(adjusted_start, adjusted_end, FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
-                        frames = extract_frames(sample_video, times)
-                        frames = [Image.fromarray(frame) for frame in frames]
+                        if load_videos:
+                            adjusted_start = step['start_time'] + min(step_duration * 0.05, 0.5) # Adjust the start time to be later by a maximum of 0.5 seconds
+                            adjusted_end = step['end_time'] - min(step_duration * 0.3, 3) # Adjust the end time to be earlier by a maximum of 3 seconds
+                            times = generate_float_series(adjusted_start, adjusted_end, FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
+                            frames = extract_frames(sample_video, times)
+                            frames = [Image.fromarray(frame) for frame in frames]
+                        else:
+                            times = []
+                            frames = []
 
                         verb, procedure_description = step['description'].split("-")[0], "-".join(step['description'].split("-")[1:])
 
@@ -129,7 +136,9 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
                 sample_video.release()
         
-            pickle.dump((error_examples, success_examples, all_examples), open(cache_fname, "wb"))
+            # If we processed videos, then cache
+            if load_videos:
+                pickle.dump((error_examples, success_examples, all_examples), open(cache_fname, "wb"))
             
         if debug_n_examples_per_class is not None:
             return error_examples[:debug_n_examples_per_class] + success_examples[:debug_n_examples_per_class]

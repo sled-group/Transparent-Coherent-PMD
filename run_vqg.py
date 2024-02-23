@@ -7,7 +7,7 @@ import torch
 from tqdm import tqdm
 
 from travel.constants import MODEL_CACHE_DIR, RESULTS_DIR, HF_TOKEN
-from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGOutputs, save_vqg_outputs
+from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGOutputs, save_vqg_outputs, parse_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.captaincook4d.constants import RECIPE_STEPS
@@ -25,6 +25,8 @@ parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.v
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 # parser.add_argument("--n_questions_to_generate", type=int, default=2, choices=range(1, len(VQG_DEMONSTRATIONS[0].questions) + 1), help="Number of questions to generate per procedure.")
+parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
+parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
@@ -40,6 +42,16 @@ lm = pipeline("text-generation",
               device=device)
 lm.tokenizer.padding_side = "left"
 lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
+lm.model.generation_config.top_p = args.top_p
+if args.temperature == 0.0:
+    lm.model.generation_config.temperature = None
+    lm.model.generation_config.do_sample = False
+else:
+    lm.model.generation_config.temperature = args.temperature
+    lm.model.generation_config.do_sample = True
+
+print("Generation config:")
+print(lm.model.generation_config)
 
 prompts = []
 if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
@@ -48,8 +60,14 @@ if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
 for procedure_id, step in indexed_procedures.items():
     prompt = generate_vqg_prompt_icl(step, n_demonstrations=args.n_demonstrations)
     prompts.append({"procedure_id": procedure_id, "step": step, "prompt": prompt})
-    if args.debug and len(prompts) >= 5:
+    if args.debug and len(prompts) >= 10:
         break
+
+# Gemma consumes more GPU memory
+if "gemma" in args.lm_name:
+    batch_size = 2
+else:
+    batch_size = 8
 
 # Run prompts through LM to generate visual questions
 vqg_outputs = {}
@@ -76,18 +94,9 @@ with torch.no_grad():
         
         # Parse reported target object and questions and answers
         try:
-            # TODO: move question parsing logic to external code file
-            target_object = text_fixed.split("\n")[0].split("Target object: ")[1].strip()
-            questions_answers = [(q_a.split("? (yes/no)")[0].strip() + "?", q_a.split("? (yes/no)")[1].strip()) for q_a in text_fixed.split("\n")[1:3]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
-            questions = [q[2:].strip() for q, _ in questions_answers]          
-            answers = [a for _, a in questions_answers]
-            output = VQGOutputs(procedure_id,
-                                step,
-                                target_object,
-                                questions,
-                                answers)
+            output = parse_vqg_outputs(text_fixed, procedure_id, step)
         except:
-            print("ERROR:")
+            print("Error parsing VQG outputs:")
             print(text)
             print('======')
             print(text_fixed)
