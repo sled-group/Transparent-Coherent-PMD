@@ -30,16 +30,26 @@ parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
-# Load LM
-if torch.cuda.is_available():
-    device = "cuda"
+# Gemma consumes more GPU memory
+if "gemma" in args.lm_name:
+    batch_size = 1
+    model_kwargs = {"device_map": "auto"}
+    device = None
+
 else:
-    device = "cpu"
-print(f"Loading LM on {device}...")
+    batch_size = 8
+    model_kwargs = []
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+# Load LM
 lm = pipeline("text-generation", 
               model=args.lm_name, 
               token=HF_TOKEN,
-              device=device)
+              device=device,
+              model_kwargs=model_kwargs)
 lm.tokenizer.padding_side = "left"
 lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
 lm.model.generation_config.top_p = args.top_p
@@ -62,12 +72,6 @@ for procedure_id, step in indexed_procedures.items():
     prompts.append({"procedure_id": procedure_id, "step": step, "prompt": prompt})
     if args.debug and len(prompts) >= 10:
         break
-
-# Gemma consumes more GPU memory
-if "gemma" in args.lm_name:
-    batch_size = 1
-else:
-    batch_size = 8
 
 # Run prompts through LM to generate visual questions
 vqg_outputs = {}
