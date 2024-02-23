@@ -44,7 +44,7 @@ pprint(metrics_majority)
 # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
 timestamp = datetime.datetime.now()
 this_results_dir = f"simple_baselines"
-this_results_dir += f"_{args.vlm_name.split('/')[-1]}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
 this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
 os.makedirs(this_results_dir)
 

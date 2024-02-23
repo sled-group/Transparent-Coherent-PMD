@@ -65,7 +65,7 @@ for procedure_id, step in indexed_procedures.items():
 
 # Gemma consumes more GPU memory
 if "gemma" in args.lm_name:
-    batch_size = 2
+    batch_size = 1
 else:
     batch_size = 8
 
