@@ -390,8 +390,9 @@ def compile_mistake_detection_preds(dataset: MistakeDetectionDataset,
     :param vqa_outputs: Ragged list of VQA outputs; shape should correspond to (# examples, # frames, # questions per frame)
     """
     compiled_preds = {example.example_id: {"example": example.to_dict()} for example in dataset}
-    for example_outputs in vqa_outputs:
-        example_id = example_outputs[0][0].example_id
+    assert len(dataset) == len(vqa_outputs), "Expected same number of dataset examples and VQAOutputs lists."
+    for example_outputs, example in zip(vqa_outputs, dataset):
+        example_id = example.example_id
         compiled_preds[example_id]["vqa"] = [[question_output.to_dict() for question_output in frame_outputs] for frame_outputs in example_outputs]
     for threshold in mistake_detection_preds:
         for pred in mistake_detection_preds[threshold]:

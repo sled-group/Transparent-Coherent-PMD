@@ -52,15 +52,15 @@ del detector
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
 vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, cache_dir=DATA_CACHE_DIR, load_in_8bit=True) # NOTE: when loading in 8bit, batched inference may output nans
 vlm_processor.tokenizer.padding_side = "left"
-vlm.lm.generation_config.temperature = None
-vlm.lm.generation_config.top_p = None
-vlm.lm.generation_config.do_sample = False
+vlm.language_model.generation_config.temperature = None
+vlm.language_model.generation_config.top_p = None
+vlm.language_model.generation_config.do_sample = False
 
 prompt_template = VQG2VQA_PROMPT_TEMPLATES[args.vlm_name]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
 # Load cached VLM outputs
-vqa_cache_fname = os.path.join(DATA_CACHE_DIR, f"vqa_vqg2vqa_{args.vlm_name.replace('/','_')}.json")
+vqa_cache_fname = os.path.join(DATA_CACHE_DIR, f"vqa_vqg2vqa_{args.vlm_name.replace('/','_')}.pkl")
 if os.path.exists(vqa_cache_fname):
     vqa_cache = pickle.load(open(vqa_cache_fname, "rb"))
 else:
@@ -83,7 +83,7 @@ for example in tqdm(eval_dataset):
     prompts = [prompt_template.format(question=question.strip()) for question in questions]
     expected_answers = vqg_outputs[step_id].answers
 
-    if target_frames_proportion is not None:
+    if target_frames_proportion is not None and len(example.frame_times) > 0:
         cutoff_time = get_cutoff_time_by_proportion(example, target_frames_proportion)
     else:
         cutoff_time = None
@@ -95,7 +95,7 @@ for example in tqdm(eval_dataset):
 
             if cutoff_time is not None and frame_time < cutoff_time:
                 # Don't run inference on this frame
-                frame_vqa_outputs.append([VQAOutputs(
+                frame_vqa_outputs.append(VQAOutputs(
                     example.example_id,
                     step_id,
                     frame,
@@ -103,7 +103,7 @@ for example in tqdm(eval_dataset):
                     expected_answer,
                     response_token_ids,
                     torch.zeros((vlm_processor.tokenizer.vocab_size)).float() # Placeholder zero logits since we didn't prompt the VLM
-                )])
+                ))
                 continue
 
             # Forward pass

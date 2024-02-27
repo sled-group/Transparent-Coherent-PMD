@@ -35,12 +35,15 @@ eval_dataset = CaptainCook4DDataset(data_split=args.eval_split,
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
 vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, cache_dir=DATA_CACHE_DIR, load_in_8bit=True) # NOTE: when loading in 8bit, batched inference may output nans
 vlm_processor.tokenizer.padding_side = "left"
+vlm.language_model.generation_config.temperature = None
+vlm.language_model.generation_config.top_p = None
+vlm.language_model.generation_config.do_sample = False
 
 prompt_template = SUCCESSVQA_PROMPT_TEMPLATES[args.vlm_name]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
 # Load cached VLM outputs
-vqa_cache_fname = os.path.join(DATA_CACHE_DIR, f"vqa_successvqa_{args.vlm_name.replace('/','_')}.json")
+vqa_cache_fname = os.path.join(DATA_CACHE_DIR, f"vqa_successvqa_{args.vlm_name.replace('/','_')}.pkl")
 if os.path.exists(vqa_cache_fname):
     vqa_cache = pickle.load(open(vqa_cache_fname, "rb"))
 else:

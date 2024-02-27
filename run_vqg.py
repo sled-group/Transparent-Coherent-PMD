@@ -39,7 +39,7 @@ if "gemma" in args.lm_name:
 
 else:
     batch_size = 8
-    model_kwargs = []
+    model_kwargs = {}
     if torch.cuda.is_available():
         device = "cuda"
     else:
