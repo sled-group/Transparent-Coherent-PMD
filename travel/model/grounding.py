@@ -38,7 +38,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
         
         batch_size = 8
         all_results = []
-        all_padded_images = []
+        # all_padded_images = []
         for i in tqdm(range(0, len(all_frames), batch_size), desc="detecting objects"):
             # Prepare the batch
             batch_frames = all_frames[i:i+batch_size]
@@ -55,11 +55,11 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
             # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
             results = detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=0.2)
             all_results += results
-            all_padded_images += padded_images
+            # all_padded_images += padded_images
             
         texts = all_texts
         results = all_results
-        padded_images = all_padded_images
+        # padded_images = all_padded_images
 
         example_frame_idx = 0
         filtered_examples = []  
