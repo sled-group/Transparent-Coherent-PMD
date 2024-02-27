@@ -95,17 +95,17 @@ for example in tqdm(eval_dataset, "running inference on clips"):
                 logits = logits[-1].detach().cpu() # (vocab size)
                 vqa_cache[prompt_id] = logits
 
-            this_vqa_outputs.append(
-                [VQAOutputs(
-                    example.example_id,
-                    step_id,
-                    frame,
-                    prompt,
-                    expected_answer,
-                    response_token_ids,
-                    logits,        
-                )]
-            )
+        this_vqa_outputs.append(
+            [VQAOutputs(
+                example.example_id,
+                step_id,
+                frame,
+                prompt,
+                expected_answer,
+                response_token_ids,
+                logits,        
+            )]
+        )
         
     vqa_outputs.append(this_vqa_outputs)
 

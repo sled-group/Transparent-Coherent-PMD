@@ -103,7 +103,7 @@ class MistakeDetectionEvaluator:
             pred_objects = self.check_mistakes(threshold)
             preds = [pred.final_mistake_prediction for pred in pred_objects]
 
-            this_metrics = mistakea_detection_metrics(labels, preds)
+            this_metrics = mistake_detection_metrics(labels, preds)
             combined_preds[threshold] = pred_objects
             metrics[threshold] = this_metrics
 

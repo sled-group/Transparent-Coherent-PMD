@@ -42,6 +42,9 @@ else:
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
 vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, cache_dir=DATA_CACHE_DIR, load_in_8bit=True) # NOTE: when loading in 8bit, batched inference may output nans
 vlm_processor.tokenizer.padding_side = "left"
+vlm.lm.generation_config.temperature = None
+vlm.lm.generation_config.top_p = None
+vlm.lm.generation_config.do_sample = False
 
 prompt_template = VQG2VQA_PROMPT_TEMPLATES[args.vlm_name]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
@@ -59,23 +62,41 @@ vqg_outputs = load_vqg_outputs(args.vqg_directory)
 # TODO: incorporate filtering based on whether target object is present?
 
 # Run VQA inference on questions generated in VQG
-# TODO: this is pretty slow - can we optimize it without adding batching? maybe use hf pipeline code?
 vqa_outputs = []
-with torch.no_grad():
-    # for example in tqdm(filtered_examples):
-    for example in tqdm(eval_dataset):
-        example_vqa_outputs = []
+for example in tqdm(eval_dataset):
+    example_vqa_outputs = []
+    
+    step_id = example.procedure_id
+    
+    questions = vqg_outputs[step_id].questions
+    prompts = [prompt_template.format(question=question.strip()) for question in questions]
+    expected_answers = vqg_outputs[step_id].answers
+
+    if target_frames_proportion is not None:
+        cutoff_time = get_cutoff_time_by_proportion(example, target_frames_proportion)
+    else:
+        cutoff_time = None
+
+    for frame, frame_time in zip(example.frames, example.frame_times):
+        frame_vqa_outputs = []
         
-        step_id = example.procedure_id
-        
-        questions = vqg_outputs[step_id].questions
-        prompts = [prompt_template.format(question=question.strip()) for question in questions]
-        expected_answers = vqg_outputs[step_id].answers
-                           
-        for frame, frame_time in zip(example.frames, example.frame_times):
-            frame_vqa_outputs = []
-            
-            for prompt, expected_answer in zip(prompts, expected_answers):
+        for prompt, expected_answer in zip(prompts, expected_answers):
+
+            if cutoff_time is not None and frame_time < cutoff_time:
+                # Don't run inference on this frame
+                frame_vqa_outputs.append([VQAOutputs(
+                    example.example_id,
+                    step_id,
+                    frame,
+                    prompt,
+                    expected_answer,
+                    response_token_ids,
+                    torch.zeros((vlm_processor.tokenizer.vocab_size)).float() # Placeholder zero logits since we didn't prompt the VLM
+                )])
+                continue
+
+            # Forward pass
+            with torch.no_grad():
                 prompt_id = (example.example_id, frame_time, prompt)
                 if prompt_id in vqa_cache:
                     # Check if we already cached VLM outputs for this prompt
@@ -83,26 +104,24 @@ with torch.no_grad():
                 else:
                     # If we didn't, prompt the VLM
                     inputs = vlm_processor(text=prompt, images=frame, return_tensors="pt").to(vlm.device)
-
-                    # Forward pass
                     logits = vlm(**inputs).logits[0] # (seq. length, vocab size)
                     logits = logits[-1].detach().cpu() # just logits for last input (next generation)
                     vqa_cache[prompt_id] = logits
 
-                frame_vqa_outputs.append(
-                    VQAOutputs(
-                        example.example_id,
-                        step_id,
-                        frame,
-                        prompt,
-                        expected_answer,
-                        response_token_ids,
-                        logits,        
-                    )               
-                )
-            example_vqa_outputs.append(frame_vqa_outputs)
+            frame_vqa_outputs.append(
+                VQAOutputs(
+                    example.example_id,
+                    step_id,
+                    frame,
+                    prompt,
+                    expected_answer,
+                    response_token_ids,
+                    logits,        
+                )               
+            )
+        example_vqa_outputs.append(frame_vqa_outputs)
 
-        vqa_outputs.append(example_vqa_outputs)
+    vqa_outputs.append(example_vqa_outputs)
 
 # Save VQA cache
 pickle.dump(vqa_cache, open(vqa_cache_fname, "wb"))
