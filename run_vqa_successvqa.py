@@ -1,21 +1,22 @@
+from travel.constants import MODEL_CACHE_DIR
+import os
+os.environ['HF_HOME'] = MODEL_CACHE_DIR
+
 import argparse
 import datetime
 import json
-import os
 import pickle
 from pprint import pprint
 import shutil
 import torch
 from tqdm import tqdm
+from transformers import AutoProcessor, AutoModelForVision2Seq
 
-from travel.constants import DATA_CACHE_DIR, MODEL_CACHE_DIR, RESULTS_DIR
+from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, HEURISTIC_TARGET_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
 from travel.model.vqa import VQAOutputs, VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
 from travel.data.captaincook4d import CaptainCook4DDataset
-
-os.environ['HF_HOME'] = MODEL_CACHE_DIR
-from transformers import AutoProcessor, AutoModelForVision2Seq
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
@@ -29,12 +30,6 @@ args = parser.parse_args()
 # Load mistake detection dataset
 eval_dataset = CaptainCook4DDataset(data_split=args.eval_split,
                                     debug_n_examples_per_class=20 if args.debug else None)
-
-# Some mistake detection strategies are only applied to a specific proportion of frames; if so, we can skip running inference on these frames to save time
-if args.mistake_detection_strategy == "heuristic":
-    target_frames_proportion = HEURISTIC_TARGET_FRAMES_PROPORTION
-else:
-    target_frames_proportion = None
 
 # Load VLM
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
@@ -50,6 +45,12 @@ if os.path.exists(vqa_cache_fname):
     vqa_cache = pickle.load(open(vqa_cache_fname, "rb"))
 else:
     vqa_cache = {}
+
+# Some mistake detection strategies are only applied to a specific proportion of frames; if so, we can skip running inference on these frames to save time
+if args.mistake_detection_strategy == "heuristic":
+    target_frames_proportion = HEURISTIC_TARGET_FRAMES_PROPORTION
+else:
+    target_frames_proportion = None
 
 # Run SuccessVQA inference
 vqa_outputs = []

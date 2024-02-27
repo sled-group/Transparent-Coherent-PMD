@@ -196,8 +196,10 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 # mistake_pred_majority = Counter(mistake_pred_cut)
                 # mistake_pred_majority, _ = mistake_pred_majority.most_common()[0]                
             else:
+                # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;
+                # in this case, the target object is likely not present at all in the video, suggesting an incorrect object is used instead
                 mistake_prob_cut = [[]]
-                mistake_pred_final = False
+                mistake_pred_final = True
 
             pred_object = MistakeDetectionOutputs(
                 example_id=example.example_id,

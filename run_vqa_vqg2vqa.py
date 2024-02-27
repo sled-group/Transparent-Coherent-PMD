@@ -1,3 +1,7 @@
+from travel.constants import MODEL_CACHE_DIR
+import os
+os.environ['HF_HOME'] = MODEL_CACHE_DIR
+
 import argparse
 import datetime
 import json
@@ -7,22 +11,22 @@ from pprint import pprint
 import shutil
 import torch
 from tqdm import tqdm
+from transformers import AutoProcessor, AutoModelForVision2Seq, Owlv2Processor, Owlv2ForObjectDetection
 
-from travel.constants import DATA_CACHE_DIR, MODEL_CACHE_DIR, RESULTS_DIR
+from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
+from travel.model.grounding import filter_frames_by_target_objects
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, HEURISTIC_TARGET_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
 from travel.model.vqa import VQAOutputs, VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES
 from travel.model.vqg import load_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
 from travel.data.captaincook4d import CaptainCook4DDataset
 
-os.environ['HF_HOME'] = MODEL_CACHE_DIR
-from transformers import AutoProcessor, AutoModelForVision2Seq
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired vqg_outputs.json is stored.")
 parser.add_argument("--eval_split", type=str, choices=["val", "test"])
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(VQG2VQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--reset_cache", action="store_true", help="Pass this argument to not save cached VQA outputs for the VLM, and generate new ones.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -32,11 +36,17 @@ args = parser.parse_args()
 eval_dataset = CaptainCook4DDataset(data_split=args.eval_split,
                                     debug_n_examples_per_class=20 if args.debug else None)
 
-# Some mistake detection strategies are only applied to a specific proportion of frames; if so, we can skip running inference on these frames to save time
-if args.mistake_detection_strategy == "heuristic":
-    target_frames_proportion = HEURISTIC_TARGET_FRAMES_PROPORTION
-else:
-    target_frames_proportion = None
+# Load VQG outputs from run_vqg.py
+vqg_outputs = load_vqg_outputs(args.vqg_directory)
+
+# Load OWL object detector for filtering frames, and filter frames
+detector_processor = Owlv2Processor.from_pretrained(args.detector_name)
+detector = Owlv2ForObjectDetection.from_pretrained(args.detector_name, load_in_8bit=True)
+eval_dataset = filter_frames_by_target_objects(eval_dataset, detector, detector_processor, vqg_outputs)
+
+# Clear detector from memory
+del detector_processor
+del detector
 
 # Load VLM
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
@@ -56,10 +66,11 @@ if os.path.exists(vqa_cache_fname):
 else:
     vqa_cache = {}
 
-# Load VQG outputs from run_vqg.py
-vqg_outputs = load_vqg_outputs(args.vqg_directory)
-
-# TODO: incorporate filtering based on whether target object is present?
+# Some mistake detection strategies are only applied to a specific proportion of frames; if so, we can skip running inference on these frames to save time
+if args.mistake_detection_strategy == "heuristic":
+    target_frames_proportion = HEURISTIC_TARGET_FRAMES_PROPORTION
+else:
+    target_frames_proportion = None
 
 # Run VQA inference on questions generated in VQG
 vqa_outputs = []

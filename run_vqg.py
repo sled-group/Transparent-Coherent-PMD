@@ -31,6 +31,7 @@ parser.add_argument("--debug", action="store_true", help="Pass this argument to 
 args = parser.parse_args()
 
 # Gemma consumes more GPU memory
+# TODO: Gemma still won't work with any kind of quantization or parallelism
 if "gemma" in args.lm_name:
     batch_size = 1
     model_kwargs = {"device_map": "auto"}
