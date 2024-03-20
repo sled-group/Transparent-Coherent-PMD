@@ -141,6 +141,12 @@ def get_preprocessed_image(pixel_values: torch.FloatTensor) -> Image.Image:
     unnormalized_image = Image.fromarray(unnormalized_image)
     return unnormalized_image
 
+
+def is_overlapping(rect1, rect2):
+    x1, y1, x2, y2 = rect1
+    x3, y3, x4, y4 = rect2
+    return not (x2 < x3 or x1 > x4 or y2 < y3 or y1 > y4)
+
 def draw_entity_boxes_on_image(image: Union[Image.Image, str, torch.Tensor], entities: list[Any], show=False, save_path=None):
     """
     Helper function to draw bounding boxes over a given image. Adapted from Kosmos-2 code at https://huggingface.co/microsoft/kosmos-2-patch14-224.

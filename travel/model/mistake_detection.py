@@ -187,8 +187,10 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
             if len(mistake_prob) > 0:
                 cutoff_time = get_cutoff_time_by_proportion(example, HEURISTIC_TARGET_FRAMES_PROPORTION)
                 assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue."
-                mistake_prob_cut = [prob for prob, ft in zip(mistake_prob, example.frame_times) if ft >= cutoff_time]
-                mean_mistake_prob_cut = np.mean(mistake_prob_cut)
+                mistake_prob_cut = [prob for prob, ft in zip(mistake_prob, example.frame_times) if ft >= cutoff_time] # (# heuristic frames, # questions)
+                
+                mean_mistake_prob_cut = np.max(mistake_prob_cut, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
+                mean_mistake_prob_cut = np.mean(mistake_prob_cut) # Get mean mistakeprobability over all frames
                 frame_times_cut = [ft for ft in example.frame_times if ft >= cutoff_time]
                                 
                 mistake_pred_final = True if mean_mistake_prob_cut > detection_threshold else False

@@ -4,10 +4,16 @@ import torch
 from tqdm import tqdm
 from transformers import Owlv2Processor, Owlv2ForObjectDetection
 from typing import Optional
+import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils.image import get_preprocessed_image
 from travel.model.vqg import VQGOutputs
+
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+
+OWL_THRESHOLD = config["data"]["owl_threshold"] # Directory to cache model outputs and other temporary data
 
 def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
                                     detector: Owlv2ForObjectDetection,
@@ -28,6 +34,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     with torch.no_grad():
         
         all_frames = [frame for example in dataset for frame in example.frames]
+        frames_before = len(all_frames)
 
         if vqg_outputs is not None:
             all_texts = [f"a photo of {'an' if vqg_outputs[example.procedure_id].target_object[0] in ['a','e','i','o','u'] else 'a'} {vqg_outputs[example.procedure_id].target_object}" for example in dataset for frame in example.frames]
@@ -39,7 +46,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
         batch_size = 8
         all_results = []
         # all_padded_images = []
-        for i in tqdm(range(0, len(all_frames), batch_size), desc="detecting objects"):
+        for i in tqdm(range(0, len(all_frames), batch_size), desc=f"detecting objects with threshold {OWL_THRESHOLD}"):
             # Prepare the batch
             batch_frames = all_frames[i:i+batch_size]
             batch_texts = all_texts[i:i+batch_size]
@@ -53,7 +60,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
             # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
             target_sizes = torch.Tensor([pi.size[::-1] for pi in padded_images])
             # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
-            results = detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=0.2)
+            results = detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
             all_results += results
             # all_padded_images += padded_images
             
@@ -88,6 +95,8 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
             filtered_examples.append(new_example)
             example_frame_idx += len(example.frames)    
 
-        dataset.examples = filtered_examples
-        return dataset
+    frames_after = sum([len(example.frames) for example in filtered_examples])
+    print(f"Filtered out {filtered_out_frames} video frames ({frames_before} -> {frames_after}).")
+    dataset.examples = filtered_examples
+    return dataset
     

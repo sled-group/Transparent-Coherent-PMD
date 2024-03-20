@@ -4,12 +4,19 @@ from enum import Enum
 from PIL import Image
 import torch
 
+COMPLETION_PROMPT_TEMPLATES = {
+    "Salesforce/blip2-flan-t5-xxl": "A photo of ",
+    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nWhat is happening in this photo? ASSISTANT: ',
+}
+
 SUCCESSVQA_PROMPT_TEMPLATES = {
-    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nThe current goal is "{step}". Did the person successfully do this? (yes/no) ASSISTANT: '
+    "Salesforce/blip2-flan-t5-xxl": "The current goal is "{step}". Has the person successfully finished doing this? Answer (yes/no):",
+    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? (yes/no) ASSISTANT: '
 }
 
 VQG2VQA_PROMPT_TEMPLATES = {
-    "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} (yes/no) ASSISTANT: "
+    "Salesforce/blip2-flan-t5-xxl": "Question: {question}? Answer (yes/no): ",
+    "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} (yes/no) ASSISTANT: ",
 }
 
 class VQAResponse(int, Enum):

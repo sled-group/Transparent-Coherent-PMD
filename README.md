@@ -32,6 +32,8 @@ poetry shell
 
 Note that the same CUDA installation must be available whenever you activate the environment using `poetry shell`.
 
+### Jupyter Notebeook Support
+
 For Jupyter notebook support, run this when the `travel` environment is activated (i.e., after running `poetry shell`):
 
 ```
@@ -39,3 +41,37 @@ python -m ipykernel install --user --name=travel
 ```
 
 Also ensure that the same CUDA installation is available in your notebook environment; for example, in a Great Lakes JupyterLab session, you can add `load cuda/11.7.1` under "Module commands". Then use the `travel` kernel in Jupyter.
+
+### Slurm Script Support
+
+In a Slurm script, ensure you prepend commands with `poetry run` to activate the virtual environment.
+
+## Running Experiments
+
+### Configuration
+
+You can configure some arguments and hyperparameters in `config.yml`, including video frame sampling frequency and directories where preprocessed data and results are stored.
+
+### SuccessVQA
+
+Baseline that simply asks VLMs whether some procedure was successfully performed. Check `run_vqa_successvqa.py` for more command-line arguments.
+
+```
+python run_vqa_successvqa.py --eval_split <val|test>
+```
+
+### VQG2VQA
+
+First, run visual question generation (VQG) to generate questions for each recipe step:
+
+```
+python run_vqg.py --temperature <temperature> --top_p <top_p>
+```
+
+Then, based on the outputs generated from the VQG script, run VQA mistake detection:
+
+```
+python run_vqa_vqg2vqa.py --eval_split <val|test> --vqg_directory "path/to/vqg/outputs"
+```
+
+Check `run_vqa_vqg2vqa.py` for more configurable command-line arguments.
