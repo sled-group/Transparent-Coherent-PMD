@@ -6,16 +6,22 @@ import torch
 
 COMPLETION_PROMPT_TEMPLATES = {
     "Salesforce/blip2-flan-t5-xxl": "A photo of ",
-    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nWhat is happening in this photo? ASSISTANT: ',
+    "Salesforce/instructblip-flan-t5-xxl": "A photo of ",
+    "microsoft/kosmos-2-patch14-224": "<grounding> A photo of",
+    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nWhat is happening in this photo? ASSISTANT: This is a photo of ',
 }
 
 SUCCESSVQA_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": "The current goal is "{step}". Has the person successfully finished doing this? Answer (yes/no):",
+    "Salesforce/blip2-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer (yes/no):',
+    "Salesforce/instructblip-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer (yes/no):',
+    "microsoft/kosmos-2-patch14-224": "<grounding> Q: The current goal is {step}. Has the person successfully finished doing this? A (yes/no): ",
     "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? (yes/no) ASSISTANT: '
 }
 
 VQG2VQA_PROMPT_TEMPLATES = {
     "Salesforce/blip2-flan-t5-xxl": "Question: {question}? Answer (yes/no): ",
+    "Salesforce/instructblip-flan-t5-xxl": "Question: {question}? Answer (yes/no): ",
+    "microsoft/kosmos-2-patch14-224": "<grounding> Q: {question} A (yes/no): ",
     "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} (yes/no) ASSISTANT: ",
 }
 
@@ -63,3 +69,23 @@ class VQAOutputs:
         for response in return_dict['answer_probs']:
             return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
         return return_dict
+    
+def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
+    """Copy of _shift_right method from T5 to use with BLIP-2 to automatically generate decoder input IDs."""
+    if decoder_start_token_id is None:
+        raise ValueError(
+            "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. "
+            "See T5 docs for more information."
+        )
+
+    # shift inputs to the right
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+    shifted_input_ids[..., 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
