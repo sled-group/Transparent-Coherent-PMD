@@ -5,24 +5,30 @@ from PIL import Image
 import torch
 
 COMPLETION_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": "A photo of ",
-    "Salesforce/instructblip-flan-t5-xxl": "A photo of ",
+    "Salesforce/blip2-flan-t5-xxl": "A photo of",
+    "Salesforce/instructblip-flan-t5-xxl": "A photo of",
     "microsoft/kosmos-2-patch14-224": "<grounding> A photo of",
-    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nWhat is happening in this photo? ASSISTANT: This is a photo of ',
+    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nWhat is happening in this photo? ASSISTANT: This is a photo of',
+    "llava-hf/llava-v1.6-vicuna-7b-hf": "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\nWhat is shown in this image? ASSISTANT: This is a photo of",
+    "llava-hf/llava-v1.6-mistral-7b-hf": '[INST] <image>\nWhat is shown in this image? [/INST] This is a photo of',
 }
 
 SUCCESSVQA_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer (yes/no):',
-    "Salesforce/instructblip-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer (yes/no):',
-    "microsoft/kosmos-2-patch14-224": "<grounding> Q: The current goal is {step}. Has the person successfully finished doing this? A (yes/no): ",
-    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? (yes/no) ASSISTANT: '
+    "Salesforce/blip2-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
+    "Salesforce/instructblip-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
+    "microsoft/kosmos-2-patch14-224": "<grounding> Q: The current goal is {step}. Has the person successfully finished doing this? A: ",
+    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT: ',
+    "llava-hf/llava-v1.6-vicuna-7b-hf": 'A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human\'s questions. USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT:',
+    "llava-hf/llava-v1.6-mistral-7b-hf": '[INST] <image>\nThe current goal is "{step}". Has the person successfully finished doing this? [/INST]',
 }
 
 VQG2VQA_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": "Question: {question}? Answer (yes/no): ",
-    "Salesforce/instructblip-flan-t5-xxl": "Question: {question}? Answer (yes/no): ",
-    "microsoft/kosmos-2-patch14-224": "<grounding> Q: {question} A (yes/no): ",
-    "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} (yes/no) ASSISTANT: ",
+    "Salesforce/blip2-flan-t5-xxl": "Question: {question}? Answer: ",
+    "Salesforce/instructblip-flan-t5-xxl": "Question: {question}? Answer: ",
+    "microsoft/kosmos-2-patch14-224": "<grounding> Question: {question} Answer: ",
+    "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} ASSISTANT: ",
+    "llava-hf/llava-v1.6-vicuna-7b-hf": 'A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human\'s questions. USER: <image>\n{question} ASSISTANT:',
+    "llava-hf/llava-v1.6-mistral-7b-hf": "[INST] <image>\n{question} [/INST]",
 }
 
 class VQAResponse(int, Enum):
