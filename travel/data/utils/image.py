@@ -141,7 +141,6 @@ def get_preprocessed_image(pixel_values: torch.FloatTensor) -> Image.Image:
     unnormalized_image = Image.fromarray(unnormalized_image)
     return unnormalized_image
 
-
 def is_overlapping(rect1, rect2):
     x1, y1, x2, y2 = rect1
     x3, y3, x4, y4 = rect2
