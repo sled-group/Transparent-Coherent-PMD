@@ -5,7 +5,7 @@ from PIL import Image
 import torch
 
 COMPLETION_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": "A photo of <pad>",
+    "Salesforce/blip2-flan-t5-xxl": "A photo of",
     "Salesforce/instructblip-flan-t5-xxl": "A photo of",
     "microsoft/kosmos-2-patch14-224": "<grounding> A photo of",
     "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nWhat is happening in this photo? ASSISTANT: This is a photo of',
@@ -14,7 +14,7 @@ COMPLETION_PROMPT_TEMPLATES = {
 }
 
 SUCCESSVQA_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer: <pad>',
+    "Salesforce/blip2-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
     "Salesforce/instructblip-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
     "microsoft/kosmos-2-patch14-224": '<grounding> Q: The current goal is "{step}". Has the person successfully finished doing this? A: ',
     "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT: ',
@@ -23,7 +23,7 @@ SUCCESSVQA_PROMPT_TEMPLATES = {
 }
 
 VQG2VQA_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": "Question: {question}? Answer: <pad>",
+    "Salesforce/blip2-flan-t5-xxl": "Question: {question}? Answer:",
     "Salesforce/instructblip-flan-t5-xxl": "Question: {question}? Answer: ",
     "microsoft/kosmos-2-patch14-224": "<grounding> Question: {question} Answer: ",
     "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} ASSISTANT: ",
