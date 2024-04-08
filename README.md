@@ -42,7 +42,7 @@ poetry shell
 
 Note that the same CUDA installation must be available whenever you activate the environment using `poetry shell`.
 
-### Jupyter Notebeook Support
+### Jupyter Notebook Support
 
 For Jupyter notebook support, run this when the `travel` environment is activated (i.e., after running `poetry shell`):
 
