@@ -18,12 +18,11 @@ In some environments, you may have issues getting Poetry to use the correct Pyth
 poetry env use /path/to/desired/python
 ```
 
-If using Great Lakes, you will need to create a `conda` environment with Python 3.10 and activate it:
+If using Great Lakes, you will need to create a `conda` environment with Python 3.10 and activate it before running the above:
 
 ```
 module load python3.10-anaconda/2023.03
 conda create --name python310 python=3.10
-source activate python310
 ```
 
 Install [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) if needed, and ensure a CUDA installation is available which is compatible with both `bitsandbytes` and `torch`. On Great Lakes, you will need to load an appropriate module before installing the dependencies. For example:
