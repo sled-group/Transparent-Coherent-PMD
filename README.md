@@ -22,7 +22,7 @@ If using Great Lakes, you will need to create a `conda` environment with Python 
 
 ```
 module load python3.10-anaconda/2023.03
-conda create --name python310 python=3.10
+conda create --name python310 python=3.10.9
 ```
 
 Install [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) if needed, and ensure a CUDA installation is available which is compatible with both `bitsandbytes` and `torch`. On Great Lakes, you will need to load an appropriate module before installing the dependencies. For example:
