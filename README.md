@@ -21,7 +21,7 @@ poetry env use /path/to/desired/python
 If using Great Lakes, you will need to create a `conda` environment with Python 3.10 and activate it:
 
 ```
-module avail python3.10-anaconda/2023.03
+module load python3.10-anaconda/2023.03
 conda create --name python310 python=3.10
 source activate python310
 ```
