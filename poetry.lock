@@ -4933,13 +4933,13 @@ test = ["argcomplete (>=3.0.3)", "mypy (>=1.7.0)", "pre-commit", "pytest (>=7.0,
 
 [[package]]
 name = "transformers"
-version = "4.39.1"
+version = "4.39.3"
 description = "State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow"
 optional = false
 python-versions = ">=3.8.0"
 files = [
-    {file = "transformers-4.39.1-py3-none-any.whl", hash = "sha256:df167e08b27ab254044a38bb7c439461cd3916332205416e9b6b1592b517a1a5"},
-    {file = "transformers-4.39.1.tar.gz", hash = "sha256:ab9c1e1912843b9976e6cc62b27cd5434284fc0dab465e1b660333acfa81c6bc"},
+    {file = "transformers-4.39.3-py3-none-any.whl", hash = "sha256:7838034a12cca3168247f9d2d1dba6724c9de3ae0f73a108258c6b8fc5912601"},
+    {file = "transformers-4.39.3.tar.gz", hash = "sha256:2586e5ff4150f122716fc40f5530e92871befc051848fbe82600969c535b762d"},
 ]
 
 [package.dependencies]
@@ -5500,4 +5500,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "218475d3f70704f8f9b44332731239d133eb6ca115cbd323d0c1f636c39af943"
+content-hash = "3c09c7be8be6cc2efd7062157c9304e22295cb47990f8dd003fd545bf1a667de"
