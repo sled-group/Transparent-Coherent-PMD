@@ -3,8 +3,11 @@ from enum import Enum
 from PIL import Image
 from typing import Optional, Any
 
+from travel.model.vqa import VQAResponse
+
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
+    Ego4D = "ego4d" # In SuccessVQA format
 
 @dataclass
 class MistakeDetectionExample:
