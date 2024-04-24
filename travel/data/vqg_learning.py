@@ -3,21 +3,20 @@ from PIL import Image
 
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.vqa import VQAResponse
+from travel.model.vqg import VQGOutputs
 
 @dataclass
 class FrameVQAMistakeDetectionExample:
-    """Class to store the data for a single-frame VQA mistake detection instance, including a candidate set of questions. Used for optimizing LMs for question generation."""
-    task_name: MistakeDetectionTasks # TODO: do we need all this info? some might be irrelevant or unused
+    """Class to store the data for a single-frame VQA mistake detection instance, including one or more candidate sets of questions. Used for optimizing LMs for question generation."""
+    task_name: MistakeDetectionTasks
     video_id: str
     procedure_id: int
-    mistake_detection_example_id: str
-    vqg_example_id: int
+    example_id: str # Mistake detection example that frame will come from
     frame: Image.Image
     frame_time: float
     procedure_description: str
     mistake: bool
-    questions: list[str]
-    expected_answers: list[VQAResponse]
+    candidate_question_sets: list[VQGOutputs]
 
     def __post_init__(self):
         """Saves a count of questions in this question set."""
@@ -38,6 +37,7 @@ class VQGTrainingExample:
     task_name: MistakeDetectionTasks
     procedure_id: int
     procedure_description: str
+    candidate_id: int # Index of generated question set (unique for a given procedure ID)
     questions: list[str]
     expected_answers: list[VQAResponse]
     preference_score: float

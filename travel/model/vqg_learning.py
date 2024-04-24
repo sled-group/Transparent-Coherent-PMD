@@ -28,7 +28,7 @@ class FrameVQAMistakeDetectionScorer:
                    vqa_outputs: list[list[VQAOutputs]],
                    ) -> list[float]:
         """
-        Scores whether VQA outputs successfully indicate mistakes/lack of mistakes.
+        Scores whether VQA outputs successfully indicate mistakes/lack of mistakes. This is separate from mistake detection policies, which integrate information across multiple frames and may employ confidence thresholds, etc.
 
         :param mistake_labels: List of bools indicating whether there is a mistake in some mistake detection example.
         :param vqa_outputs: List of lists of VQA outputs, one for each question set which will be scored.

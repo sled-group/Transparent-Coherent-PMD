@@ -7,7 +7,8 @@ from travel.model.vqa import VQAResponse
 
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
-    Ego4D = "ego4d" # In SuccessVQA format
+    Ego4D = "ego4d"
+    # EpicKitchens = "epickitchens" # Can consider adding EK later if need more training data for VQG
 
 @dataclass
 class MistakeDetectionExample:

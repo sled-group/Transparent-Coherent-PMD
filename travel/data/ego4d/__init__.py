@@ -1,17 +1,27 @@
 # Most code in this file was adapted from EILEV: https://github.com/yukw777/EILEV
-
 import json
 import os
 from collections.abc import Callable, Iterable
 from fractions import Fraction
+import pickle
 from pytorchvideo.data import ClipSampler, LabeledVideoDataset
 from pytorchvideo.data.clip_sampling import ClipInfo
 import random
 import re
+import spacy
 import string
 import torch
+from torch.nn.functional import cosine_similarity
+from torchvision.transforms.functional import to_pil_image
 from transformers import BatchEncoding, DataCollatorForSeq2Seq, PreTrainedTokenizer
-from typing import Any, TypeVar
+from typing import Any, TypeVar, Optional
+from tqdm import tqdm
+
+from travel.constants import DATA_CACHE_DIR
+from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH
+from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
+from travel.data.utils.text import simple_present_to_imperative
+from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY
 
 # Some verbs would not be expected in the task-oriented mistake detection setting, so we can filter them out
 EGO4D_IGNORE_VERBS = ['scroll', # Scrolling on phone, tablet, etc.
@@ -334,7 +344,12 @@ def filter_action(action: dict[str, Any], previous_action: dict[str, Any]=None) 
         and action["critical_frames"] is not None
         and action["structured_verb"] not in EGO4D_IGNORE_VERBS # Omit clips with non-task actions
         and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
-        and (previous_action is None or not ((action['structured_verb'], action['structured_noun']) == (previous_action['structured_verb'], previous_action['structured_noun']))) # Filter out clips where the same action is being performed over and over
+        and (
+            previous_action is None
+            or not (
+                (action['structured_verb'], action['structured_noun']) == (previous_action['structured_verb'], previous_action['structured_noun']))
+                or action['previous_occurrences'] > 1
+            ) # Filter out clips where the same action is being performed over and over
         and C_REGEX.match(action["narration_text"]) is not None
     )
 
@@ -353,18 +368,21 @@ def get_structured_noun(action: dict) -> str | None:
                 return box["structured_noun"]
     return None
 
-# TODO: adapt below into a preprocessing method for actions - don't just add structures, but also combine repetitive actions
-def add_structured_nouns(actions: list[dict]) -> list[dict]:
+def preprocess_actions(actions: list[dict]) -> list[dict]:
+    # Add structured noun to action data
     for action_idx, action in enumerate(actions):
         action['structured_noun'] = get_structured_noun(action)
         
+    # Record information about previous occurrences of actions
     for action_idx, action in enumerate(actions):
         structured_action = (action['structured_verb'], action['structured_noun'])
         action['previous_occurrences'] = sum([1 if structured_action == (previous_action['structured_verb'], previous_action['structured_noun']) else 0 for previous_action in actions[:action_idx - 1]])
         action['future_occurrences'] = sum([1 if structured_action == (future_action['structured_verb'], future_action['structured_noun']) else 0 for future_action in actions[action_idx + 1:]])
+
+    # TODO: Combine repeated actions? Can look at initial data and see if this is needed
     return actions
 
-
+# TODO: add an option to not load videos?
 class Ego4dFHOMainDataset(LabeledVideoDataset):
     """Class to store data from Ego4D. Some domain-specific filtering steps are performed for egocentric mistake detection."""
     def __init__(
@@ -429,7 +447,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                                 "future_occurrences": action["future_occurrences"]
                             }
                             for interval in video_dict[video_uid]["annotated_intervals"]
-                            for action_idx, action in enumerate(add_structured_nouns(interval["narrated_actions"]))
+                            for action_idx, action in enumerate(preprocess_actions(interval["narrated_actions"]))
                             if filter_action(action, previous_action=interval["narrated_actions"][action_idx - 1] if action_idx > 0 else None)
                         ],
                         "video_uid": video_uid,
@@ -445,3 +463,97 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
 
     def __len__(self) -> int:
         return self.num_narrated_actions
+    
+class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
+    def __init__(self, 
+                 data_split: str,
+                 debug_n_examples_per_class: Optional[int]=None):
+        """
+        Method to initialize and load Ego4D dataset for mistake detection.
+
+        :param data_split: String name for data partition to load.
+        :param load_videos: Whether to include videos in the examples.
+        :param debug_n_examples_per_class: Load a small number of examples for each class (success and mistake).
+        """
+        super().__init__(data_split,
+                         debug_n_examples_per_class=debug_n_examples_per_class)
+
+    def load_examples(self,
+                      data_split: str,
+                      debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
+        
+        # Check if we already loaded data before
+        cache_fname = f"ego4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}" 
+        if debug_n_examples_per_class is not None:
+            cache_fname += f"_debug{debug_n_examples_per_class}"
+        cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname + ".pkl")
+
+        if os.path.exists(cache_fname):
+            examples = pickle.load(open(cache_fname, "rb"))
+        else:
+            ego4d = Ego4dFHOMainDataset(
+                EGO4D_ANNOTATION_PATH,
+                EGO4D_SPLIT_PATHS[data_split],
+                EGO4D_VIDEO_PATH
+            )
+
+        nlp = spacy.load('en_core_web_sm')
+        SIMILARITY_THRESHOLD = 0.95
+        for clip in tqdm(ego4d):
+            print(clip.keys())
+            
+            # Index procedure based on video and clip index (each narration is unique)
+            procedure_id = 1000 * clip['video_index'] + clip['clip_index']
+            clip_id = f"{clip['video_uid']}_{clip['clip_index']}"
+
+            # Convert narration text to imperative form to match the sentence structure of recipes and task instructions    
+            instruction_text = clean_narration_text(clip['narration_text']) # Replace symbols in narration text with words
+            instruction_text = simple_present_to_imperative(nlp, instruction_text)
+
+            # clip['video'] shape: (C, # frames, H, W)
+            precondition_frame_t, effect_frame_t = clip['video'][:,0], clip['video'][:,-1] # (C, H, W)
+            precondition_frame, effect_frame = to_pil_image(precondition_frame_t), to_pil_image(effect_frame_t)
+            
+            # Omit examples where precondition and effect frame are overly similar
+            precondition_effect_similarity = cosine_similarity(precondition_frame_t.flatten().float(), effect_frame_t.flatten().float(), dim=0).detach().numpy()
+            if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
+                continue    
+            
+            # Generate positive example from effect frame
+            # TODO: maybe want to get entire clip later
+            examples.append(MistakeDetectionExample(
+                task_name="ego4d",
+                video_id=clip['video_uid'],
+                procedure_id=procedure_id,
+                example_id=f"{clip_id}_pos",
+                frames=[effect_frame],
+                frame_times=[clip['post_frame'] / clip['fps']],
+                procedure_description=instruction_text,
+                mistake=False,
+            ))
+            
+            # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
+            # if clip['previous_occurrences'] < 2:
+            # TODO: can we get whole 8 second clip before precondition frame? (might not be needed)
+            examples.append(MistakeDetectionExample(
+                task_name="ego4d",
+                video_id=clip['video_uid'],
+                procedure_id=procedure_id,
+                example_id=f"{clip_id}_hardneg",
+                frames=[precondition_frame],
+                frame_times=[clip['pre_frame'] / clip['fps']],
+                procedure_description=instruction_text,
+                mistake=True,
+                mistake_type="Action Incomplete",
+            ))
+
+            # TODO: Generate more diverse negative examples by matching to clips with mismatched structured verb/noun
+            # (inspired by Yayuan's approach - talk to him)
+            # ^ may also need to have an option to turn this off if we want to generate SuccessVQA-comparable results
+            # ^ may need to somehow save information for structured verb and noun in above examples to pull this off
+
+            if debug_n_examples_per_class is not None and len(examples) >= 2 * debug_n_examples_per_class:
+                break
+
+        pickle.dump(examples, open(cache_fname, "wb"))
+        return examples
