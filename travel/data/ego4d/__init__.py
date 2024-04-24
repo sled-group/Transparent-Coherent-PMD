@@ -497,63 +497,64 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 EGO4D_VIDEO_PATH
             )
 
-        nlp = spacy.load('en_core_web_sm')
-        SIMILARITY_THRESHOLD = 0.95
-        for clip in tqdm(ego4d):
-            print(clip.keys())
-            
-            # Index procedure based on video and clip index (each narration is unique)
-            procedure_id = 1000 * clip['video_index'] + clip['clip_index']
-            clip_id = f"{clip['video_uid']}_{clip['clip_index']}"
+            examples = []
 
-            # Convert narration text to imperative form to match the sentence structure of recipes and task instructions    
-            instruction_text = clean_narration_text(clip['narration_text']) # Replace symbols in narration text with words
-            instruction_text = simple_present_to_imperative(nlp, instruction_text)
+            nlp = spacy.load('en_core_web_sm')
+            SIMILARITY_THRESHOLD = 0.95
+            for clip in tqdm(ego4d):
+                
+                # Index procedure based on video and clip index (each narration is unique)
+                procedure_id = 1000 * clip['video_index'] + clip['clip_index']
+                clip_id = f"{clip['video_uid']}_{clip['clip_index']}"
 
-            # clip['video'] shape: (C, # frames, H, W)
-            precondition_frame_t, effect_frame_t = clip['video'][:,0], clip['video'][:,-1] # (C, H, W)
-            precondition_frame, effect_frame = to_pil_image(precondition_frame_t), to_pil_image(effect_frame_t)
-            
-            # Omit examples where precondition and effect frame are overly similar
-            precondition_effect_similarity = cosine_similarity(precondition_frame_t.flatten().float(), effect_frame_t.flatten().float(), dim=0).detach().numpy()
-            if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
-                continue    
-            
-            # Generate positive example from effect frame
-            # TODO: maybe want to get entire clip later
-            examples.append(MistakeDetectionExample(
-                task_name="ego4d",
-                video_id=clip['video_uid'],
-                procedure_id=procedure_id,
-                example_id=f"{clip_id}_pos",
-                frames=[effect_frame],
-                frame_times=[clip['post_frame'] / clip['fps']],
-                procedure_description=instruction_text,
-                mistake=False,
-            ))
-            
-            # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
-            # if clip['previous_occurrences'] < 2:
-            # TODO: can we get whole 8 second clip before precondition frame? (might not be needed)
-            examples.append(MistakeDetectionExample(
-                task_name="ego4d",
-                video_id=clip['video_uid'],
-                procedure_id=procedure_id,
-                example_id=f"{clip_id}_hardneg",
-                frames=[precondition_frame],
-                frame_times=[clip['pre_frame'] / clip['fps']],
-                procedure_description=instruction_text,
-                mistake=True,
-                mistake_type="Action Incomplete",
-            ))
+                # Convert narration text to imperative form to match the sentence structure of recipes and task instructions    
+                instruction_text = clean_narration_text(clip['narration_text']) # Replace symbols in narration text with words
+                instruction_text = simple_present_to_imperative(nlp, instruction_text)
 
-            # TODO: Generate more diverse negative examples by matching to clips with mismatched structured verb/noun
-            # (inspired by Yayuan's approach - talk to him)
-            # ^ may also need to have an option to turn this off if we want to generate SuccessVQA-comparable results
-            # ^ may need to somehow save information for structured verb and noun in above examples to pull this off
+                # clip['video'] shape: (C, # frames, H, W)
+                precondition_frame_t, effect_frame_t = clip['video'][:,0], clip['video'][:,-1] # (C, H, W)
+                precondition_frame, effect_frame = to_pil_image(precondition_frame_t), to_pil_image(effect_frame_t)
+                
+                # Omit examples where precondition and effect frame are overly similar
+                precondition_effect_similarity = cosine_similarity(precondition_frame_t.flatten().float(), effect_frame_t.flatten().float(), dim=0).detach().numpy()
+                if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
+                    continue    
+                
+                # Generate positive example from effect frame
+                # TODO: maybe want to get entire clip later
+                examples.append(MistakeDetectionExample(
+                    task_name="ego4d",
+                    video_id=clip['video_uid'],
+                    procedure_id=procedure_id,
+                    example_id=f"{clip_id}_pos",
+                    frames=[effect_frame],
+                    frame_times=[clip['post_frame'] / clip['fps']],
+                    procedure_description=instruction_text,
+                    mistake=False,
+                ))
+                
+                # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
+                # if clip['previous_occurrences'] < 2:
+                # TODO: can we get whole 8 second clip before precondition frame? (might not be needed)
+                examples.append(MistakeDetectionExample(
+                    task_name="ego4d",
+                    video_id=clip['video_uid'],
+                    procedure_id=procedure_id,
+                    example_id=f"{clip_id}_hardneg",
+                    frames=[precondition_frame],
+                    frame_times=[clip['pre_frame'] / clip['fps']],
+                    procedure_description=instruction_text,
+                    mistake=True,
+                    mistake_type="Action Incomplete",
+                ))
 
-            if debug_n_examples_per_class is not None and len(examples) >= 2 * debug_n_examples_per_class:
-                break
+                # TODO: Generate more diverse negative examples by matching to clips with mismatched structured verb/noun
+                # (inspired by Yayuan's approach - talk to him)
+                # ^ may also need to have an option to turn this off if we want to generate SuccessVQA-comparable results
+                # ^ may need to somehow save information for structured verb and noun in above examples to pull this off
 
-        pickle.dump(examples, open(cache_fname, "wb"))
+                if debug_n_examples_per_class is not None and len(examples) >= 2 * debug_n_examples_per_class:
+                    break
+
+            pickle.dump(examples, open(cache_fname, "wb"))
         return examples

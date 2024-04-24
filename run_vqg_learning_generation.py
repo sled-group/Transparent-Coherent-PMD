@@ -1,26 +1,26 @@
-# TODO: generate data to train VQG model
+# Need this call at the beginning of every script to set random seeds and set the HF cache
+from travel import init_travel
+init_travel()
 
 import argparse
 from collections import defaultdict
 import datetime
 import json
-import numpy as np
 import os
+import numpy as np
 import pickle
 import shutil
 import torch
 from tqdm import tqdm
+from transformers import pipeline
+from transformers.pipelines.pt_utils import KeyDataset
 
-from travel import set_random_seed
-from travel.constants import MODEL_CACHE_DIR, RESULTS_DIR, HF_TOKEN
+from travel.constants import RESULTS_DIR, HF_TOKEN
 from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGOutputs, save_vqg_outputs, parse_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample
 
-os.environ['HF_HOME'] = MODEL_CACHE_DIR
-from transformers import pipeline
-from transformers.pipelines.pt_utils import KeyDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
@@ -30,12 +30,15 @@ parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
-set_random_seed()
-
 # NOTE: we need to think about how to control the LMs used for question generation and answering:
 # Start with: LLaMA 2-7B ( -> Vicuna-7B chat fine-tuned) -> LLaVA 1.5
 
 # TODO: need to include Ruixuan's updates to VQG strategies here
+
+# Load Ego4D for mistake detection
+dataset = Ego4DMistakeDetectionDataset(data_split="train",
+                                       debug_n_examples_per_class=20 if args.debug else None)
+# TODO: for some reason, dataset.examples is empty after this step
 
 batch_size = 8
 model_kwargs = {}
@@ -57,14 +60,10 @@ lm.model.generation_config.top_p = args.top_p
 print("Generation config:")
 print(lm.model.generation_config)
 
-# Load Ego4D for mistake detection
-dataset = Ego4DMistakeDetectionDataset(data_split="train",
-                                       debug_n_examples_per_class=20 if args.debug else None)
-
 # Generate prompts - one per example
 prompts = []
 seen_video_clips = {}
-for example in dataset:
+for example in tqdm(dataset, desc="generating prompts"):
     if (example.video_id, example.procedure_id) in seen_video_clips:
         continue
     
@@ -101,7 +100,7 @@ with torch.no_grad():
             inp = prompts[prompt_idx]
 
             procedure_id = int(inp['procedure_id'])
-            step = inp['step']
+            step = inp['procedure_description']
 
             text = out[0]['generated_text']
             
@@ -153,6 +152,7 @@ this_results_dir = os.path.join(RESULTS_DIR, "vqg_learning", this_results_dir)
 os.makedirs(this_results_dir)
 
 # TODO: if too space heavy to do this, can save a json file with images in scratch? need to think about what makes sense based on estimated size
+# TODO: also may need to save this in unreplicated volume instead
 pickle.dump(frameVQA_examples, open(os.path.join(this_results_dir, "frameVQA_examples.pkl"), "wb"))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))

@@ -34,13 +34,13 @@ class MistakeDetectionExample:
 
 class MistakeDetectionDataset:
     """Superclass for loading and storing a mistake detection dataset."""
-    def __init__(self, data_split: str, load_videos: bool, **kwargs: dict[str, Any]):
+    def __init__(self, data_split: str, **kwargs: dict[str, Any]):
         """
         Method to initialize and load dataset.
 
         :param kwargs: Task-specific arguments for dataset compilation.
         """
-        self.examples: list[MistakeDetectionExample] = self.load_examples(data_split, load_videos, **kwargs)
+        self.examples: list[MistakeDetectionExample] = self.load_examples(data_split, **kwargs)
 
     def __len__(self):
         return len(self.examples)
