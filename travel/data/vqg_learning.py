@@ -20,7 +20,8 @@ class FrameVQAMistakeDetectionExample:
 
     def __post_init__(self):
         """Saves a count of questions in this question set."""
-        assert len(self.questions) == len(self.expected_answers), "FrameVQAMistakeDetectionExample expected same number of questions and answers!"
+        for cqs in self.candidate_question_sets:
+            assert len(cqs.questions) == len(cqs.expected_answers), "FrameVQAMistakeDetectionExample expected same number of questions and answers for each candidate question set!"
         self.n_questions = len(self.questions)
 
     def to_dict(self):
@@ -37,6 +38,7 @@ class VQGTrainingExample:
     task_name: MistakeDetectionTasks
     procedure_id: int
     procedure_description: str
+    prompt: str
     candidate_id: int # Index of generated question set (unique for a given procedure ID)
     questions: list[str]
     expected_answers: list[VQAResponse]

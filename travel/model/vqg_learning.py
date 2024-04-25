@@ -4,7 +4,7 @@ from transformers import AutoProcessor, AutoModelForVision2Seq
 from typing import Union
 
 from travel.constants import DATA_CACHE_DIR
-from travel.data.mistake_detection import FrameVQAMistakeDetectionExample, VQGTrainingExample
+from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
@@ -66,11 +66,11 @@ class FrameVQAMistakeDetectionScorer:
         :return: FloatTensor of scores of shape (len(examples), # questions per example) and a list of VQAOutputs.
         """
         # Extract parallel frames, questions, answers, and mistake labels
-        questions = [question for example in examples for question in example.questions]
-        answers = [answer for example in examples for answer in example.expected_answers]
-        frames = [example.frame for example in examples for _ in example.questions]
+        questions = [question for example in examples for question_set in example.candidate_question_sets for question in question_set.questions]
+        answers = [answer for example in examples for question_set in example.candidate_question_sets for answer in question_set.answers]
+        frames = [example.frame for example in examples for question_set in example.candidate_question_sets for _ in question_set.questions]
         assert len(questions) == len(answers) == len(frames), "Need same number of questions, answers, and frames to score questions on frame-based VQA!"
-        mistake_labels = [example.mistake for example in examples]
+        mistake_labels = [example.mistake for example in examples for _ in example.candidate_question_sets] # One scoring per each question set
              
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[self.model_name]
         prompts = [prompt_template.format(question=question) for question in questions]
@@ -99,19 +99,22 @@ class FrameVQAMistakeDetectionScorer:
         parallel_idx = 0
         for example in enumerate(examples): 
             this_vqa_outputs = []
-            for _ in range(example.n_questions):
-                this_vqa_outputs.append(
-                    VQAOutputs(
-                        example.example_id,
-                        example.procedure_id,
-                        frames[parallel_idx],
-                        prompts[parallel_idx],
-                        answers[parallel_idx],
-                        response_tokens,
-                        logits[parallel_idx]
+            for question_set in example.candidate_question_sets:
+                for _, answer in zip(question_set.questions, question_set.answers):
+                    assert answers[parallel_idx] == answer, "Parallel input examples and VQA outputs are out of sync!"
+                    this_vqa_outputs.append(
+                        VQAOutputs(
+                            example.task_name,
+                            example.example_id,
+                            example.procedure_id,
+                            example.frame,
+                            prompts[parallel_idx],
+                            answers[parallel_idx],
+                            response_tokens,
+                            logits[parallel_idx]
+                        )
                     )
-                )
-                parallel_idx += 1
+                    parallel_idx += 1
             vqa_outputs.append(this_vqa_outputs)
         
         if return_vqa_outputs:
@@ -121,12 +124,14 @@ class FrameVQAMistakeDetectionScorer:
             scores = self.get_scores(mistake_labels, vqa_outputs)
             return [
                 VQGTrainingExample(
-                    task_name=example.task_name,
-                    procedure_id=example.procedure_id, 
-                    procedure_description=example.procedure_description,
-                    questions=example.questions,
-                    expected_answers=example.expected_answers,
+                    task_name=vqa_output.task_name,
+                    procedure_id=vqa_output.procedure_id, 
+                    procedure_description=vqg_output.procedure_description,
+                    prompt=vqa_output.prompt,
+                    candidate_id=candidate_id,
+                    questions=vqg_output.questions,
+                    expected_answers=vqg_output.expected_answers,
                     preference_score=score
                 )
-                for example, score in zip(examples, scores)
+                for (candidate_id, vqg_output), vqa_output, score in zip(enumerate([vqg_output for ex in examples for vqg_output in ex.candidate_question_sets]), vqa_outputs, scores)
             ]

@@ -5,6 +5,8 @@ from PIL import Image
 import torch
 from typing import Optional
 
+from travel.data.mistake_detection import MistakeDetectionTasks
+
 COMPLETION_PROMPT_TEMPLATES = {
     "Salesforce/blip2-flan-t5-xxl": "A photo of",
     "Salesforce/instructblip-flan-t5-xxl": "A photo of",
@@ -45,6 +47,7 @@ def get_vqa_response_token_ids(tokenizer):
 @dataclass
 class VQAOutputs:
     """Dataclass to hold all VLM outputs from visual question answering (VQA)."""
+    task_name: MistakeDetectionTasks
     example_id: str
     procedure_id: int
     frame: Image

@@ -38,6 +38,7 @@ args = parser.parse_args()
 # Load Ego4D for mistake detection
 dataset = Ego4DMistakeDetectionDataset(data_split="train",
                                        debug_n_examples_per_class=20 if args.debug else None)
+print(f"{len(dataset)} Ego4D mistake detection examples loaded")
 # TODO: for some reason, dataset.examples is empty after this step
 
 batch_size = 8
@@ -70,15 +71,15 @@ for example in tqdm(dataset, desc="generating prompts"):
     prompt = generate_vqg_prompt_icl(example.procedure_description, n_demonstrations=args.n_demonstrations)
     prompts.append(
         {
-            "procedure_id": example.procedure_id, # TODO: not sure if this is unique, but it will need to be
+            "procedure_id": example.procedure_id,
             "procedure_description": example.procedure_description,
             "prompt": prompt,
         }
     )
-    
+print(f"{len(prompts)} prompts generated")
+
 # Run prompts through LM to generate visual questions
 vqg_outputs = defaultdict(list)
-prompt_idx = 0
 with torch.no_grad():
     # Try all temperatures
     for temperature in tqdm(args.temperatures, desc="temperatures"):
@@ -88,6 +89,7 @@ with torch.no_grad():
         else:
             lm.model.generation_config.temperature = temperature
             lm.model.generation_config.do_sample = True
+        prompt_idx = 0
 
         # Generate for each prompt
         for out in tqdm(lm(KeyDataset(prompts, "prompt"), 
