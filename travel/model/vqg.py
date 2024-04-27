@@ -2,9 +2,7 @@ from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
 import os
 import json
-import torch.nn as nn
 
-from travel.data.mistake_detection import MistakeDetectionExample
 from travel.model.vqa import VQAResponse
 
 @dataclass_json

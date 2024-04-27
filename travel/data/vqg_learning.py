@@ -21,8 +21,8 @@ class FrameVQAMistakeDetectionExample:
     def __post_init__(self):
         """Saves a count of questions in this question set."""
         for cqs in self.candidate_question_sets:
-            assert len(cqs.questions) == len(cqs.expected_answers), "FrameVQAMistakeDetectionExample expected same number of questions and answers for each candidate question set!"
-        self.n_questions = len(self.questions)
+            assert len(cqs.questions) == len(cqs.answers), "FrameVQAMistakeDetectionExample expected same number of questions and answers for each candidate question set!"
+        self.n_candidates = len(self.candidate_question_sets)
 
     def to_dict(self):
         """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""        

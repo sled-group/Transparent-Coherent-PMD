@@ -56,7 +56,6 @@ lm = pipeline("text-generation",
               model_kwargs=model_kwargs)
 lm.tokenizer.padding_side = "left"
 lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
-lm.model.generation_config.top_p = args.top_p
 
 print("Generation config:")
 print(lm.model.generation_config)
@@ -86,9 +85,11 @@ with torch.no_grad():
         if temperature == 0.0:
             lm.model.generation_config.temperature = None
             lm.model.generation_config.do_sample = False
+            lm.model.generation_config.top_p = None
         else:
             lm.model.generation_config.temperature = temperature
             lm.model.generation_config.do_sample = True
+            lm.model.generation_config.top_p = args.top_p
         prompt_idx = 0
 
         # Generate for each prompt
@@ -156,6 +157,7 @@ os.makedirs(this_results_dir)
 # TODO: if too space heavy to do this, can save a json file with images in scratch? need to think about what makes sense based on estimated size
 # TODO: also may need to save this in unreplicated volume instead
 pickle.dump(frameVQA_examples, open(os.path.join(this_results_dir, "frameVQA_examples.pkl"), "wb"))
+# TODO: we can't visualize this - maybe make methods to save/load framevqa_examples which handle loading and saving jsons
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
