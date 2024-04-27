@@ -130,7 +130,7 @@ class FrameVQAMistakeDetectionScorer:
                     prompt=vqa_output.prompt,
                     candidate_id=candidate_id,
                     questions=vqg_output.questions,
-                    expected_answers=vqg_output.expected_answers,
+                    expected_answers=vqg_output.answers,
                     preference_score=score
                 )
                 for (candidate_id, vqg_output), vqa_output, score in zip(enumerate([vqg_output for ex in examples for vqg_output in ex.candidate_question_sets]), vqa_outputs, scores)
