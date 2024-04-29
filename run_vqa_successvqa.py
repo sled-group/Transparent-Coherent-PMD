@@ -56,6 +56,7 @@ else:
     target_frames_proportion = None
 
 # Run SuccessVQA inference
+# TODO: should we apply "contrastive region guidance" as a normalization for this baseline?
 vqa_outputs = []
 for example in tqdm(eval_dataset, "running inference on clips"):
     this_vqa_outputs = []
@@ -76,6 +77,7 @@ for example in tqdm(eval_dataset, "running inference on clips"):
         if cutoff_time is not None and frame_time < cutoff_time:
             # Don't run inference on this frame
             this_vqa_outputs.append([VQAOutputs(
+                example.task_name,
                 example.example_id,
                 step_id,
                 frame,
@@ -101,6 +103,7 @@ for example in tqdm(eval_dataset, "running inference on clips"):
 
         this_vqa_outputs.append(
             [VQAOutputs(
+                example.task_name,
                 example.example_id,
                 step_id,
                 frame,

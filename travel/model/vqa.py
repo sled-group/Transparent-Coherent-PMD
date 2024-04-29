@@ -3,6 +3,9 @@ from dataclasses_json import dataclass_json
 from enum import Enum
 from PIL import Image
 import torch
+from typing import Optional
+
+from travel.data.mistake_detection import MistakeDetectionTasks
 
 COMPLETION_PROMPT_TEMPLATES = {
     "Salesforce/blip2-flan-t5-xxl": "A photo of",
@@ -44,13 +47,14 @@ def get_vqa_response_token_ids(tokenizer):
 @dataclass
 class VQAOutputs:
     """Dataclass to hold all VLM outputs from visual question answering (VQA)."""
+    task_name: MistakeDetectionTasks
     example_id: str
     procedure_id: int
     frame: Image
     prompt: str
     expected_answer: VQAResponse
     response_token_ids: dict[VQAResponse, int]
-    logits: torch.FloatTensor # (vocab size) 
+    logits: Optional[torch.FloatTensor] # (vocab size) 
     answer_probs: dict[VQAResponse, float] = field(default_factory=list)
     predicted_answer: VQAResponse = VQAResponse["No"]
 

@@ -96,6 +96,7 @@ for example in tqdm(eval_dataset):
             if cutoff_time is not None and frame_time < cutoff_time:
                 # Don't run inference on this frame
                 frame_vqa_outputs.append(VQAOutputs(
+                    example.task_name,
                     example.example_id,
                     step_id,
                     frame,
@@ -121,6 +122,7 @@ for example in tqdm(eval_dataset):
 
             frame_vqa_outputs.append(
                 VQAOutputs(
+                    example.task_name,
                     example.example_id,
                     step_id,
                     frame,
