@@ -494,7 +494,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             ego4d = Ego4dFHOMainDataset(
                 EGO4D_ANNOTATION_PATH,
                 EGO4D_SPLIT_PATHS[data_split],
-                EGO4D_VIDEO_PATH
+                EGO4D_VIDEO_PATH,
+                random_clip=True if debug_n_examples_per_class is not None else False
             )
 
             examples = []
