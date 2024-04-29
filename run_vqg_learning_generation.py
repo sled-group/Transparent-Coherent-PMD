@@ -19,7 +19,7 @@ from travel.constants import RESULTS_DIR, HF_TOKEN
 from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGOutputs, save_vqg_outputs, parse_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
-from travel.data.vqg_learning import FrameVQAMistakeDetectionExample
+from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, save_frameVQA_examples
 
 
 parser = argparse.ArgumentParser()
@@ -136,7 +136,7 @@ for example in dataset:
                 procedure_id=example.procedure_id,
                 example_id=example.example_id,
                 frame=example.frames[0], # NOTE: this relies on there only being one frame in the Ego4D examples
-                frame_time=example.frames[0], # NOTE: this relies on there only being one frame in the Ego4D examples
+                frame_time=example.frame_times[0], # NOTE: this relies on there only being one frame in the Ego4D examples
                 procedure_description=example.procedure_description,
                 mistake=example.mistake,
                 candidate_question_sets=vqg_outputs[example.procedure_id]
@@ -157,7 +157,7 @@ os.makedirs(this_results_dir)
 # TODO: if too space heavy to do this, can save a json file with images in scratch? need to think about what makes sense based on estimated size
 # TODO: also may need to save this in unreplicated volume instead
 pickle.dump(frameVQA_examples, open(os.path.join(this_results_dir, "frameVQA_examples.pkl"), "wb"))
-# TODO: we can't visualize this - maybe make methods to save/load framevqa_examples which handle loading and saving jsons
+save_frameVQA_examples(frameVQA_examples, this_results_dir) # TODO: handle saving of images efficiently here
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

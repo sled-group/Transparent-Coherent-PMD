@@ -1,4 +1,6 @@
 from dataclasses import dataclass, asdict
+import json
+import os
 from PIL import Image
 
 from travel.data.mistake_detection import MistakeDetectionTasks
@@ -32,6 +34,32 @@ class FrameVQAMistakeDetectionExample:
         return_dict['frame_time'] = float(round(return_dict['frame_time'], 3))
         return return_dict
     
+def save_frameVQA_examples(frameVQA_examples: list[FrameVQAMistakeDetectionExample], path: str):
+    """
+    Saves list of FrameVQAMistakeDetectionExample created by `run_vqg_learning_generation.py`.
+    
+    :param frameVQA_examples: List of FrameVQAMistakeDetectionExample.
+    :param path: Path to save json file (directory).
+    """
+    if not os.path.exists(path):
+        os.makedirs(path)
+    json.dump([example.to_dict() for example in frameVQA_examples], 
+              open(os.path.join(path, "frameVQA_examples.json"), "w"),
+              indent=4)    
+
+# TODO: handle frames here for this to be doable
+
+# def load_frameVQA_examples(path: str) -> dict[int, FrameVQAMistakeDetectionExample]:
+#     """
+#     Loads list of FrameVQAMistakeDetectionExample created by `run_vqg_learning_generation.py`.
+    
+#     :param path: Path to directory to load json file from.
+#     """
+#     frameVQA_examples = json.load(open(os.path.join(path, "frameVQA_examples.json"), "r"))
+#     frameVQA_examples = {int(k): VQGOutputs.from_dict(v) for k, v in vqg_outputs.items()}
+#     return frameVQA_examples
+
+
 @dataclass
 class VQGTrainingExample:
     """Class to store data to optimize LMs to generate visual questions."""
