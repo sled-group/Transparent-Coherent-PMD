@@ -48,9 +48,9 @@ def save_frameVQA_examples(frameVQA_examples: list[FrameVQAMistakeDetectionExamp
               open(os.path.join(path, "frameVQA_examples.json"), "w"),
               indent=4)    
 
-# TODO: handle frames better here for this to be doable
+# TODO: handle frames better here for this to be efficient and consistent
 
-def load_frameVQA_examples(path: str) -> dict[int, FrameVQAMistakeDetectionExample]:
+def load_frameVQA_examples(path: str) -> list[FrameVQAMistakeDetectionExample]:
     """
     Loads list of FrameVQAMistakeDetectionExample created by `run_vqg_learning_generation.py`.
     

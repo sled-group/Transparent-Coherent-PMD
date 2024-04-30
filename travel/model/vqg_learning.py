@@ -1,3 +1,5 @@
+import json
+import os
 import torch
 from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq
@@ -97,9 +99,9 @@ class FrameVQAMistakeDetectionScorer:
         # Gather up VQAOutputs (# examples, # questions per example)
         vqa_outputs = []
         parallel_idx = 0
-        for example in enumerate(examples): 
+        for example in examples: 
             this_vqa_outputs = []
-            for question_set in example.candidate_question_sets:
+            for question_set in example.candidate_question_sets: # TODO: this causes an attributeerror near end of VQA script
                 for _, answer in zip(question_set.questions, question_set.answers):
                     assert answers[parallel_idx] == answer, "Parallel input examples and VQA outputs are out of sync!"
                     this_vqa_outputs.append(

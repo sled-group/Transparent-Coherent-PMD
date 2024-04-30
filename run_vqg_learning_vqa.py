@@ -10,21 +10,20 @@ import pickle
 import shutil
 
 from travel.constants import RESULTS_DIR
+from travel.data.vqg_learning import load_frameVQA_examples
 from travel.model.grounding import filter_frames_by_target_objects
 from travel.model.vqa import VQG2VQA_PROMPT_TEMPLATES, save_vqa_outputs
-from travel.model.vqg import load_frameVQA_examples
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer, save_vqg_training_examples
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired frameVQA_examples.pkl is stored.")
-parser.add_argument("--eval_split", type=str, choices=["val", "test"])
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(VQG2VQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
-parser.add_argument("--reset_cache", action="store_true", help="Pass this argument to not save cached VQA outputs for the VLM, and generate new ones.")
 args = parser.parse_args()
 
 # Load outputs
 frameVQA_examples = load_frameVQA_examples(args.vqg_directory)
+print("LAST EXAMPLE:")
 
 # TODO: introduce spatial filter - maybe need a consistent way to do this so we can reuse in vqa scripts
 
