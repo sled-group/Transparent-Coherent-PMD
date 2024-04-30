@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field, asdict
 from dataclasses_json import dataclass_json
 from enum import Enum
+import json
+import os
 from PIL import Image
 import torch
 from typing import Optional
@@ -99,3 +101,16 @@ def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
+
+def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str):
+    """
+    Saves dict of VQAOutputs created by `run_vqg.py`.
+    
+    :param vqa_outputs: List of VQAOutputs.
+    :param path: Path to save json file (directory).
+    """
+    if not os.path.exists(path):
+        os.makedirs(path)
+    json.dump([ex.to_dict() for ex in vqa_outputs], 
+              open(os.path.join(path, "vqa_outputs.json"), "w"),
+              indent=4)    
