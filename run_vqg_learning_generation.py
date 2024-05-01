@@ -139,6 +139,7 @@ for example in dataset:
                 frame_time=example.frame_times[0], # NOTE: this relies on there only being one frame in the Ego4D examples
                 procedure_description=example.procedure_description,
                 mistake=example.mistake,
+                prompt=generate_vqg_prompt_icl(example.procedure_description, n_demonstrations=args.n_demonstrations),
                 candidate_question_sets=vqg_outputs[example.procedure_id]
             )
         )

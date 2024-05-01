@@ -19,11 +19,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired frameVQA_examples.pkl is stored.")
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(VQG2VQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
+parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
 # Load outputs
 frameVQA_examples = load_frameVQA_examples(args.vqg_directory)
-print("LAST EXAMPLE:")
+if args.debug:
+    frameVQA_examples = frameVQA_examples[:20]
 
 # TODO: introduce spatial filter - maybe need a consistent way to do this so we can reuse in vqa scripts
 

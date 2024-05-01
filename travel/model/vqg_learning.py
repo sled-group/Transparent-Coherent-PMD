@@ -100,8 +100,8 @@ class FrameVQAMistakeDetectionScorer:
         vqa_outputs = []
         parallel_idx = 0
         for example in examples: 
-            this_vqa_outputs = []
             for question_set in example.candidate_question_sets: # TODO: this causes an attributeerror near end of VQA script
+                this_vqa_outputs = []
                 for _, answer in zip(question_set.questions, question_set.answers):
                     assert answers[parallel_idx] == answer, "Parallel input examples and VQA outputs are out of sync!"
                     this_vqa_outputs.append(
@@ -117,21 +117,23 @@ class FrameVQAMistakeDetectionScorer:
                         )
                     )
                     parallel_idx += 1
-            vqa_outputs.append(this_vqa_outputs)
+                vqa_outputs.append(this_vqa_outputs)
         
         scores = self.get_scores(mistake_labels, vqa_outputs)
         vqg_training_examples = [
             VQGTrainingExample(
-                task_name=vqa_output.task_name,
-                procedure_id=vqa_output.procedure_id, 
+                task_name=vqg_output.task_name,
+                procedure_id=vqg_output.procedure_id, 
                 procedure_description=vqg_output.procedure_description,
-                prompt=vqa_output.prompt,
+                prompt=example.prompt,
                 candidate_id=candidate_id,
                 questions=vqg_output.questions,
                 expected_answers=vqg_output.answers,
                 preference_score=score
             )
-            for (candidate_id, vqg_output), vqa_output, score in zip(enumerate([vqg_output for ex in examples for vqg_output in ex.candidate_question_sets]), vqa_outputs, scores)
+            for candidate_id, (vqg_output, example, score) in enumerate(zip([vqg_output for ex in examples for vqg_output in ex.candidate_question_sets], 
+                                                                            [ex for ex in examples for _ in ex.candidate_question_sets],
+                                                                            scores))
         ]
 
         if return_vqa_outputs:

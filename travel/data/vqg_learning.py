@@ -19,6 +19,7 @@ class FrameVQAMistakeDetectionExample:
     frame_time: float
     procedure_description: str
     mistake: bool
+    prompt: str
     candidate_question_sets: list[VQGOutputs]
 
     def __post_init__(self):
