@@ -519,7 +519,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 # Omit examples where precondition and effect frame are overly similar
                 precondition_effect_similarity = cosine_similarity(precondition_frame_t.flatten().float(), effect_frame_t.flatten().float(), dim=0).detach().numpy()
                 if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
-                    continue    
+                    continue
                 
                 # Generate positive example from effect frame
                 # TODO: maybe want to get entire clip later

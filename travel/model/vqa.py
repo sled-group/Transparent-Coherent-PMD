@@ -82,6 +82,20 @@ class VQAOutputs:
             return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
         return return_dict
     
+def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str, partition: str):
+    """
+    Saves list of VQAOutputs.
+    
+    :param vqa_outputs: List of VQAOutputs.
+    :param path: Path to save json file (directory).
+    """
+    fname = f"vqa_outputs_{partition}.json"
+    if not os.path.exists(path):
+        os.makedirs(path)
+    json.dump([ex.to_dict() for ex in vqa_outputs], 
+              open(os.path.join(path, fname), "w"),
+              indent=4)    
+
 def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
     """Copy of _shift_right method from T5 to use with BLIP-2 to automatically generate decoder input IDs."""
     if decoder_start_token_id is None:
@@ -101,16 +115,3 @@ def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
-
-def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str):
-    """
-    Saves dict of VQAOutputs created by `run_vqg.py`.
-    
-    :param vqa_outputs: List of VQAOutputs.
-    :param path: Path to save json file (directory).
-    """
-    if not os.path.exists(path):
-        os.makedirs(path)
-    json.dump([ex.to_dict() for ex in vqa_outputs], 
-              open(os.path.join(path, "vqa_outputs.json"), "w"),
-              indent=4)    

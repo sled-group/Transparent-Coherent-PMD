@@ -128,21 +128,20 @@ with torch.no_grad():
 frameVQA_examples = []
 current_example_id = 0
 for example in dataset:
-    for vqg_id, output in enumerate(vqg_outputs[example.procedure_id]):
-        frameVQA_examples.append(
-            FrameVQAMistakeDetectionExample(
-                task_name=MistakeDetectionTasks.Ego4D,
-                video_id=example.video_id,
-                procedure_id=example.procedure_id,
-                example_id=example.example_id,
-                frame=example.frames[0], # NOTE: this relies on there only being one frame in the Ego4D examples
-                frame_time=example.frame_times[0], # NOTE: this relies on there only being one frame in the Ego4D examples
-                procedure_description=example.procedure_description,
-                mistake=example.mistake,
-                prompt=generate_vqg_prompt_icl(example.procedure_description, n_demonstrations=args.n_demonstrations),
-                candidate_question_sets=vqg_outputs[example.procedure_id]
-            )
+    frameVQA_examples.append(
+        FrameVQAMistakeDetectionExample(
+            task_name=MistakeDetectionTasks.Ego4D,
+            video_id=example.video_id,
+            procedure_id=example.procedure_id,
+            example_id=example.example_id,
+            frame=example.frames[0], # NOTE: this relies on there only being one frame in the Ego4D examples
+            frame_time=example.frame_times[0], # NOTE: this relies on there only being one frame in the Ego4D examples - which is probably fine for our project anyway
+            procedure_description=example.procedure_description,
+            mistake=example.mistake,
+            prompt=generate_vqg_prompt_icl(example.procedure_description, n_demonstrations=args.n_demonstrations),
+            candidate_question_sets=vqg_outputs[example.procedure_id]
         )
+    )
 
 print(f"{len(frameVQA_examples)} examples generated for training VQG")
 
@@ -155,10 +154,8 @@ this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_
 this_results_dir = os.path.join(RESULTS_DIR, "vqg_learning", this_results_dir)
 os.makedirs(this_results_dir)
 
-# TODO: if too space heavy to do this, can save a json file with images in scratch? need to think about what makes sense based on estimated size
-# TODO: also may need to save this in unreplicated volume instead
-pickle.dump(frameVQA_examples, open(os.path.join(this_results_dir, "frameVQA_examples.pkl"), "wb"))
-save_frameVQA_examples(frameVQA_examples, this_results_dir) # TODO: handle saving of images efficiently here
+# TODO: also need to save this in unreplicated volume instead, or scratch
+save_frameVQA_examples(frameVQA_examples, this_results_dir, "train") # TODO: handle saving of images efficiently here
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

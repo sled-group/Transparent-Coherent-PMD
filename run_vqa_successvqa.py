@@ -1,6 +1,6 @@
-from travel.constants import MODEL_CACHE_DIR
-import os
-os.environ['HF_HOME'] = MODEL_CACHE_DIR
+# Need this call at the beginning of every script to set random seeds and set the HF cache
+from travel import init_travel
+init_travel()
 
 import argparse
 import datetime

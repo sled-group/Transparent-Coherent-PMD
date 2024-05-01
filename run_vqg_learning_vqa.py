@@ -10,10 +10,10 @@ import pickle
 import shutil
 
 from travel.constants import RESULTS_DIR
-from travel.data.vqg_learning import load_frameVQA_examples
+from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples
 from travel.model.grounding import filter_frames_by_target_objects
 from travel.model.vqa import VQG2VQA_PROMPT_TEMPLATES, save_vqa_outputs
-from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer, save_vqg_training_examples
+from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired frameVQA_examples.pkl is stored.")
@@ -24,7 +24,7 @@ parser.add_argument("--debug", action="store_true", help="Pass this argument to 
 args = parser.parse_args()
 
 # Load outputs
-frameVQA_examples = load_frameVQA_examples(args.vqg_directory)
+frameVQA_examples = load_frameVQA_examples(args.vqg_directory, "train")
 if "_debug" in args.vqg_directory:
     frameVQA_examples = frameVQA_examples[:20]
 
@@ -47,8 +47,8 @@ vqg_training_examples, vqa_outputs = scorer(frameVQA_examples,
 # Save training examples for VQG in the same folder
 this_results_dir = args.vqg_directory
 
-save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir)
-save_vqg_training_examples(vqg_training_examples, this_results_dir)
+save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, "train")
+save_vqg_training_examples(vqg_training_examples, this_results_dir, "train")
 pickle.dump(vqg_training_examples, open(os.path.join(this_results_dir, "vqg_training_examples.pkl"), "wb"))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))

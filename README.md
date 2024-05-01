@@ -70,7 +70,7 @@ Baseline that simply asks VLMs whether some procedure was successfully performed
 python run_vqa_successvqa.py --eval_split <val|test>
 ```
 
-### VQG2VQA Baseline
+### VQG2VQA
 
 First, run visual question generation (VQG) to generate questions for each recipe step:
 

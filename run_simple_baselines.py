@@ -1,13 +1,15 @@
+# Need this call at the beginning of every script to set random seeds and set the HF cache
+from travel import init_travel
+init_travel()
+
 import argparse
 from collections import Counter
 import datetime
 import json
 import os
-import pickle
 from pprint import pprint
 from random import randint
 import shutil
-import torch
 from tqdm import tqdm
 
 from travel.constants import MODEL_CACHE_DIR, RESULTS_DIR
