@@ -33,7 +33,7 @@ class FrameVQAMistakeDetectionExample:
         return_dict = {
             k: v for k, v in asdict(self).items() if k not in ["frame"]
         }
-        return_dict['frame_time'] = float(round(return_dict['frame_time'], 3))
+        return_dict['frame_time'] = float(round(return_dict['frame_time'], 9))
         return return_dict
     
 def save_frameVQA_examples(frameVQA_examples: list[FrameVQAMistakeDetectionExample], path: str):
@@ -75,6 +75,7 @@ class VQGTrainingExample:
     candidate_id: int # Index of generated question set (unique for a given procedure ID)
     questions: list[str]
     expected_answers: list[VQAResponse]
+    answer_probs: list[tuple[float, float]]
     preference_score: float
 
     def to_dict(self):
@@ -82,5 +83,6 @@ class VQGTrainingExample:
         return_dict = {
             k: v for k, v in asdict(self).items()
         }
-        return_dict['preference_score'] = float(round(return_dict['preference_score'], 3))
+        return_dict['preference_score'] = float(round(return_dict['preference_score'], 9))
+        return_dict['answer_probs'] = [(float(round(prob[0], 9)), float(round(prob[1], 9))) for prob in return_dict['answer_probs']]
         return return_dict    

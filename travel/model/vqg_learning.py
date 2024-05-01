@@ -7,6 +7,7 @@ from typing import Union
 
 from travel.constants import DATA_CACHE_DIR
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
+from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
@@ -38,7 +39,10 @@ class FrameVQAMistakeDetectionScorer:
         """
         assert len(mistake_labels) == len(vqa_outputs), "FrameVQAMistakeDetectionScorer.get_scores expected same number of mistake labels and VQA outputs!"
         scores = []
+        answer_probs = []
         for mistake, example_vqa_outputs in zip(mistake_labels, vqa_outputs):
+            answer_probs.append([(output.answer_probs[VQAResponse.No], output.answer_probs[VQAResponse.Yes]) for output in example_vqa_outputs])
+            
             # VLM probabilities that there's a mistake for each question
             mistake_probs = [1.0 - output.answer_probs[output.expected_answer] for output in example_vqa_outputs]
 
@@ -53,7 +57,7 @@ class FrameVQAMistakeDetectionScorer:
             else:
                 scores.append(1.0 - max_mistake_prob)
 
-        return scores
+        return answer_probs, scores
 
     def __call__(self, 
                  examples: list[FrameVQAMistakeDetectionExample],
@@ -87,7 +91,7 @@ class FrameVQAMistakeDetectionScorer:
             for i in tqdm(range(0, len(frames), batch_size), desc="running VQA"):
                 # Prepare the batch
                 batch_frames = frames[i:i+batch_size]
-                batch_prompts = prompts[i:i+batch_size]            
+                batch_prompts = prompts[i:i+batch_size]
 
                 inputs = self.processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
                 inputs = inputs.to(self.vlm.device)
@@ -119,20 +123,22 @@ class FrameVQAMistakeDetectionScorer:
                     parallel_idx += 1
                 vqa_outputs.append(this_vqa_outputs)
         
-        scores = self.get_scores(mistake_labels, vqa_outputs)
+        answer_probs, scores = self.get_scores(mistake_labels, vqa_outputs)
         vqg_training_examples = [
             VQGTrainingExample(
-                task_name=vqg_output.task_name,
+                task_name=MistakeDetectionTasks.Ego4D,
                 procedure_id=vqg_output.procedure_id, 
                 procedure_description=vqg_output.procedure_description,
                 prompt=example.prompt,
                 candidate_id=candidate_id,
                 questions=vqg_output.questions,
                 expected_answers=vqg_output.answers,
+                answer_probs=prob,
                 preference_score=score
             )
-            for candidate_id, (vqg_output, example, score) in enumerate(zip([vqg_output for ex in examples for vqg_output in ex.candidate_question_sets], 
+            for candidate_id, (vqg_output, example, prob, score) in enumerate(zip([vqg_output for ex in examples for vqg_output in ex.candidate_question_sets], 
                                                                             [ex for ex in examples for _ in ex.candidate_question_sets],
+                                                                            answer_probs, 
                                                                             scores))
         ]
 

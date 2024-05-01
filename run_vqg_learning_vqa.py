@@ -19,12 +19,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired frameVQA_examples.pkl is stored.")
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(VQG2VQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
+parser.add_argument("--batch_size", type=int, default=1, help="Batch size for VQA inference. For quantized models, a batch size greater than 1 can cause nans.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
 # Load outputs
 frameVQA_examples = load_frameVQA_examples(args.vqg_directory)
-if args.debug:
+if "_debug" in args.vqg_directory:
     frameVQA_examples = frameVQA_examples[:20]
 
 # TODO: introduce spatial filter - maybe need a consistent way to do this so we can reuse in vqa scripts
@@ -41,20 +42,14 @@ scorer = FrameVQAMistakeDetectionScorer(args.vlm_name)
 
 vqg_training_examples, vqa_outputs = scorer(frameVQA_examples,
                                             return_vqa_outputs=True,
-                                            batch_size=8) # TODO: this may cause nans
+                                            batch_size=args.batch_size) # TODO: this may cause nans
 
-# Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
-timestamp = datetime.datetime.now()
-this_results_dir = f"VQG2VQA"
-if args.debug:
-    this_results_dir += f"_debug"
-this_results_dir += f"_{args.vlm_name.split('/')[-1]}_{timestamp.strftime('%Y%m%d%H%M%S')}"
-this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
-os.makedirs(this_results_dir)
+# Save training examples for VQG in the same folder
+this_results_dir = args.vqg_directory
 
-save_vqa_outputs(vqa_outputs, this_results_dir)
+save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir)
 save_vqg_training_examples(vqg_training_examples, this_results_dir)
-pickle.dump(vqg_training_examples, open(os.path.join(this_results_dir, "vqg_training_examples.pkl"), "rb"))
+pickle.dump(vqg_training_examples, open(os.path.join(this_results_dir, "vqg_training_examples.pkl"), "wb"))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

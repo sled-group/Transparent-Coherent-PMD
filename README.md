@@ -62,7 +62,7 @@ In a Slurm script, ensure you prepend commands with `poetry run` to activate the
 
 You can configure some arguments and hyperparameters in `config.yml`, including video frame sampling frequency and directories where preprocessed data and results are stored.
 
-### SuccessVQA
+### SuccessVQA Baseline
 
 Baseline that simply asks VLMs whether some procedure was successfully performed. Check `run_vqa_successvqa.py` for more command-line arguments.
 
@@ -70,7 +70,7 @@ Baseline that simply asks VLMs whether some procedure was successfully performed
 python run_vqa_successvqa.py --eval_split <val|test>
 ```
 
-### VQG2VQA
+### VQG2VQA Baseline
 
 First, run visual question generation (VQG) to generate questions for each recipe step:
 
@@ -85,3 +85,19 @@ python run_vqa_vqg2vqa.py --eval_split <val|test> --vqg_directory "path/to/vqg/o
 ```
 
 Check `run_vqa_vqg2vqa.py` for more configurable command-line arguments.
+
+### Learning VQG
+
+#### Generating Training Data from Ego4D
+```
+python run_vqg_learning_generation.py
+python run_vqg_learning_vqa.py --vqg_directory /saved_results/path/to/generated/questions/from/previous/step/
+```
+
+#### Training VQG from Generated Data
+
+TBA
+
+#### Evaluating Trained Pipeline
+
+TBA
