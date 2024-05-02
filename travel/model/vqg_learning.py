@@ -78,7 +78,7 @@ class FrameVQAMistakeDetectionScorer:
         assert len(questions) == len(answers) == len(frames), "Need same number of questions, answers, and frames to score questions on frame-based VQA!"
         mistake_labels = [example.mistake for example in examples for _ in example.candidate_question_sets] # One scoring per each question set
              
-        prompt_template = VQG2VQA_PROMPT_TEMPLATES[self.model_name]
+        prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
         
         response_tokens = {}

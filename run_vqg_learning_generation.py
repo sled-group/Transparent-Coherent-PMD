@@ -23,7 +23,7 @@ from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, save_frame
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
+parser.add_argument("--lm_name", type=str, default="/nfs/turbo/coe-chaijy-unreplicated/pre-trained-weights/Llama-3-hf/models--meta-llama--Meta-Llama-3-8B/snapshots/b6887ce03ea47d068bf8502ba6ed27f8c5c12a6b", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument('--temperatures', nargs='+', type=float, default=[0.0, 0.5, 1.0])
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
@@ -154,8 +154,7 @@ this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_
 this_results_dir = os.path.join(RESULTS_DIR, "vqg_learning", this_results_dir)
 os.makedirs(this_results_dir)
 
-# TODO: also need to save this in unreplicated volume instead, or scratch
-save_frameVQA_examples(frameVQA_examples, this_results_dir, "train") # TODO: handle saving of images efficiently here
+save_frameVQA_examples(frameVQA_examples, this_results_dir, "train")
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

@@ -16,7 +16,7 @@ from transformers import AutoProcessor, AutoModelForVision2Seq, Owlv2Processor, 
 from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
 from travel.model.grounding import filter_frames_by_target_objects
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, HEURISTIC_TARGET_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
-from travel.model.vqa import VQAOutputs, VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES
+from travel.model.vqa import VQAOutputs, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES
 from travel.model.vqg import load_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
 from travel.data.captaincook4d import CaptainCook4DDataset
@@ -25,7 +25,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired vqg_outputs.json is stored.")
 parser.add_argument("--eval_split", type=str, choices=["val", "test"])
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(VQG2VQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--reset_cache", action="store_true", help="Pass this argument to not save cached VQA outputs for the VLM, and generate new ones.")
@@ -56,7 +56,7 @@ vlm.language_model.generation_config.temperature = None
 vlm.language_model.generation_config.top_p = None
 vlm.language_model.generation_config.do_sample = False
 
-prompt_template = VQG2VQA_PROMPT_TEMPLATES[args.vlm_name]
+prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(vlm)]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
 # Load cached VLM outputs

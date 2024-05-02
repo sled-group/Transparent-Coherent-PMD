@@ -5,35 +5,33 @@ import json
 import os
 from PIL import Image
 import torch
+from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
 from typing import Optional
 
 from travel.data.mistake_detection import MistakeDetectionTasks
 
 COMPLETION_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": "A photo of",
-    "Salesforce/instructblip-flan-t5-xxl": "A photo of",
-    "microsoft/kosmos-2-patch14-224": "<grounding> A photo of",
-    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nWhat is happening in this photo? ASSISTANT: This is a photo of',
-    "llava-hf/llava-v1.6-vicuna-7b-hf": "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\nWhat is shown in this image? ASSISTANT: This is a photo of",
-    "llava-hf/llava-v1.6-mistral-7b-hf": '[INST] <image>\nWhat is shown in this image? [/INST] This is a photo of',
+    Blip2ForConditionalGeneration: "A photo of",
+    InstructBlipForConditionalGeneration: "A photo of",
+    Kosmos2ForConditionalGeneration: "<grounding> A photo of",
+    LlavaForConditionalGeneration: 'USER: <image>\nWhat is happening in this photo? ASSISTANT: This is a photo of',
+    LlavaNextForConditionalGeneration: '[INST] <image>\nWhat is shown in this image? [/INST] This is a photo of',
 }
 
 SUCCESSVQA_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
-    "Salesforce/instructblip-flan-t5-xxl": 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
-    "microsoft/kosmos-2-patch14-224": '<grounding> Q: The current goal is "{step}". Has the person successfully finished doing this? A: ',
-    "llava-hf/llava-1.5-7b-hf": 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT: ',
-    "llava-hf/llava-v1.6-vicuna-7b-hf": 'A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human\'s questions. USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT:',
-    "llava-hf/llava-v1.6-mistral-7b-hf": '[INST] <image>\nThe current goal is "{step}". Has the person successfully finished doing this? [/INST]',
+    Blip2ForConditionalGeneration: 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
+    InstructBlipForConditionalGeneration: 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
+    Kosmos2ForConditionalGeneration: '<grounding> Q: The current goal is "{step}". Has the person successfully finished doing this? A: ',
+    LlavaForConditionalGeneration: 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT: ',
+    LlavaNextForConditionalGeneration: '[INST] <image>\nThe current goal is "{step}". Has the person successfully finished doing this? [/INST]',
 }
 
 VQG2VQA_PROMPT_TEMPLATES = {
-    "Salesforce/blip2-flan-t5-xxl": "Question: {question}? Answer:",
-    "Salesforce/instructblip-flan-t5-xxl": "Question: {question}? Answer: ",
-    "microsoft/kosmos-2-patch14-224": "<grounding> Question: {question} Answer: ",
-    "llava-hf/llava-1.5-7b-hf": "USER: <image>\n{question} ASSISTANT: ",
-    "llava-hf/llava-v1.6-vicuna-7b-hf": 'A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human\'s questions. USER: <image>\n{question} ASSISTANT:',
-    "llava-hf/llava-v1.6-mistral-7b-hf": "[INST] <image>\n{question} [/INST]",
+    Blip2ForConditionalGeneration: "Question: {question}? Answer:",
+    InstructBlipForConditionalGeneration: "Question: {question}? Answer: ",
+    Kosmos2ForConditionalGeneration: "<grounding> Question: {question} Answer: ",
+    LlavaForConditionalGeneration: "USER: <image>\n{question} ASSISTANT: ",
+    LlavaNextForConditionalGeneration: "[INST] <image>\n{question} [/INST]",
 }
 
 class VQAResponse(int, Enum):

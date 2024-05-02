@@ -41,7 +41,7 @@ class FrameVQAMistakeDetectionExample:
         if image_base_path is not None:
             if not os.path.exists(image_base_path):
                 os.makedirs(image_base_path)
-            image_path = os.path.join(image_base_path, f"frame_{example_id}.jpg")
+            image_path = os.path.join(image_base_path, f"frame_{self.example_id}.jpg")
             self.frame.save(image_path)
             return_dict["frame"] = image_path
         return_dict['frame_time'] = float(round(return_dict['frame_time'], 9))
@@ -56,7 +56,8 @@ class FrameVQAMistakeDetectionExample:
         """
         assert "frame" in data, "Can't use from_dict on this class without including a `frame` image."
         data["frame"] = Image.open(data["frame"])
-        example = FrameVQAMistakeDetectionExample.from_dict(data)
+        data["candidate_question_sets"] = [VQGOutputs(**output) for output in data["candidate_question_sets"]]
+        example = FrameVQAMistakeDetectionExample(**data)
         return example
     
 def save_frameVQA_examples(frameVQA_examples: list[FrameVQAMistakeDetectionExample], path: str, partition: str):
@@ -82,7 +83,7 @@ def load_frameVQA_examples(path: str, partition: str) -> list[FrameVQAMistakeDet
     """
     fname = f"frameVQA_examples_{partition}.json"
     frameVQA_examples = json.load(open(os.path.join(path, fname), "r"))
-    frameVQA_examples = [VQGOutputs.from_dict(d) for d in frameVQA_examples]
+    frameVQA_examples = [FrameVQAMistakeDetectionExample.from_dict(d) for d in frameVQA_examples]
     return frameVQA_examples
 
 @dataclass

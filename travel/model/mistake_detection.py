@@ -12,11 +12,9 @@ from transformers import AutoProcessor, AutoModelForVision2Seq
 from typing import Union, Any
 import yaml
 
-from travel.constants import DATA_CACHE_DIR
-from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, get_cutoff_time_by_proportion, FrameVQAMistakeDetectionExample
+from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, get_cutoff_time_by_proportion
 from travel.data.utils import generate_float_series
-from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES
-from travel.model.vqg import VQGOutputs
+from travel.model.vqa import VQAOutputs, VQAResponse
 
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
 

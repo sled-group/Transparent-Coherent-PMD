@@ -162,7 +162,7 @@ def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_desc
     :return: VQGOutputs parsed from generated language.
     """
     target_object = generated_language.split("\n")[0].split("Target object: ")[1].strip()
-    questions_answers = [(q_a.split("? (yes/no)")[0].strip() + "?", q_a.split("? (yes/no)")[1].strip()) for q_a in generated_language.split("\n")[1:3]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
+    questions_answers = [(q_a.split("? (yes/no)")[0].strip() + "?", q_a.split("(yes/no)")[1].strip()) for q_a in generated_language.split("\n")[1:3]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
     questions = [q[2:].strip() for q, _ in questions_answers]          
     answers = [a for _, a in questions_answers]
     output = VQGOutputs(procedure_id,
@@ -192,5 +192,5 @@ def load_vqg_outputs(path: str) -> dict[int, VQGOutputs]:
     :param path: Path to directory to load json file from (a directory that includes a vqg_outputs.json in it).
     """
     vqg_outputs = json.load(open(os.path.join(path, "vqg_outputs.json"), "r"))
-    vqg_outputs = {int(k): VQGOutputs.from_dict(v) for k, v in vqg_outputs.items()}
+    vqg_outputs = {int(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
     return vqg_outputs
