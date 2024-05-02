@@ -16,10 +16,10 @@ from travel.model.vqa import VQG2VQA_PROMPT_TEMPLATES, save_vqa_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired frameVQA_examples.pkl is stored.")
+parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired frameVQA_examples.json is stored.")
 parser.add_argument("--vlm_name", type=str, default="/nfs/turbo/coe-chaijy-unreplicated/pre-trained-weights/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
-parser.add_argument("--batch_size", type=int, default=1, help="Batch size for VQA inference. For quantized models, a batch size greater than 1 can cause nans.")
+parser.add_argument("--batch_size", type=int, default=1, help="Batch size for VQA inference. For quantized models, a batch size greater than 1 can cause nans.") # TODO: can we fix nans problem
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
@@ -45,7 +45,7 @@ vqg_training_examples, vqa_outputs = scorer(frameVQA_examples,
                                             batch_size=args.batch_size) # TODO: this may cause nans
 
 # Save training examples for VQG in the same folder
-this_results_dir = args.vqg_directory
+this_results_dir = os.path.join(args.vqg_directory, "VQA_data_" + args.vlm_name.split("/")[-1])
 
 save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, "train")
 save_vqg_training_examples(vqg_training_examples, this_results_dir, "train")

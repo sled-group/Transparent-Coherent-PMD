@@ -39,7 +39,6 @@ args = parser.parse_args()
 dataset = Ego4DMistakeDetectionDataset(data_split="train",
                                        debug_n_examples_per_class=20 if args.debug else None)
 print(f"{len(dataset)} Ego4D mistake detection examples loaded")
-# TODO: for some reason, dataset.examples is empty after this step
 
 batch_size = 8
 model_kwargs = {}
