@@ -5,3 +5,11 @@ saved_results
 .ipynb_checkpoints
 *.pyc
 dpo_outputs
+.venv
+.vscode/launch.json
+dataset
+.cache
+tmp*
+.python-version
+fho_narration_df_rows.json
+narration_mapping_fho2srl_df.csv
