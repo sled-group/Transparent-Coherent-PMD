@@ -1,11 +1,10 @@
-from dataclasses import dataclass, field
-from dataclasses_json import dataclass_json
+from dataclasses import dataclass, field, asdict
 import os
 import json
+from typing import Any
 
 from travel.model.vqa import VQAResponse
 
-@dataclass_json
 @dataclass
 class VQGOutputs:
     """Dataclass to hold all LM outputs from visual question generation (VQG)."""
@@ -32,6 +31,8 @@ class VQGOutputs:
         for question in self.questions:
             if not question.strip().endswith("?"):
                 print(f"Warning: Question '{question}' doesn't appear to be a question.")
+    def to_dict(self):
+        return asdict(self)
 
 # List of examples to use for in-context learning for VQG
 # TODO: add more?
@@ -172,25 +173,36 @@ def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_desc
                         answers)
     return output
 
-def save_vqg_outputs(vqg_outputs: dict[int, VQGOutputs], path: str):
+def save_vqg_outputs(vqg_outputs: dict[Any, VQGOutputs], path: str):
     """
     Saves dict of VQGOutputs created by `run_vqg.py`.
     
     :param vqg_outputs: Dictionary mapping procedure ID int to VQGOutputs.
     :param path: Path to save json file (directory).
     """
-    if not os.path.exists(path):
-        os.makedirs(path)
+    if not path.endswith(".json"):
+        if not os.path.exists(path):
+            os.makedirs(path)
+        path = os.path.join(path, "vqg_outputs.json")
+    else:
+        if not os.path.exists("/".join(path.split("/")[:-1])):
+            os.makedirs("/".join(path.split("/")[:-1]))
+
     json.dump({k: v.to_dict() for k, v in vqg_outputs.items()}, 
-              open(os.path.join(path, "vqg_outputs.json"), "w"),
+              open(path, "w"),
               indent=4)    
 
-def load_vqg_outputs(path: str) -> dict[int, VQGOutputs]:
+def load_vqg_outputs(path: str) -> dict[Any, VQGOutputs]:
     """
     Loads dict of VQGOutputs created by `run_vqg.py`.
     
     :param path: Path to directory to load json file from (a directory that includes a vqg_outputs.json in it).
     """
-    vqg_outputs = json.load(open(os.path.join(path, "vqg_outputs.json"), "r"))
-    vqg_outputs = {int(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
+    if not path.endswith(".json"):
+        path = os.path.join(path, "vqg_outputs.json")
+    vqg_outputs = json.load(open(path, "r"))
+    try:
+        vqg_outputs = {int(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
+    except:
+        vqg_outputs = {str(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
     return vqg_outputs
