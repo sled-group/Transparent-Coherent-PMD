@@ -13,3 +13,4 @@ tmp*
 .python-version
 fho_narration_df_rows.json
 narration_mapping_fho2srl_df.csv
+ego4d_mismatch_srl_files

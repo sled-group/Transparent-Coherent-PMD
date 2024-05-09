@@ -77,6 +77,7 @@ else:
 for partition in ["train", "val", "test"]:
     # Load Ego4D for mistake detection
     dataset = Ego4DMistakeDetectionDataset(data_split=partition,
+                                           mismatch_augmentation=True,
                                            debug_n_examples_per_class=20 if args.debug else None)
     print(f"{len(dataset)} Ego4D mistake detection examples loaded from {partition} partition")
 

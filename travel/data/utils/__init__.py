@@ -1,3 +1,7 @@
+import ast
+import pandas as pd
+from tqdm import tqdm
+
 def generate_float_series(start: float, end: float, step: float) -> list[float]:
     """
     Generates a list of floats including a `start` and `end` point, and intermediate points `step` apart.
@@ -23,3 +27,44 @@ def generate_float_series(start: float, end: float, step: float) -> list[float]:
         series.append(end)
 
     return series
+
+def convert_to_list(string):
+    try:
+        return ast.literal_eval(string)
+    except:
+        return []  # Return an empty list in case of error
+
+def read_large_csv(file_path, columns_str2list=[], nrows=None, chunk_size=100, ):
+    """
+    Read a large CSV file in chunks.
+    
+    Args:
+    """
+    
+    # Define the file path
+    # file_path = f'../dataset/egoclip_groups_groupby_{grouping_type}.csv'
+
+    # Determine the number of rows in the CSV
+    total_rows = sum(1 for _ in open(file_path, 'r'))
+
+    # Read the CSV with a progress bar
+    # chunk_size = 100  # Adjust chunk size based on your needs
+    chunks = []
+    converters = None
+    if columns_str2list != []:
+        converters = {cname: convert_to_list for cname in columns_str2list}
+    # Use tqdm to show progress
+    for chunk in tqdm(pd.read_csv(file_path, 
+                                chunksize=chunk_size,
+                                index_col=0,
+                                converters=converters,
+                                nrows=nrows), 
+                    total=total_rows/chunk_size,
+                    unit=f'chunk ({chunk_size} videos per chunk)'):
+        chunks.append(chunk)
+
+    # Concatenate all chunks into a single DataFrame
+    df = pd.concat(chunks, axis=0)
+
+    # Now you can use df as a normal DataFrame
+    return df    

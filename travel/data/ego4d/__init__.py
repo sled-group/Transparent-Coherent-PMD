@@ -1,15 +1,20 @@
 # Most code in this file was adapted from EILEV: https://github.com/yukw777/EILEV
-import json
-import os
+import ast
 from collections.abc import Callable, Iterable
 from fractions import Fraction
+import json
+import numpy as np
+import os
+import pandas as pd
 import pickle
+from pprint import pprint
 from pytorchvideo.data import ClipSampler, LabeledVideoDataset
 from pytorchvideo.data.clip_sampling import ClipInfo
 import random
 import re
 import spacy
 import string
+import time
 import torch
 from torch.nn.functional import cosine_similarity
 from torchvision.transforms.functional import to_pil_image
@@ -17,11 +22,13 @@ from transformers import BatchEncoding, DataCollatorForSeq2Seq, PreTrainedTokeni
 from typing import Any, TypeVar, Optional
 from tqdm import tqdm
 
-from travel.constants import DATA_CACHE_DIR
-from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH
-from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
+from travel.constants import DATA_CACHE_DIR, RANDOM_SEED
+from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
+                                        EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT
+from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
+from travel.data.utils import read_large_csv
 from travel.data.utils.text import simple_present_to_imperative
-from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY
+from travel.data.utils.video import FRAME_SAMPLING_FREQUENCY
 
 # Some verbs would not be expected in the task-oriented mistake detection setting, so we can filter them out
 EGO4D_IGNORE_VERBS = ['scroll', # Scrolling on phone, tablet, etc.
@@ -382,6 +389,178 @@ def preprocess_actions(actions: list[dict]) -> list[dict]:
     # TODO: Combine repeated actions? Can look at initial data and see if this is needed
     return actions
 
+class MisalignSRL:
+    def __init__(self, fho_main_path, narration_mapping_fho2srl_df_path, narration_df_path, fho_narration_df_rows_path, group_df_path):
+        '''
+        fho_main_path: the path to json file (fho_main) with structure
+            {"videos": 
+                [{"annotated_intervals": [{"clip_uid": str, ... , 
+                                            "narrated_actions": [{"narration_text": str, 
+                                                                "narration_timestamp_sec"}, ...]
+                                            }, ...
+                ], 
+                "video_metadata": {}, 
+                "video_uid": str}]},
+            "date": xx, 
+            "description": xx, 
+            "metadata": xx}
+        
+        narration_mapping_fho2srl_df_path: the path to csv file with columns ["video_uid", "narration_text", "narration_timestamp_sec", "srl_index", "fho_index"]
+        
+        narration_df_path: the path to csv file with example row:
+            video_uid                 26202090-684d-4be8-b3cc-de04da827e91
+            video_dur                                          3127.233333
+            narration_source                              narration_pass_1
+            narration_ind                                                7
+            narration_time                                         40.8375
+            clip_start                                           40.583986
+            clip_end                                             41.090933
+            clip_text                C takes his hand out of the paper bag
+            tag_verb                                                  [93]
+            tag_noun                                        [321, 12, 349]
+            ARG0                                                         C
+            V                                                        takes
+            ARG1                                                  his hand
+            valid_tag_noun                                           [321]
+            valid_txt_noun                                        ['hand']
+            valid_tag_verb                                            [93]
+            valid_txt_verb                                        ['take']
+            index                                                   322348
+            valid_txt_verb_single                                     take
+            valid_txt_noun_single                                     hand        
+        
+        fho_narration_df_rows_path: the path to json file with structure: a list of dict. An example dict:
+                    {
+                      'video_index': 1, # the index of the video in the fho_main.json
+                      'interval_index': 0, # the index of the interval in the fho_main.json
+                      'action_index': 3, # the index of the action in the fho_main.json                      
+                      'narration_timestamp_sec': 35.4317396,
+                      'video_uid': '26202090-684d-4be8-b3cc-de04da827e91',
+                      'narration_text': '#C C takes a steel bowl out of the '
+                                        'paper bag',}
+        
+        group_df_path: the path to csv/parquet file with columns ["txt_verb"(str), "txt_noun"(str), "narration_index"(list), "narration_indices"(list), "mismatch_noun"(list), "mismatch_verb"(list), "mismatch_verb_noun"(list)]. 
+        '''
+        
+        print("Loading fho_main_json ...")
+        start_time = time.time()
+        # file_path = "/home/yayuanli/fun/mistake_detection/fine_grained_action_mistake_detection/dataset/fho_main.json"
+        with open(fho_main_path, "r") as file:
+            fho_main_json = json.load(file)
+        print(f"Loading fho_main.json took {time.time() - start_time} seconds.")
+        
+        print("Loading narration_df ...")
+        start_time = time.time()
+        # narration_df = "/z/home/yayuanli/dat/Ego4D_Mistake/v1/egoclip_narrations_exploed_groupby_no,txt.csv"
+        narration_df = pd.read_csv(narration_df_path, index_col=0)        
+        print(f"Loading narration_df took {time.time() - start_time} seconds.")
+        
+        print("Loading narration_mapping_fho2srl_df ...")  
+        start_time = time.time()
+        # 'narration_mapping_fho2srl_df.csv'
+        narration_mapping_fho2srl_df = pd.read_csv(narration_mapping_fho2srl_df_path, index_col=0)
+        narration_mapping_fho2srl_df["srl_index"] = narration_mapping_fho2srl_df["srl_index"].apply(ast.literal_eval)
+        print(f"Loading narration_mapping_fho2srl_df took {time.time() - start_time} seconds.")
+        
+        print("Loading fho_narration_df_rows ...")
+        start_time = time.time()
+        # fho_narration_df_rows.json
+        with open(fho_narration_df_rows_path, 'r') as f:
+            fho_narration_df_rows = json.load(f)
+        print(f"Loading fho_narration_df_rows took {time.time() - start_time} seconds.")
+        
+        print("Loading group_df ...")
+        start_time = time.time()
+        # f'/z/home/yayuanli/dat/Ego4D_Mistake/v1/egoclip_groups_groupby_no,txt.csv'
+        group_df = read_large_csv(group_df_path, 
+                                #   columns_str2list=["narration_index", "narration_indices", "mismatch_noun", "mismatch_verb", "mismatch_verb_noun"], 
+                                nrows=None, # None
+                                )
+        print(f"Loading group_df took {time.time() - start_time} seconds.")
+
+        self.fho_main_json = fho_main_json
+        self.narration_mapping_fho2srl_df = narration_mapping_fho2srl_df
+        self.narration_df = narration_df
+        self.fho_narration_df_rows = fho_narration_df_rows
+        self.group_df = group_df
+
+
+        self.type_name_col_name_map = {"MisalignSRL_V": "mismatch_verb", "MisalignSRL_ARG1": "mismatch_noun", "MisalignSRL_V_ARG1": "mismatch_verb_noun"} # human readable name -> column name in group_df
+
+           
+    def get_misaligned_samples(self, clip):
+        '''
+        clip: (obj?). Corresponds to one action clip in fho_main.json. The distinguishing information of this clip is `video_uid` and `narration_timestamp_sec`.
+        
+        return:
+            mistake_example_meta_dict: {misalignsrl_type -> one action clip in fho_main.json (fho_main_json["videos"][video_index]["annotated_intervals"][big_clip_index]["narrated_actions"][narration_clip_index])}
+        '''
+        # for each misalignsrl_type, sample one srl_index in the group, and return the index of that narration clip in `fho_main.json`
+        # mistake_example_meta_dict: misalignsrl_type -> fho_narration_df_rows. To be returned.
+        mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
+
+        
+        video_uid = clip["video_uid"]
+        narration_timestamp_sec = clip["narration_timestamp_sec"]
+        
+        # find the map_row (the row in `narration_mapping_fho2srl_df (pd.DataFrame)`) by matching `video_uid` and `narration_timestamp_sec`
+        match_video_uid = self.narration_mapping_fho2srl_df["video_uid"] == video_uid
+        match_narration_timestamp_sec = self.narration_mapping_fho2srl_df["narration_timestamp_sec"] == narration_timestamp_sec
+        map_row = self.narration_mapping_fho2srl_df[match_video_uid & match_narration_timestamp_sec]
+        
+        # return if no map_row found. Meaning, this clip does not have misalignsrl sample in current group_df.
+        if len(map_row) == 0:
+            # TODO: we always return here - why???
+            print("!!!! CASE 1 !!!!")
+            return mistake_example_meta_dict
+        
+        # get the `fho_index` (index in `fho_narration_df_rows`) and `srl_index` (index in `narration_df`) from the map_row (a row in `narration_mapping_fho2srl_df (pd.DataFrame)`)
+        fho_index = map_row["fho_index"].values[0]
+        
+        srl_index = random.choice(map_row["srl_index"].values[0]) # randomly pick one. one narration could be in multiple groups. E.g., "pick up a bag of clothes" could be in "pick up bag" and "pick up cloth"
+        
+        # find the group in `group_df` to which the `srl_narration_row` belongs
+        srl_narration_row = self.narration_df.iloc[srl_index]
+        match_txt_verb = self.group_df["txt_verb"] == srl_narration_row["valid_txt_verb_single"]
+        match_txt_noun = self.group_df["txt_noun"] == srl_narration_row["valid_txt_noun_single"]
+        target_group = self.group_df[match_txt_verb & match_txt_noun] # a row in `group_df` (pd.Series)
+        
+        # fill in the mistake_example_meta_dict   
+        for misalignsrl_type in self.type_name_col_name_map:
+            # index_list: list of int. the srl index in the srl narration df.
+            index_list = target_group[self.type_name_col_name_map[misalignsrl_type]].iloc[0] 
+            # TODO: this row can be optmized by saving group_df as parquet file instead of csv
+            if not isinstance(index_list, list):
+                index_list = ast.literal_eval(index_list)
+                
+            # shuffle the index_list so that different given `clip` is less likely to get the same sample for a misalignsrl_type. For example, for given `clip`s "cut carrot" and "pour sauce", the first sample for "MisalignSRL_VN" could be the same -- "pick up cap"
+            index_list = np.random.permutation(index_list)
+            # find fho_index (for fho_narration_df_rows)        
+            if len(index_list) == 0:
+                print("!!!! CASE 2 !!!!")
+            for srl_index in index_list:
+                # narration_mapping_fho2srl_df["srl_index"] is a column where each row is a list of int. srl_index is a int. 
+                # Find the row where the srl_index is in the list of the row narration_mapping_fho2srl_df["srl_index"]
+                # it may not be since current group_df is made from `egoclip.csv` (refer to: https://github.com/facebookresearch/EgoVLPv2), which contains narration clips over whole Ego4D while the fho_main.json is a subset of Ego4D (with bbox annotation).
+                match_misalign_sample_in_fho_main = self.narration_mapping_fho2srl_df["srl_index"].apply(lambda x: srl_index in x)
+                fho_index_row = self.narration_mapping_fho2srl_df[match_misalign_sample_in_fho_main] 
+                if len(fho_index_row) > 0:
+                    fho_index = fho_index_row["fho_index"].values[0]
+                    mistake_example_meta_dict[misalignsrl_type] = self.fho_narration_df_rows[fho_index]
+                    break
+                print("!!!! CASE 3 !!!!")
+
+        # return mistake_example_meta_dict. For each misalignsrl_type, if None, it means no sample is found in the group. (This could be improved making group_df.parquet from fho_main.json instead of from egoclip)
+        return mistake_example_meta_dict    
+        
+
+    def get_clip_info_from_fho_main_index(self, video_index, big_clip_index, narration_clip_index):
+        narration_clip_info = self.fho_main_json["videos"][video_index]["annotated_intervals"][big_clip_index]["narrated_actions"][narration_clip_index]
+        
+        return narration_clip_info
+    
+        # (need Peter's input.) for each misalignsrl_type, given the information of the narration clip in fho_main.json, we can load visual media (image). Such information of a narration clip should have been loaded the same way as one item (`clip`) in `ego4d` above. I.E., need to identify the index of this clip in `ego4d` so that the media can be loaded efficiently using exisiting code. 
+
 # TODO: add an option to not load full videos - just use index files and specific frames instead? This would be much faster.
 class Ego4dFHOMainDataset(LabeledVideoDataset):
     """Class to store data from Ego4D. Some domain-specific filtering steps are performed for egocentric mistake detection."""
@@ -444,7 +623,8 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                                 "structured_verb": action["structured_verb"],
                                 "structured_noun": action["structured_noun"],
                                 "previous_occurrences": action["previous_occurrences"],
-                                "future_occurrences": action["future_occurrences"]
+                                "future_occurrences": action["future_occurrences"],
+                                "narration_timestamp_sec": action["narration_timestamp_sec"],
                             }
                             for interval in video_dict[video_uid]["annotated_intervals"]
                             for action_idx, action in enumerate(preprocess_actions(interval["narrated_actions"]))
@@ -467,23 +647,38 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
 class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
+                 mismatch_augmentation: bool=False,
                  debug_n_examples_per_class: Optional[int]=None):
         """
-        Method to initialize and load Ego4D dataset for mistake detection.
+        Method to initialize and load Ego4D dataset for mistake detection, following the SuccessVQA approach (https://proceedings.mlr.press/v232/du23b.html).
 
         :param data_split: String name for data partition to load.
-        :param load_videos: Whether to include videos in the examples.
+        :param mismatch_augmentation: Whether to augment negative examples by selecting alternative video clips for narrated procedures with mismatched verbs and nouns. Set this to False to be comparable to SuccessVQA approach.
         :param debug_n_examples_per_class: Load a small number of examples for each class (success and mistake).
         """
+        if mismatch_augmentation:
+            self.mismatch_sampler = MisalignSRL(
+                EGO4D_ANNOTATION_PATH,
+                EGO4D_MISMATCH_FHO2SRL_PATH,
+                EGO4D_MISMATCH_NARRATIONS_PATH,
+                EGO4D_MISMATCH_NARRATIONS_ROWS_PATH,
+                EGO4D_MISMATCH_GROUPS_PATH
+            )
+        else:
+            self.mismatch_sampler = None
         super().__init__(data_split,
+                         mismatch_augmentation=mismatch_augmentation,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
     def load_examples(self,
                       data_split: str,
+                      mismatch_augmentation: bool=False,
                       debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
         
         # Check if we already loaded data before
-        cache_fname = f"ego4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}" 
+        cache_fname = f"ego4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}_seed{RANDOM_SEED}" 
+        if mismatch_augmentation:
+            cache_fname += f"_mismatch{EGO4D_MISMATCH_COUNT}"
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
         cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname + ".pkl")
@@ -522,8 +717,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     continue
                 
                 # Generate positive example from effect frame
-                # TODO: maybe want to get entire clip later
-                examples.append(MistakeDetectionExample(
+                # TODO: maybe want to get entire clip later - OR just write new code to extract single frames from video files
+                positive_example = MistakeDetectionExample(
                     task_name="ego4d",
                     video_id=clip['video_uid'],
                     procedure_id=procedure_id,
@@ -532,11 +727,11 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     frame_times=[clip['post_frame'] / clip['fps']],
                     procedure_description=instruction_text,
                     mistake=False,
-                ))
+                )
+                examples.append(positive_example)
                 
                 # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
                 # if clip['previous_occurrences'] < 2:
-                # TODO: can we get whole 8 second clip before precondition frame? (might not be needed)
                 examples.append(MistakeDetectionExample(
                     task_name="ego4d",
                     video_id=clip['video_uid'],
@@ -549,10 +744,12 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     mistake_type="Action Incomplete",
                 ))
 
-                # TODO: Generate more diverse negative examples by matching to clips with mismatched structured verb/noun
-                # (inspired by Yayuan's approach - talk to him)
-                # ^ may also need to have an option to turn this off if we want to generate SuccessVQA-comparable results
-                # ^ may need to somehow save information for structured verb and noun in above examples to pull this off
+                # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
+                if mismatch_augmentation:
+                    mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
+                    pprint(clip)
+                    print("==========")
+                    pprint(mismatch_examples)
 
                 if debug_n_examples_per_class is not None and len(examples) >= 2 * debug_n_examples_per_class:
                     break
