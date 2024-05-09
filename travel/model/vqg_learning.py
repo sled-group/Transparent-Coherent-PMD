@@ -2,10 +2,10 @@ import json
 import os
 import torch
 from tqdm import tqdm
-from transformers import AutoProcessor, AutoModelForVision2Seq
-from typing import Union
+from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
+from typing import Union, Optional
 
-from travel.constants import DATA_CACHE_DIR
+from travel.constants import DATA_CACHE_DIR, CACHE_FREQUENCY
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES
@@ -18,9 +18,17 @@ class FrameVQAMistakeDetectionScorer:
         super().__init__()
         self.model_name = vlm_name
         self.processor = AutoProcessor.from_pretrained(vlm_name)
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            llm_int8_threshold=6.0,
+            llm_int8_has_fp16_weight=False,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
         self.vlm = AutoModelForVision2Seq.from_pretrained(vlm_name, 
-                                                          cache_dir=DATA_CACHE_DIR, # TODO: add this back
-                                                          load_in_8bit=True)
+                                                          cache_dir=DATA_CACHE_DIR,
+                                                          quantization_config=bnb_config)
         self.vlm.language_model.generation_config.top_p = None
         self.vlm.language_model.generation_config.temperature = None
         self.vlm.language_model.generation_config.do_sample = False
@@ -62,7 +70,8 @@ class FrameVQAMistakeDetectionScorer:
     def __call__(self, 
                  examples: list[FrameVQAMistakeDetectionExample],
                  return_vqa_outputs: bool=False,
-                 batch_size: int=1) -> Union[torch.FloatTensor, list[VQAOutputs]]:
+                 batch_size: int=1,
+                 cache_path: Optional[str]=None) -> Union[torch.FloatTensor, list[VQAOutputs]]:
         """
         Score visual questions when posed on individual video frames to a VLM.
         
@@ -86,9 +95,18 @@ class FrameVQAMistakeDetectionScorer:
             response_tokens[response_type] = self.processor.tokenizer(response_type.name, add_special_tokens=False)['input_ids'][0]
             
         # Run VQA in batches
-        logits = []
+        logits = torch.zeros((0,self.vlm.vocab_size)).float()
+        if cache_path is not None:
+            assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
+            if os.path.exists(cache_path):
+                logits = torch.load(cache_path)
+            else:
+                if not os.path.exists("/".join(cache_path.split("/")[:-1])):
+                    os.makedirs("/".join(cache_path.split("/")[:-1]))
+
+        last_save = 0
         with torch.no_grad():
-            for i in tqdm(range(0, len(frames), batch_size), desc="running VQA"):
+            for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc="running VQA"):
                 # Prepare the batch
                 batch_frames = frames[i:i+batch_size]
                 batch_prompts = prompts[i:i+batch_size]
@@ -97,8 +115,16 @@ class FrameVQAMistakeDetectionScorer:
                 inputs = inputs.to(self.vlm.device)
                 this_logits = self.vlm(**inputs).logits
                 this_logits = this_logits[:, -1].detach().cpu()
-                logits.append(this_logits)
-            logits = torch.cat(logits, dim=0)
+                logits = torch.cat([logits, this_logits], dim=0)
+
+                # Cache logits so far
+                if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
+                    torch.save(logits, cache_path)
+                    last_save = i
+
+        # Cache one more time
+        if cache_path is not None:
+            torch.save(logits, cache_path)        
         
         # Gather up VQAOutputs (# examples, # questions per example)
         vqa_outputs = []

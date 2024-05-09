@@ -14,7 +14,7 @@ from tqdm import tqdm
 from transformers import pipeline
 from transformers.pipelines.pt_utils import KeyDataset
 
-from travel.constants import RESULTS_DIR, HF_TOKEN
+from travel.constants import RESULTS_DIR, HF_TOKEN, CACHE_FREQUENCY
 from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, parse_vqg_outputs, save_vqg_outputs, load_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
@@ -23,19 +23,20 @@ from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, save_frame
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--lm_name", type=str, default="/nfs/turbo/coe-chaijy-unreplicated/pre-trained-weights/Llama-3-hf/models--meta-llama--Meta-Llama-3-8B/snapshots/b6887ce03ea47d068bf8502ba6ed27f8c5c12a6b", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
+parser.add_argument("--partition", type=str, default="train", help="Dataset partition name to generate from.")
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument('--temperatures', nargs='+', type=float, default=[0.0, 0.5, 1.0])
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
-parser.add_argument("--partition", type=str, default="train", help="Dataset partition name to generate from.")
 parser.add_argument("--resume_directory", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
-parser.add_argument("--cache_frequency", type=int, default=10, help="Frequency of caching generated questions.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
+
+assert len(set(args.temperatures)) == len(args.temperatures), "Must pass a list of unique temperatures! Duplicates aren't supported yet."
 
 # NOTE: we need to think about how to control the LMs used for question generation and answering:
 # Start with: LLaMA 2-7B ( -> Vicuna-7B chat fine-tuned) -> LLaVA 1.5
 
-# TODO: need to include Ruixuan's updates to VQG strategies here
+# TODO: need to include Ruixuan's updates to VQG strategies here - maybe need a consistent method for VQG so we can reuse in other scripts
 
 # Load Ego4D for mistake detection
 dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
@@ -154,7 +155,7 @@ with torch.no_grad():
 
             vqg_outputs[f"{temperature}_{prompt_idx}"] = output
 
-            if prompt_idx % args.cache_frequency == 0:
+            if prompt_idx % CACHE_FREQUENCY == 0:
                 print("Saving progress...")
                 save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
 
@@ -179,8 +180,8 @@ for example in dataset:
             video_id=example.video_id,
             procedure_id=example.procedure_id,
             example_id=example.example_id,
-            frame=example.frames[0], # NOTE: this relies on there only being one frame in the Ego4D examples
-            frame_time=example.frame_times[0], # NOTE: this relies on there only being one frame in the Ego4D examples - which is probably fine for our project anyway
+            frame=example.frames[0],
+            frame_time=example.frame_times[0],
             procedure_description=example.procedure_description,
             mistake=example.mistake,
             prompt=generate_vqg_prompt_icl(example.procedure_description, n_demonstrations=args.n_demonstrations),

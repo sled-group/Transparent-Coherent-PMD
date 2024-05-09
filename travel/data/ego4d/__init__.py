@@ -382,7 +382,7 @@ def preprocess_actions(actions: list[dict]) -> list[dict]:
     # TODO: Combine repeated actions? Can look at initial data and see if this is needed
     return actions
 
-# TODO: add an option to not load videos?
+# TODO: add an option to not load full videos - just use index files and specific frames instead? This would be much faster.
 class Ego4dFHOMainDataset(LabeledVideoDataset):
     """Class to store data from Ego4D. Some domain-specific filtering steps are performed for egocentric mistake detection."""
     def __init__(
