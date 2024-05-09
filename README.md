@@ -58,11 +58,13 @@ In a Slurm script, ensure you prepend commands with `poetry run` to activate the
 
 ## Running Experiments
 
+Before running experiments, be sure to configure the directories in `config.yml` accordingly.
+
 ### Configuration
 
-You can configure some arguments and hyperparameters in `config.yml`, including video frame sampling frequency and directories where preprocessed data and results are stored.
+You can configure some arguments and hyperparameters in `config.yml`, including video frame sampling frequency and caching frequency.
 
-### SuccessVQA
+### SuccessVQA Baseline
 
 Baseline that simply asks VLMs whether some procedure was successfully performed. Check `run_vqa_successvqa.py` for more command-line arguments.
 
@@ -85,3 +87,19 @@ python run_vqa_vqg2vqa.py --eval_split <val|test> --vqg_directory "path/to/vqg/o
 ```
 
 Check `run_vqa_vqg2vqa.py` for more configurable command-line arguments.
+
+### Learning VQG
+
+#### Generating Training Data from Ego4D
+```
+python run_vqg_learning_generation.py
+python run_vqg_learning_vqa.py --vqg_directory /saved_results/path/to/generated/questions/from/previous/step/
+```
+
+#### Training VQG from Generated Data
+
+TBA
+
+#### Evaluating Trained Pipeline
+
+TBA

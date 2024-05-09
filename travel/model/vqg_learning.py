@@ -1,10 +1,13 @@
+import json
+import os
 import torch
 from tqdm import tqdm
-from transformers import AutoProcessor, AutoModelForVision2Seq
-from typing import Union
+from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
+from typing import Union, Optional
 
-from travel.constants import DATA_CACHE_DIR
+from travel.constants import DATA_CACHE_DIR, CACHE_FREQUENCY
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
+from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
@@ -15,9 +18,17 @@ class FrameVQAMistakeDetectionScorer:
         super().__init__()
         self.model_name = vlm_name
         self.processor = AutoProcessor.from_pretrained(vlm_name)
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            llm_int8_threshold=6.0,
+            llm_int8_has_fp16_weight=False,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
         self.vlm = AutoModelForVision2Seq.from_pretrained(vlm_name, 
-                                                          cache_dir=DATA_CACHE_DIR, # TODO: add this back
-                                                          load_in_8bit=True)
+                                                          cache_dir=DATA_CACHE_DIR,
+                                                          quantization_config=bnb_config)
         self.vlm.language_model.generation_config.top_p = None
         self.vlm.language_model.generation_config.temperature = None
         self.vlm.language_model.generation_config.do_sample = False
@@ -36,7 +47,10 @@ class FrameVQAMistakeDetectionScorer:
         """
         assert len(mistake_labels) == len(vqa_outputs), "FrameVQAMistakeDetectionScorer.get_scores expected same number of mistake labels and VQA outputs!"
         scores = []
+        answer_probs = []
         for mistake, example_vqa_outputs in zip(mistake_labels, vqa_outputs):
+            answer_probs.append([(output.answer_probs[VQAResponse.No], output.answer_probs[VQAResponse.Yes]) for output in example_vqa_outputs])
+            
             # VLM probabilities that there's a mistake for each question
             mistake_probs = [1.0 - output.answer_probs[output.expected_answer] for output in example_vqa_outputs]
 
@@ -51,12 +65,13 @@ class FrameVQAMistakeDetectionScorer:
             else:
                 scores.append(1.0 - max_mistake_prob)
 
-        return scores
+        return answer_probs, scores
 
     def __call__(self, 
                  examples: list[FrameVQAMistakeDetectionExample],
                  return_vqa_outputs: bool=False,
-                 batch_size: int=1) -> Union[torch.FloatTensor, list[VQAOutputs]]:
+                 batch_size: int=1,
+                 cache_path: Optional[str]=None) -> Union[torch.FloatTensor, list[VQAOutputs]]:
         """
         Score visual questions when posed on individual video frames to a VLM.
         
@@ -72,7 +87,7 @@ class FrameVQAMistakeDetectionScorer:
         assert len(questions) == len(answers) == len(frames), "Need same number of questions, answers, and frames to score questions on frame-based VQA!"
         mistake_labels = [example.mistake for example in examples for _ in example.candidate_question_sets] # One scoring per each question set
              
-        prompt_template = VQG2VQA_PROMPT_TEMPLATES[self.model_name]
+        prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
         
         response_tokens = {}
@@ -80,26 +95,43 @@ class FrameVQAMistakeDetectionScorer:
             response_tokens[response_type] = self.processor.tokenizer(response_type.name, add_special_tokens=False)['input_ids'][0]
             
         # Run VQA in batches
-        logits = []
+        logits = torch.zeros((0,self.vlm.vocab_size)).float()
+        if cache_path is not None:
+            assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
+            if os.path.exists(cache_path):
+                logits = torch.load(cache_path)
+            else:
+                if not os.path.exists("/".join(cache_path.split("/")[:-1])):
+                    os.makedirs("/".join(cache_path.split("/")[:-1]))
+
+        last_save = 0
         with torch.no_grad():
-            for i in tqdm(range(0, len(frames), batch_size), desc="running VQA"):
+            for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc="running VQA"):
                 # Prepare the batch
                 batch_frames = frames[i:i+batch_size]
-                batch_prompts = prompts[i:i+batch_size]            
+                batch_prompts = prompts[i:i+batch_size]
 
                 inputs = self.processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
                 inputs = inputs.to(self.vlm.device)
                 this_logits = self.vlm(**inputs).logits
                 this_logits = this_logits[:, -1].detach().cpu()
-                logits.append(this_logits)
-            logits = torch.cat(logits, dim=0)
+                logits = torch.cat([logits, this_logits], dim=0)
+
+                # Cache logits so far
+                if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
+                    torch.save(logits, cache_path)
+                    last_save = i
+
+        # Cache one more time
+        if cache_path is not None:
+            torch.save(logits, cache_path)        
         
         # Gather up VQAOutputs (# examples, # questions per example)
         vqa_outputs = []
         parallel_idx = 0
-        for example in enumerate(examples): 
-            this_vqa_outputs = []
-            for question_set in example.candidate_question_sets:
+        for example in examples: 
+            for question_set in example.candidate_question_sets: # TODO: this causes an attributeerror near end of VQA script
+                this_vqa_outputs = []
                 for _, answer in zip(question_set.questions, question_set.answers):
                     assert answers[parallel_idx] == answer, "Parallel input examples and VQA outputs are out of sync!"
                     this_vqa_outputs.append(
@@ -115,23 +147,29 @@ class FrameVQAMistakeDetectionScorer:
                         )
                     )
                     parallel_idx += 1
-            vqa_outputs.append(this_vqa_outputs)
+                vqa_outputs.append(this_vqa_outputs)
         
+        answer_probs, scores = self.get_scores(mistake_labels, vqa_outputs)
+        vqg_training_examples = [
+            VQGTrainingExample(
+                task_name=MistakeDetectionTasks.Ego4D,
+                procedure_id=vqg_output.procedure_id, 
+                procedure_description=vqg_output.procedure_description,
+                prompt=example.prompt,
+                candidate_id=candidate_id,
+                questions=vqg_output.questions,
+                expected_answers=vqg_output.answers,
+                answer_probs=prob,
+                preference_score=score
+            )
+            for candidate_id, (vqg_output, example, prob, score) in enumerate(zip([vqg_output for ex in examples for vqg_output in ex.candidate_question_sets], 
+                                                                            [ex for ex in examples for _ in ex.candidate_question_sets],
+                                                                            answer_probs, 
+                                                                            scores))
+        ]
+
         if return_vqa_outputs:
-            return vqa_outputs
+            return vqg_training_examples, vqa_outputs
         else:
-            # In most cases, we just want scores for each generated question set
-            scores = self.get_scores(mistake_labels, vqa_outputs)
-            return [
-                VQGTrainingExample(
-                    task_name=vqa_output.task_name,
-                    procedure_id=vqa_output.procedure_id, 
-                    procedure_description=vqg_output.procedure_description,
-                    prompt=vqa_output.prompt,
-                    candidate_id=candidate_id,
-                    questions=vqg_output.questions,
-                    expected_answers=vqg_output.answers,
-                    preference_score=score
-                )
-                for (candidate_id, vqg_output), vqa_output, score in zip(enumerate([vqg_output for ex in examples for vqg_output in ex.candidate_question_sets]), vqa_outputs, scores)
-            ]
+            return vqg_training_examples
+    
