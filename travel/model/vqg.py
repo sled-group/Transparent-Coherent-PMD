@@ -104,7 +104,7 @@ VQG_DEMONSTRATIONS = [
     )    
 ]
 
-VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} questions we could ask about an image of a target object and their expected answers?\n'
+VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} yes/no questions we could ask about an image of a target object and their expected answers?\n'
 VQG_EXAMPLE_TEMPLATE = VQG_PROMPT_TEMPLATE + \
                        "Target object: {target_object}\n" + \
                        "{question_list}"

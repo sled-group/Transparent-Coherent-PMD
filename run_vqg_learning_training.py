@@ -24,48 +24,55 @@ parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size 
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
-print("Preparing training data...")
-training_data = load_vqg_training_examples(args.data_directory, "train")
+print("Preparing training and validation data...")
+data = {
+    "train": load_vqg_training_examples(args.data_directory, "train"),
+    "val": load_vqg_training_examples(args.data_directory, "val")
+}
+
+# (Save testing data for downstream Ego4D-SuccessVQA evaluation)
 
 # Pair examples based on preference scores
-training_data_paired = defaultdict(list)
-for example in training_data:
-    training_data_paired[example.procedure_id].append(example)
+datasets = {}
+for partition in data:
+    data_paired = defaultdict(list)
+    for example in data[partition]:
+        data_paired[example.procedure_id].append(example)
+    pairs = []
+    for procedure_id in data_paired:
+        pairs += itertools.combinations(data_paired[procedure_id], 2)
 
-training_pairs = []
-for procedure_id in training_data_paired:
-    training_pairs += itertools.combinations(training_data_paired[procedure_id], 2)
+    prompt = []
+    chosen = []
+    rejected = []
+    for ex1, ex2 in tqdm(pairs, "Pairing examples"):
+        assert ex1.prompt == ex2.prompt, "Prompts for training pair don't match!"
+        prompt.append(ex1.prompt)
 
-prompt = []
-chosen = []
-rejected = []
-for ex1, ex2 in tqdm(training_pairs):
-    assert ex1.prompt == ex2.prompt, "Prompts for training pair don't match!"
-    prompt.append(ex1.prompt)
+        gen1 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex1.questions)])
+        gen2 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex2.questions)])
 
-    gen1 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex1.questions)])
-    gen2 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex2.questions)])
+        if ex1.preference_score > ex2.preference_score:
+            chosen.append(gen1)
+            rejected.append(gen2)
+        else:
+            chosen.append(gen2)
+            rejected.append(gen1) 
 
-    if ex1.preference_score > ex2.preference_score:
-        chosen.append(gen1)
-        rejected.append(gen2)
-    else:
-        chosen.append(gen2)
-        rejected.append(gen1) 
+    # Cut down data if debug mode
+    if args.debug:
+        prompt = prompt[:10]
+        chosen = chosen[:10]
+        rejected = rejected[:10]
 
-# Cut down data if debug mode
-if args.debug:
-    prompt = prompt[:10]
-    chosen = chosen[:10]
-    rejected = rejected[:10]
-
-train_dataset = Dataset.from_dict(
-    {
-        "prompt": prompt,
-        "chosen": chosen,
-        "rejected": rejected,
-    }
-)
+    dataset = Dataset.from_dict(
+        {
+            "prompt": prompt,
+            "chosen": chosen,
+            "rejected": rejected,
+        }
+    )
+    datasets[partition] = dataset
 
 # Set up LM for training
 print("Loading LM...")
@@ -106,7 +113,8 @@ dpo_trainer = DPOTrainer(
     beta=0.1,
     max_prompt_length=2 * max([len(p.split()) for p in prompt]),
     max_length=2 * max([len(g.split()) for g in chosen + rejected]),
-    train_dataset=train_dataset,
+    train_dataset=datasets["train"],
+    eval_dataset=datasets["val"],
     tokenizer=tokenizer,
 )
 dpo_trainer.train()
