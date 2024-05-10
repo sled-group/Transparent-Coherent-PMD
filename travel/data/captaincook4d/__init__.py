@@ -24,7 +24,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                          load_videos,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
-    def get_cache_fname(self,
+    def get_cache_dir(self,
                       data_split: str,
                       load_videos: bool=True,
                       debug_n_examples_per_class: Optional[int]=None) -> str:
@@ -32,7 +32,15 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         cache_fname = f"captaincook4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}" 
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
-        cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname + ".pkl")
+        cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname)
+        return cache_fname
+
+    def get_cache_fname(self,
+                      data_split: str,
+                      load_videos: bool=True,
+                      debug_n_examples_per_class: Optional[int]=None) -> str:
+        cache_dir = self.get_cache_dir(data_split, load_videos=load_videos, debug_n_examples_per_class=debug_n_examples_per_class)
+        cache_fname = os.path.join(cache_dir, "captaincook4d.json")
         return cache_fname
 
     # TODO: don't load videos on init? Instead can just load annotations and frame times, then load actual frames when accessing specific items

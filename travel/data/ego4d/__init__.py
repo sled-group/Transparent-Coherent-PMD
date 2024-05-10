@@ -671,17 +671,23 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                          mismatch_augmentation=mismatch_augmentation,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
-    def get_cache_fname(self,
-                        data_split: str,
-                        mismatch_augmentation: bool=False,
-                        debug_n_examples_per_class: Optional[int]=None) -> str:
-        # Check if we already loaded this data before
+    def get_cache_dir(self, 
+                      data_split: str,
+                      mismatch_augmentation: bool=False,
+                      debug_n_examples_per_class: Optional[int]=None) -> str:
         cache_fname = f"ego4d_{data_split}_seed{RANDOM_SEED}"
         if mismatch_augmentation:
             cache_fname += f"_mismatch{EGO4D_MISMATCH_COUNT}"
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
-        cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname, "ego4d.json")
+        return os.path.join(DATA_CACHE_DIR, cache_fname)
+
+    def get_cache_fname(self,
+                        data_split: str,
+                        mismatch_augmentation: bool=False,
+                        debug_n_examples_per_class: Optional[int]=None) -> str:        
+        cache_dir = self.get_cache_dir(data_split, mismatch_augmentation=mismatch_augmentation, debug_n_examples_per_class=debug_n_examples_per_class)
+        cache_fname = os.path.join(cache_dir, "ego4d.json")
         return cache_fname
     
     def load_examples(self,
@@ -732,11 +738,15 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 procedure_description=instruction_text,
                 mistake=False,
             )
+            # Cache frames to preserve memory
+            positive_example.cache_frames(image_base_path=self.get_cache_dir(data_split, 
+                                                                            mismatch_augmentation=mismatch_augmentation, 
+                                                                            debug_n_examples_per_class=debug_n_examples_per_class),)
             examples.append(positive_example)
             
             # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
             # if clip['previous_occurrences'] < 2:
-            examples.append(MistakeDetectionExample(
+            negative_example_hard = MistakeDetectionExample(
                 task_name="ego4d",
                 video_id=clip['video_uid'],
                 procedure_id=procedure_id,
@@ -746,7 +756,12 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 procedure_description=instruction_text,
                 mistake=True,
                 mistake_type="Action Incomplete",
-            ))
+            )
+            # Cache frames to preserve memory
+            negative_example_hard.cache_frames(image_base_path=self.get_cache_dir(data_split, 
+                                                                                mismatch_augmentation=mismatch_augmentation, 
+                                                                                debug_n_examples_per_class=debug_n_examples_per_class),)            
+            examples.append(negative_example_hard)
 
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:

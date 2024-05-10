@@ -8,6 +8,12 @@ import torch
 import torchvision.transforms as T
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from typing import Union, Any
+import yaml
+
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+
+FRAME_DIMENSION = config["data"]["video_frame_dimension"]
 
 class BoundingBox:
     """

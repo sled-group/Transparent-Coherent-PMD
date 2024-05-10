@@ -3,7 +3,9 @@ from enum import Enum
 import json
 import os
 from PIL import Image
-from typing import Optional, Any
+from typing import Optional, Any, Union
+
+from travel.data.utils.image import FRAME_DIMENSION
 
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
@@ -17,33 +19,18 @@ class MistakeDetectionExample:
     video_id: str
     procedure_id: int
     example_id: str
-    frames: list[Image.Image]
+    frames: Union[list[Image.Image], list[str]]
     frame_times: list[float]
     procedure_description: str
     mistake: bool
     mistake_type: Optional[str] = None
     mistake_description: Optional[str] = None
     
-    def to_dict(self, image_base_path: Optional[str]=None):
-        """
-        Helper method to create a JSON-serializable version of the class instance.
+    def __post_init__(self):
+        """Resizes frames to save space in caching."""
+        new_sizes = [(int(FRAME_DIMENSION * (frame.width / frame.height)), FRAME_DIMENSION) if frame.width > frame.height else (FRAME_DIMENSION, int(FRAME_DIMENSION * (frame.height / frame.width))) for frame in self.frames]
+        self.frames = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, self.frames)]
 
-        :param image_base_path: Include this to save the 'frame' key to file, and replace it with its file path. Otherwise, the 'frame' key will be discarded.
-        """        
-        return_dict = {
-            k: v for k, v in asdict(self).items() if k not in ["frames"]
-        }
-        if image_base_path is not None:
-            if not os.path.exists(image_base_path):
-                os.makedirs(image_base_path)
-            
-            for fi, frame in enumerate(self.frames):
-                image_path = os.path.join(image_base_path, f"frame_{self.example_id}_{fi}.jpg")
-                frame.save(image_path)
-                return_dict["frame"] = image_path
-        return_dict['frame_times'] = [float(round(t, 9)) for t in return_dict['frame_times']]
-        return return_dict
-    
     @staticmethod
     def from_dict(data: dict):
         """
@@ -55,6 +42,46 @@ class MistakeDetectionExample:
         data["frames"] = [Image.open(fname) for fname in data["frame"]]
         example = MistakeDetectionExample(**data)
         return example
+    
+    def cache_frames(self, image_base_path: str):
+        assert all(type(frame) == Image.Image for frame in self.frames), "Can only cache PIL images!"
+
+        if not os.path.exists(os.path.join(image_base_path, "frames")):
+            os.makedirs(os.path.join(image_base_path, "frames"))
+
+        frame_paths = []
+        for fi, frame in enumerate(self.frames):
+            image_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id}_{fi}.jpg")
+
+            frame.save(image_path)
+            frame_paths.append(image_path)
+
+        self.frames = frame_paths
+
+    def uncache_frames(self):
+        assert all(type(frame) == str and frame.endswith(".jpg") for frame in self.frames), "Can only uncache string .jpg filenames!"
+        self.frames = [Image.open(frame) for frame in self.frames]
+        
+    def is_cached(self):
+        return True if type(self.frames[0]) == str else False
+
+    def to_dict(self, image_base_path: Optional[str]=None):
+        """
+        Helper method to create a JSON-serializable version of the class instance.
+
+        :param image_base_path: Include this to save the 'frame' key to file, and replace it with its file path. Otherwise, the 'frame' key will be discarded.
+        """        
+        # Cache frames if possible and if not cached already
+        if image_base_path is not None:
+            if not self.is_cached():
+                self.cache_frames(os.path.join(image_base_path, "frames"))
+        
+        # Convert to dictionary
+        return_dict = {
+            k: v for k, v in asdict(self).items() if k not in ["frames"]
+        }
+        return_dict['frame_times'] = [float(round(t, 9)) for t in return_dict['frame_times']]
+        return return_dict
 
 class MistakeDetectionDataset:
     """Superclass for loading and storing a mistake detection dataset."""
@@ -75,6 +102,7 @@ class MistakeDetectionDataset:
         self.cache_examples(data_split, **kwargs)
 
         self.data_split: str = data_split
+        self.index = 0
 
     def __len__(self):
         return len(self.examples)
@@ -83,12 +111,31 @@ class MistakeDetectionDataset:
         return self.examples[index]
     
     def __iter__(self):
-        return iter(self.examples)
+        return self
+    
+    def __next__(self):
+        if self.index < len(self.examples):
+            example = self.examples[self.index]
+            # Uncache from file if needed
+            if example.is_cached():
+                example.uncache_frames()
+
+            if self.index > 0 and not self.examples[self.index - 1].is_cached():
+                self.examples[self.index - 1].cache_frames()
+
+            self.index += 1
+            return example
+        else:
+            raise StopIteration   
+        # TODO: need to be able to cache after not used anymore 
 
     def load_examples(self, data_split: str, **kwargs: dict[str, Any]) -> list[MistakeDetectionExample]:
         raise NotImplementedError("Subclass should implement dataset loading procedure.")
 
-    def get_cache_fname(self, **kwargs: dict[str, Any]):
+    def get_cache_dir(self, **kwargs: dict[str, Any]) -> str:
+        raise NotImplementedError("Subclass should implement logic for generating cached data directory.")
+    
+    def get_cache_fname(self, **kwargs: dict[str, Any]) -> str:
         raise NotImplementedError("Subclass should implement logic for generating cached data filename.")
     
     def load_examples_from_file(self, path: str):
@@ -115,7 +162,7 @@ class MistakeDetectionDataset:
         if not os.path.exists("/".join(path.split("/")[:-1])):
             os.makedirs("/".join(path.split("/")[:-1]))
 
-        json.dump([v.to_dict(image_base_path=os.path.join("/".join(path.split("/")[:-1]), "frames")) for v in self.examples], 
+        json.dump([v.to_dict(image_base_path="/".join(path.split("/")[:-1])) for v in self.examples], 
                   open(path, "w"),
                   indent=4)
         
