@@ -11,6 +11,12 @@ EGO4D_SPLIT_PATHS = {
     "val": os.path.join(config["data"]["ego4d"]["split_path"], "fho_main_val.json"),
     "test": os.path.join(config["data"]["ego4d"]["split_path"], "fho_main_test.json")
 }
+critical_frame_path_template = os.path.join(config["data"]["ego4d"]["sampled_frames_path"], "fho_main_{partition}-critical-frames-subsample-8")
+EGO4D_CRITICAL_FRAME_PATHS = {
+    "train": critical_frame_path_template.format(partition="train"),
+    "val": critical_frame_path_template.format(partition="val"),
+    "test": critical_frame_path_template.format(partition="test"),
+}
 EGO4D_VIDEO_PATH = config["data"]["ego4d"]["video_path"]
 
 EGO4D_MISMATCH_DIR = config["data"]["ego4d"]["mismatch_dir"]

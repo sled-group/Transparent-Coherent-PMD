@@ -100,6 +100,4 @@ python run_vqg_learning_vqa.py --vqg_directory /saved_results/path/to/generated/
 
 TBA
 
-#### Evaluating Trained Pipeline
-
-TBA
+Evaluate the trained pipeline with `run_vqa_vqg2vqa.py` following the above.

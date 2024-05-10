@@ -1,0 +1,17 @@
+# Need this call at the beginning of every script to set random seeds and set the HF cache
+import argparse
+
+from travel import init_travel
+init_travel()
+
+from travel.data.ego4d import Ego4DMistakeDetectionDataset
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--partition", type=str, default="train", help="Dataset partition name to generate from.")
+args = parser.parse_args()
+
+# TODO: can we parallelize more
+
+# Load Ego4D for mistake detection
+dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
+                                        mismatch_augmentation=False)
