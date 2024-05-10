@@ -671,90 +671,91 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                          mismatch_augmentation=mismatch_augmentation,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
-    def load_examples(self,
-                      data_split: str,
-                      mismatch_augmentation: bool=False,
-                      debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
-        
-        # Check if we already loaded data before
+    def get_cache_fname(self,
+                        data_split: str,
+                        mismatch_augmentation: bool=False,
+                        debug_n_examples_per_class: Optional[int]=None) -> str:
+        # Check if we already loaded this data before
         cache_fname = f"ego4d_{data_split}_seed{RANDOM_SEED}"
         if mismatch_augmentation:
             cache_fname += f"_mismatch{EGO4D_MISMATCH_COUNT}"
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
-        cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname + ".pkl")
+        cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname, "ego4d.json")
+        return cache_fname
+    
+    def load_examples(self,
+                      data_split: str,
+                      mismatch_augmentation: bool=False,
+                      debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
+        
+        examples = []
 
-        if os.path.exists(cache_fname):
-            examples = pickle.load(open(cache_fname, "rb"))
-        else:
-            # TODO: consider just copying metadata processing code and loading images individually from travel.data.ego4d.constants.EGO4D_CRITICAL_FRAME_PATHS - might be faster
-            ego4d = Ego4dFHOMainDataset(
-                EGO4D_ANNOTATION_PATH,
-                EGO4D_SPLIT_PATHS[data_split],
-                EGO4D_VIDEO_PATH,
-                random_clip=True if debug_n_examples_per_class is not None else False
+        # TODO: consider just copying metadata processing code and loading images individually from travel.data.ego4d.constants.EGO4D_CRITICAL_FRAME_PATHS - might be faster
+        ego4d = Ego4dFHOMainDataset(
+            EGO4D_ANNOTATION_PATH,
+            EGO4D_SPLIT_PATHS[data_split],
+            EGO4D_VIDEO_PATH,
+            random_clip=True if debug_n_examples_per_class is not None else False
+        )
+
+        nlp = spacy.load('en_core_web_sm')
+        SIMILARITY_THRESHOLD = 0.95
+        for clip in tqdm(ego4d):
+            
+            # Index procedure based on video and clip index (each narration is unique)
+            procedure_id = 1000 * clip['video_index'] + clip['clip_index']
+            clip_id = f"{clip['video_uid']}_{clip['clip_index']}"
+
+            # Convert narration text to imperative form to match the sentence structure of recipes and task instructions    
+            instruction_text = clean_narration_text(clip['narration_text']) # Replace symbols in narration text with words
+            instruction_text = simple_present_to_imperative(nlp, instruction_text)
+
+            # clip['video'] shape: (C, # frames, H, W)
+            precondition_frame_t, effect_frame_t = clip['video'][:,0], clip['video'][:,-1] # (C, H, W)
+            precondition_frame, effect_frame = to_pil_image(precondition_frame_t), to_pil_image(effect_frame_t)
+            
+            # Omit examples where precondition and effect frame are overly similar
+            precondition_effect_similarity = cosine_similarity(precondition_frame_t.flatten().float(), effect_frame_t.flatten().float(), dim=0).detach().numpy()
+            if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
+                continue
+            
+            # Generate positive example from effect frame
+            # TODO: maybe want to get entire clip later - OR just write new code to extract single frames from video files
+            positive_example = MistakeDetectionExample(
+                task_name="ego4d",
+                video_id=clip['video_uid'],
+                procedure_id=procedure_id,
+                example_id=f"{clip_id}_pos",
+                frames=[effect_frame],
+                frame_times=[clip['post_frame'] / clip['fps']],
+                procedure_description=instruction_text,
+                mistake=False,
             )
+            examples.append(positive_example)
+            
+            # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
+            # if clip['previous_occurrences'] < 2:
+            examples.append(MistakeDetectionExample(
+                task_name="ego4d",
+                video_id=clip['video_uid'],
+                procedure_id=procedure_id,
+                example_id=f"{clip_id}_hardneg",
+                frames=[precondition_frame],
+                frame_times=[clip['pre_frame'] / clip['fps']],
+                procedure_description=instruction_text,
+                mistake=True,
+                mistake_type="Action Incomplete",
+            ))
 
-            examples = []
+            # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
+            if mismatch_augmentation:
+                mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
+                pprint(clip.keys())
+                print("==========")
+                pprint(mismatch_examples)
 
-            nlp = spacy.load('en_core_web_sm')
-            SIMILARITY_THRESHOLD = 0.95
-            for clip in tqdm(ego4d):
-                
-                # Index procedure based on video and clip index (each narration is unique)
-                procedure_id = 1000 * clip['video_index'] + clip['clip_index']
-                clip_id = f"{clip['video_uid']}_{clip['clip_index']}"
+            if debug_n_examples_per_class is not None and len(examples) >= 2 * debug_n_examples_per_class:
+                break
 
-                # Convert narration text to imperative form to match the sentence structure of recipes and task instructions    
-                instruction_text = clean_narration_text(clip['narration_text']) # Replace symbols in narration text with words
-                instruction_text = simple_present_to_imperative(nlp, instruction_text)
-
-                # clip['video'] shape: (C, # frames, H, W)
-                precondition_frame_t, effect_frame_t = clip['video'][:,0], clip['video'][:,-1] # (C, H, W)
-                precondition_frame, effect_frame = to_pil_image(precondition_frame_t), to_pil_image(effect_frame_t)
-                
-                # Omit examples where precondition and effect frame are overly similar
-                precondition_effect_similarity = cosine_similarity(precondition_frame_t.flatten().float(), effect_frame_t.flatten().float(), dim=0).detach().numpy()
-                if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
-                    continue
-                
-                # Generate positive example from effect frame
-                # TODO: maybe want to get entire clip later - OR just write new code to extract single frames from video files
-                positive_example = MistakeDetectionExample(
-                    task_name="ego4d",
-                    video_id=clip['video_uid'],
-                    procedure_id=procedure_id,
-                    example_id=f"{clip_id}_pos",
-                    frames=[effect_frame],
-                    frame_times=[clip['post_frame'] / clip['fps']],
-                    procedure_description=instruction_text,
-                    mistake=False,
-                )
-                examples.append(positive_example)
-                
-                # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
-                # if clip['previous_occurrences'] < 2:
-                examples.append(MistakeDetectionExample(
-                    task_name="ego4d",
-                    video_id=clip['video_uid'],
-                    procedure_id=procedure_id,
-                    example_id=f"{clip_id}_hardneg",
-                    frames=[precondition_frame],
-                    frame_times=[clip['pre_frame'] / clip['fps']],
-                    procedure_description=instruction_text,
-                    mistake=True,
-                    mistake_type="Action Incomplete",
-                ))
-
-                # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
-                if mismatch_augmentation:
-                    mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
-                    pprint(clip.keys())
-                    print("==========")
-                    pprint(mismatch_examples)
-
-                if debug_n_examples_per_class is not None and len(examples) >= 2 * debug_n_examples_per_class:
-                    break
-
-            pickle.dump(examples, open(cache_fname, "wb"))
         return examples
