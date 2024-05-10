@@ -1,5 +1,6 @@
 import dataclasses
 import spacy
+from spacy.lang.en import English
 import torch
 from tqdm import tqdm
 from transformers import Owlv2Processor, Owlv2ForObjectDetection
@@ -100,3 +101,45 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     dataset.examples = filtered_examples
     return dataset
     
+# TODO: this needs more testing and fine-tuning
+def parse_question_for_spatial_attention_filter(nlp: English, question: str) -> tuple[bool, str]:
+    """
+    Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
+
+    :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_sm", disable=["lemmatizer"])`
+    :param question: A yes/no question about an image (e.g., are there any cherry tomatoes in the bowl?).
+    :return: 
+    """
+    doc = nlp(question)
+    target_noun = ""
+    negation_present = False
+    look_at_noun = True
+    spatial_relation = False
+
+    # Function to extract the compound noun if it exists
+    def get_compound_noun(token):
+        compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
+        return compound + " " + token.text if compound else token.text
+
+    for token in doc:
+        # Detect negation
+        if token.dep_ == "neg":
+            negation_present = True
+
+        # For subjects and objects, capture the noun considering compound modifiers
+        if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
+            target_noun = get_compound_noun(token)
+        
+        # Identify spatial relations based on specific dependencies
+        if token.dep_ == "prep":
+            spatial_relation = True
+
+    # Adjust the logic based on question type and negation
+    # Spatial questions with negation direct attention away from the noun
+    if spatial_relation:
+        look_at_noun = not negation_present
+    # State questions focus on the noun, negation doesn't change the focus
+    else:
+        look_at_noun = True
+
+    return (look_at_noun, target_noun)
