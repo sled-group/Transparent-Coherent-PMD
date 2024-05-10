@@ -114,15 +114,15 @@ class MistakeDetectionDataset:
         return self
     
     def __next__(self):
+        # Cache previously accessed example if possible
+        if self.index > 0 and not self.examples[self.index - 1].is_cached():
+            self.examples[self.index - 1].cache_frames()
+
         if self.index < len(self.examples):
             example = self.examples[self.index]
             # Uncache from file if needed
             if example.is_cached():
                 example.uncache_frames()
-
-            if self.index > 0 and not self.examples[self.index - 1].is_cached():
-                self.examples[self.index - 1].cache_frames()
-
             self.index += 1
             return example
         else:
