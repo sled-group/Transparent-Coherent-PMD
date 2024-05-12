@@ -1,5 +1,7 @@
 import ast
+import os
 import pandas as pd
+from pathlib import Path
 from tqdm import tqdm
 
 def generate_float_series(start: float, end: float, step: float) -> list[float]:
@@ -68,3 +70,29 @@ def read_large_csv(file_path, columns_str2list=[], nrows=None, chunk_size=100, )
 
     # Now you can use df as a normal DataFrame
     return df    
+
+def list_files_by_extension(directory, extension):
+    """
+    List all files of given extension in the given directory.
+
+    :param directory: The path to the directory to search for files.
+    :param extension: The extension to check for, e.g., ".json".
+
+    :return: A list of paths to JSON files in the specified directory.
+    """
+    # List to hold the names of JSON files
+    json_files = []
+
+    # Walk through the directory
+    for filename in os.listdir(directory):
+        if filename.endswith(extension):  # Check for files ending with .json
+            json_files.append(os.path.join(directory, filename))  # Append the full path of the file
+
+    return json_files
+
+def count_subdirectories(dir: str) -> int:
+    if os.path.exists(dir):
+        p = Path(dir)
+        return len([x for x in p.iterdir() if x.is_dir()])
+    else:
+        return 0

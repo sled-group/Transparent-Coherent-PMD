@@ -22,11 +22,11 @@ from transformers import BatchEncoding, DataCollatorForSeq2Seq, PreTrainedTokeni
 from typing import Any, TypeVar, Optional
 from tqdm import tqdm
 
-from travel.constants import DATA_CACHE_DIR, RANDOM_SEED
+from travel.constants import DATA_CACHE_DIR, RANDOM_SEED, CACHE_FREQUENCY
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
                                         EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
-from travel.data.utils import read_large_csv
+from travel.data.utils import read_large_csv, count_subdirectories
 from travel.data.utils.text import simple_present_to_imperative
 
 # Some verbs would not be expected in the task-oriented mistake detection setting, so we can filter them out
@@ -323,9 +323,24 @@ class NarratedActionClipSampler(ClipSampler):
         if self._current_clip_index == len(self.sample_clip_indices):
             is_last_clip = True
 
-        # Take pre and post frames to define the video clip
-        clip_start_sec = narrated_action['pre_frame'] / narrated_action['fps']
-        clip_end_sec = narrated_action['post_frame'] / narrated_action['fps']
+        # # Take pre and post frames to define the video clip
+        # clip_start_sec = narrated_action['pre_frame'] / narrated_action['fps']
+        # clip_end_sec = narrated_action['post_frame'] / narrated_action['fps']
+
+        # sample a clip 8 seconds around narration_time_sec
+        # if narration_time_sec is less than 4 seconds, we start from 0
+        clip_start_sec = max(
+            Fraction(narrated_action["narration_timestamp_sec"])
+            - self._clip_duration / 2,
+            0,
+        )
+
+        # add 8 seconds to clip_start_sec
+        # if clip_end_sec goes over the video duration, adjust clip_start_sec
+        clip_end_sec = clip_start_sec + self._clip_duration
+        if clip_end_sec > video_duration:
+            clip_end_sec = video_duration
+            clip_start_sec = clip_end_sec - self._clip_duration
 
         if is_last_clip:
             self.reset()
@@ -338,41 +353,12 @@ class NarratedActionClipSampler(ClipSampler):
             is_last_clip,
         )
 
+    def skip_to_index(self, idx: int):
+        self._current_clip_index = idx
+
     def reset(self) -> None:
         self._current_clip_index = 0
         self.sample_clip_indices = None
-
-def filter_action(action: dict[str, Any], previous_action: dict[str, Any]=None) -> bool:
-    """Return True if the given action should be used, False otherwise."""
-    return (
-        not action["is_rejected"]
-        and action["is_valid_action"]
-        and action["critical_frames"] is not None
-        and action["structured_verb"] not in EGO4D_IGNORE_VERBS # Omit clips with non-task actions
-        and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
-        and (
-            previous_action is None
-            or not (
-                (action['structured_verb'], action['structured_noun']) == (previous_action['structured_verb'], previous_action['structured_noun']))
-                or action['previous_occurrences'] > 1
-            ) # Filter out clips where the same action is being performed over and over
-        and C_REGEX.match(action["narration_text"]) is not None
-    )
-
-def get_structured_noun(action: dict) -> str | None:
-    if action["frames"] is None:
-        return None
-    for frame in action["frames"]:
-        if frame["frame_type"] != "pnr_frame":
-            # some actions don't have contact frames so use pnr_frame
-            continue
-        for box in frame["boxes"]:
-            if (
-                box["object_type"] == "object_of_change"
-                and box["structured_noun"] is not None
-            ):
-                return box["structured_noun"]
-    return None
 
 def preprocess_actions(actions: list[dict]) -> list[dict]:
     # Add structured noun to action data
@@ -386,6 +372,7 @@ def preprocess_actions(actions: list[dict]) -> list[dict]:
         action['future_occurrences'] = sum([1 if structured_action == (future_action['structured_verb'], future_action['structured_noun']) else 0 for future_action in actions[action_idx + 1:]])
 
     # TODO: Combine repeated actions? Can look at initial data and see if this is needed
+    # don't want to change number of actions here or will have to re-extract frames
     return actions
 
 class MisalignSRL:
@@ -560,9 +547,31 @@ class MisalignSRL:
     
         # (need Peter's input.) for each misalignsrl_type, given the information of the narration clip in fho_main.json, we can load visual media (image). Such information of a narration clip should have been loaded the same way as one item (`clip`) in `ego4d` above. I.E., need to identify the index of this clip in `ego4d` so that the media can be loaded efficiently using exisiting code. 
 
+def filter_action(action: dict[str, Any]) -> bool:
+    """Return True if the given action should be used, False otherwise."""
+    return (
+        not action["is_rejected"]
+        and action["is_valid_action"]
+        and C_REGEX.match(action["narration_text"]) is not None
+    )
+
+def get_structured_noun(action: dict) -> str | None:
+    if action["frames"] is None:
+        return None
+    for frame in action["frames"]:
+        if frame["frame_type"] != "pnr_frame":
+            # some actions don't have contact frames so use pnr_frame
+            continue
+        for box in frame["boxes"]:
+            if (
+                box["object_type"] == "object_of_change"
+                and box["structured_noun"] is not None
+            ):
+                return box["structured_noun"]
+    return None
+
 # TODO: add an option to not load full videos - just use index files and specific frames instead? This would be much faster.
 class Ego4dFHOMainDataset(LabeledVideoDataset):
-    """Class to store data from Ego4D. Some domain-specific filtering steps are performed for egocentric mistake detection."""
     def __init__(
         self,
         annotation_path: str,
@@ -611,12 +620,12 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                     {
                         "narrated_actions": [
                             {
-                                "pre_45": action["critical_frames"]["pre_45"],
-                                "pre_30": action["critical_frames"]["pre_30"],
-                                "pre_15": action["critical_frames"]["pre_15"],
-                                "pre_frame": action["critical_frames"]["pre_frame"],
-                                "pnr_frame": action["critical_frames"]["pnr_frame"],
-                                "post_frame": action["critical_frames"]["post_frame"],
+                                "pre_45": action["critical_frames"]["pre_45"] if action["critical_frames"] is not None else None,
+                                "pre_30": action["critical_frames"]["pre_30"] if action["critical_frames"] is not None else None,
+                                "pre_15": action["critical_frames"]["pre_15"] if action["critical_frames"] is not None else None,
+                                "pre_frame": action["critical_frames"]["pre_frame"] if action["critical_frames"] is not None else None,
+                                "pnr_frame": action["critical_frames"]["pnr_frame"] if action["critical_frames"] is not None else None,
+                                "post_frame": action["critical_frames"]["post_frame"] if action["critical_frames"] is not None else None,
                                 "fps": video_dict[video_uid]["video_metadata"]["fps"],
                                 "narration_text": action["narration_text"],
                                 "structured_verb": action["structured_verb"],
@@ -627,7 +636,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                             }
                             for interval in video_dict[video_uid]["annotated_intervals"]
                             for action_idx, action in enumerate(preprocess_actions(interval["narrated_actions"]))
-                            if filter_action(action, previous_action=interval["narrated_actions"][action_idx - 1] if action_idx > 0 else None)
+                            if filter_action(action)
                         ],
                         "video_uid": video_uid,
                         "video_metadata": video_dict[video_uid]["video_metadata"],
@@ -641,8 +650,25 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
         )
 
     def __len__(self) -> int:
-        return self.num_narrated_actions
+        return self.num_narrated_actions    
     
+def filter_action_for_mistake_detection(action: dict[str, Any], previous_action: dict[str, Any]=None) -> bool:
+    """Return True if the given action should be used, False otherwise."""
+    return (
+        action["pre_frame"] is not None
+        and action["pnr_frame"] is not None
+        and action["post_frame"] is not None
+        and action["structured_verb"] not in EGO4D_IGNORE_VERBS # Omit clips with non-task actions
+        and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
+        and (
+            previous_action is None
+            or not (
+                (action['structured_verb'], action['structured_noun']) == (previous_action['structured_verb'], previous_action['structured_noun']))
+                or action['previous_occurrences'] > 1
+            ) # Filter out clips where the same action is being performed over and over
+    )
+
+
 class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     """Class to store Ego4D data in mistake detection form. Each example only has one frame for efficiency, although we may have to change this later."""
     def __init__(self, 
@@ -690,13 +716,12 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         cache_fname = os.path.join(cache_dir, "ego4d.json")
         return cache_fname
     
-    def load_examples(self,
-                      data_split: str,
-                      mismatch_augmentation: bool=False,
-                      debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
+    # TODO: support parallelization by iterating through different parts of ego4D for each worker?
+    def generate_examples(self,
+                          data_split: str,
+                          mismatch_augmentation: bool=False,
+                          debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
         
-        examples = []
-
         # TODO: consider just copying metadata processing code and loading images individually from travel.data.ego4d.constants.EGO4D_CRITICAL_FRAME_PATHS - might be faster
         ego4d = Ego4dFHOMainDataset(
             EGO4D_ANNOTATION_PATH,
@@ -705,14 +730,24 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             random_clip=True if debug_n_examples_per_class is not None else False
         )
 
+        # Resume from partial generation (Ego4D is very large so we need this to avoid wasting time)
+        n_clips_processed = count_subdirectories(self.cache_dir)
+        ego4d._clip_sampler.skip_to_index(n_clips_processed)
+
         nlp = spacy.load('en_core_web_sm')
         SIMILARITY_THRESHOLD = 0.95
-        for clip in tqdm(ego4d):
-            
+
+        # Prepare list to hold examples ready for caching
+        example_cache_buffer = []
+        for clip_index, clip in enumerate(tqdm(ego4d)):
             # Index procedure based on video and clip index (each narration is unique)
             procedure_id = 1000 * clip['video_index'] + clip['clip_index']
             clip_id = f"{clip['video_uid']}_{clip['clip_index']}"
 
+            # Skip some actions based on conditions specified in filter_action_for_mistake_detection
+            if not filter_action_for_mistake_detection(clip):
+                continue
+            
             # Convert narration text to imperative form to match the sentence structure of recipes and task instructions    
             instruction_text = clean_narration_text(clip['narration_text']) # Replace symbols in narration text with words
             instruction_text = simple_present_to_imperative(nlp, instruction_text)
@@ -732,17 +767,13 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 task_name="ego4d",
                 video_id=clip['video_uid'],
                 procedure_id=procedure_id,
-                example_id=f"{clip_id}_pos",
+                example_id=f"{clip_id}/pos",
                 frames=[effect_frame],
                 frame_times=[clip['post_frame'] / clip['fps']],
                 procedure_description=instruction_text,
                 mistake=False,
             )
-            # Cache frames to preserve memory
-            positive_example.cache_frames(image_base_path=self.get_cache_dir(data_split, 
-                                                                            mismatch_augmentation=mismatch_augmentation, 
-                                                                            debug_n_examples_per_class=debug_n_examples_per_class),)
-            examples.append(positive_example)
+            example_cache_buffer.append(positive_example)
             
             # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
             # if clip['previous_occurrences'] < 2:
@@ -750,19 +781,15 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 task_name="ego4d",
                 video_id=clip['video_uid'],
                 procedure_id=procedure_id,
-                example_id=f"{clip_id}_hardneg",
+                example_id=f"{clip_id}/hardneg",
                 frames=[precondition_frame],
                 frame_times=[clip['pre_frame'] / clip['fps']],
                 procedure_description=instruction_text,
                 mistake=True,
                 mistake_type="Action Incomplete",
             )
-            # Cache frames to preserve memory
-            negative_example_hard.cache_frames(image_base_path=self.get_cache_dir(data_split, 
-                                                                                mismatch_augmentation=mismatch_augmentation, 
-                                                                                debug_n_examples_per_class=debug_n_examples_per_class),)            
-            examples.append(negative_example_hard)
-
+            example_cache_buffer.append(negative_example_hard)
+            
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
                 mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
@@ -770,7 +797,20 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 print("==========")
                 pprint(mismatch_examples)
 
-            if debug_n_examples_per_class is not None and len(examples) >= 2 * debug_n_examples_per_class:
+            if clip_index % CACHE_FREQUENCY == 0:  
+                # Cache examples in buffer
+                for new_example in example_cache_buffer:
+                    self.save_example_to_file(new_example)
+                self.save_dataset_metadata()
+                del example_cache_buffer
+                example_cache_buffer: list[MistakeDetectionExample] = []
+
+            if debug_n_examples_per_class is not None and self.n_examples >= 2 * debug_n_examples_per_class:
                 break
 
-        return examples
+        # Cache any last examples in buffer
+        for new_example in example_cache_buffer:
+            self.save_example_to_file(new_example)
+        self.save_dataset_metadata()
+        del example_cache_buffer
+        example_cache_buffer: list[MistakeDetectionExample] = []

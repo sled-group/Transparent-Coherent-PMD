@@ -14,6 +14,8 @@ args = parser.parse_args()
 # TODO: can we parallelize the dataset generation?
 
 # Load Ego4D for mistake detection
+print("Loading dataset...")
 dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                        mismatch_augmentation=False,
                                        debug_n_examples_per_class=20 if args.debug else None) # TODO: this doesn't work yet - can't seem to retrieve anything
+print("Done!")

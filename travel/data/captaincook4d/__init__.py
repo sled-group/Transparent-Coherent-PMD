@@ -10,6 +10,7 @@ from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetect
 from travel.data.utils import generate_float_series
 from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY
 
+# TODO: modify this class so all examples aren't held in memory
 class CaptainCook4DDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
@@ -39,16 +40,16 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                       data_split: str,
                       load_videos: bool=True,
                       debug_n_examples_per_class: Optional[int]=None) -> str:
-        cache_dir = self.get_cache_dir(data_split, load_videos=load_videos, debug_n_examples_per_class=debug_n_examples_per_class)
+        cache_dir = self.cache_dir
         cache_fname = os.path.join(cache_dir, "captaincook4d.json")
         return cache_fname
 
     # TODO: don't load videos on init? Instead can just load annotations and frame times, then load actual frames when accessing specific items
     # TODO: or just consider parallelizing
-    def load_examples(self,
-                      data_split: str,
-                      load_videos: bool=True,
-                      debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
+    def generate_examples(self,
+                          data_split: str,
+                          load_videos: bool=True,
+                          debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
 
         # TODO: When loading CaptainCook4D at least a few videos cannot be successfully loaded. Need to look into this at some point
 

@@ -205,5 +205,6 @@ for partition in ["train", "val", "test"]:
     # Save generated data, config, and args
     save_frameVQA_examples(frameVQA_examples, this_results_dir, partition)
 
+# TODO: move the below 2 steps to a method
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
