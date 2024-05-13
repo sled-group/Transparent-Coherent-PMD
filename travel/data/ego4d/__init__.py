@@ -12,6 +12,7 @@ from pytorchvideo.data import ClipSampler, LabeledVideoDataset
 from pytorchvideo.data.clip_sampling import ClipInfo
 import random
 import re
+import shutil
 import spacy
 import string
 import time
@@ -26,7 +27,7 @@ from travel.constants import DATA_CACHE_DIR, RANDOM_SEED, CACHE_FREQUENCY
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
                                         EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
-from travel.data.utils import read_large_csv, count_subdirectories
+from travel.data.utils import read_large_csv, count_subdirectories, split_list_into_partitions, copy_directory_contents
 from travel.data.utils.text import simple_present_to_imperative
 
 # Some verbs would not be expected in the task-oriented mistake detection setting, so we can filter them out
@@ -283,7 +284,7 @@ def parse_timestamp(timestamp: str) -> float:
 
 
 class NarratedActionClipSampler(ClipSampler):
-    def __init__(self, random: bool) -> None:
+    def __init__(self, random: bool, n_workers: Optional[int]=None, worker_index: Optional[int]=None) -> None:
         """The vast majority of narrated actions are 8 seconds long, and none
         are longer.
 
@@ -294,6 +295,8 @@ class NarratedActionClipSampler(ClipSampler):
         super().__init__(8)
         self.random = random
         self.sample_clip_indices: list[int] | None = None
+        self.n_workers = n_workers
+        self.worker_index = worker_index
 
     def __call__(
         self,
@@ -311,6 +314,9 @@ class NarratedActionClipSampler(ClipSampler):
         if self.sample_clip_indices is None:
             # first time sampling from this video, so create a clip index list
             self.sample_clip_indices = list(range(len(annotation["narrated_actions"])))
+            if self.n_workers is not None and self.n_workers > 1:
+                assert self.worker_index is not None, "Need to pass worker index into NarratedActionClipSampler!"
+                self.sample_clip_indices = split_list_into_partitions(self.sample_clip_indices, self.n_workers)[self.worker_index]
             if self.random:
                 # shuffle them if random
                 random.shuffle(self.sample_clip_indices)
@@ -579,6 +585,8 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
         video_dir_path: str,
         transform: Callable[[dict], Any] | None = None,
         random_clip: bool = False,
+        n_workers: Optional[int] = None,
+        worker_index: Optional[int] = None,
     ) -> None:
         """
         :param annotation_path: path to the main annotation file, e.g., `fho_main.json`.
@@ -635,7 +643,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                                 "narration_timestamp_sec": action["narration_timestamp_sec"],
                             }
                             for interval in video_dict[video_uid]["annotated_intervals"]
-                            for action_idx, action in enumerate(preprocess_actions(interval["narrated_actions"]))
+                            for action in preprocess_actions(interval["narrated_actions"])
                             if filter_action(action)
                         ],
                         "video_uid": video_uid,
@@ -644,7 +652,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                 )
                 for video_uid in split_data["videos"]
             ],
-            NarratedActionClipSampler(random_clip),
+            NarratedActionClipSampler(random_clip, n_workers, worker_index),
             transform=_transform,
             decode_audio=False,
         )
@@ -674,14 +682,18 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
                  mismatch_augmentation: bool=False,
-                 debug_n_examples_per_class: Optional[int]=None):
+                 debug_n_examples_per_class: Optional[int]=None,
+                 n_workers: Optional[int]=None,
+                 worker_index: Optional[int]=None):
         """
         Method to initialize and load Ego4D dataset for mistake detection, following the SuccessVQA approach (https://proceedings.mlr.press/v232/du23b.html).
 
         :param data_split: String name for data partition to load.
         :param mismatch_augmentation: Whether to augment negative examples by selecting alternative video clips for narrated procedures with mismatched verbs and nouns. Set this to False to be comparable to SuccessVQA approach.
         :param debug_n_examples_per_class: Load a small number of examples for each class (success and mistake).
+        :param n_workers: Number of workers to parallelize dataset generation over.
         """
+        # Handle Ego4D-specific initialization logic
         if mismatch_augmentation:
             # TODO: this takes several minutes - if we already have the data cached, we don't even need this - add logic for this
             self.mismatch_sampler = MisalignSRL(
@@ -695,39 +707,41 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             self.mismatch_sampler = None
         super().__init__(data_split,
                          mismatch_augmentation=mismatch_augmentation,
-                         debug_n_examples_per_class=debug_n_examples_per_class)
+                         debug_n_examples_per_class=debug_n_examples_per_class,
+                         n_workers=n_workers,
+                         worker_index=worker_index)
 
     def get_cache_dir(self, 
                       data_split: str,
                       mismatch_augmentation: bool=False,
-                      debug_n_examples_per_class: Optional[int]=None) -> str:
+                      debug_n_examples_per_class: Optional[int]=None,
+                      n_workers: Optional[int]=None,
+                      worker_index: Optional[int]=None) -> str:
         cache_fname = f"ego4d_{data_split}_seed{RANDOM_SEED}"
         if mismatch_augmentation:
             cache_fname += f"_mismatch{EGO4D_MISMATCH_COUNT}"
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
+        if n_workers is not None:
+            # If parallelizing, name folder differently
+            cache_fname += f"_partition{worker_index+1}of{n_workers}"
         return os.path.join(DATA_CACHE_DIR, cache_fname)
-
-    def get_cache_fname(self,
-                        data_split: str,
-                        mismatch_augmentation: bool=False,
-                        debug_n_examples_per_class: Optional[int]=None) -> str:        
-        cache_dir = self.get_cache_dir(data_split, mismatch_augmentation=mismatch_augmentation, debug_n_examples_per_class=debug_n_examples_per_class)
-        cache_fname = os.path.join(cache_dir, "ego4d.json")
-        return cache_fname
     
     # TODO: support parallelization by iterating through different parts of ego4D for each worker?
     def generate_examples(self,
                           data_split: str,
                           mismatch_augmentation: bool=False,
-                          debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
+                          debug_n_examples_per_class: Optional[int]=None,
+                          n_workers: Optional[int]=None,
+                          worker_index: Optional[int]=None) -> list[MistakeDetectionExample]:
         
-        # TODO: consider just copying metadata processing code and loading images individually from travel.data.ego4d.constants.EGO4D_CRITICAL_FRAME_PATHS - might be faster
         ego4d = Ego4dFHOMainDataset(
             EGO4D_ANNOTATION_PATH,
             EGO4D_SPLIT_PATHS[data_split],
             EGO4D_VIDEO_PATH,
-            random_clip=True if debug_n_examples_per_class is not None else False
+            random_clip=True if debug_n_examples_per_class is not None else False,
+            n_workers=n_workers,
+            worker_index=worker_index,
         )
 
         # Resume from partial generation (Ego4D is very large so we need this to avoid wasting time)
@@ -805,7 +819,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 del example_cache_buffer
                 example_cache_buffer: list[MistakeDetectionExample] = []
 
-            if debug_n_examples_per_class is not None and self.n_examples >= 2 * debug_n_examples_per_class:
+            if debug_n_examples_per_class is not None and self.n_examples + len(example_cache_buffer) >= 2 * debug_n_examples_per_class:
                 break
 
         # Cache any last examples in buffer
@@ -814,3 +828,35 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         self.save_dataset_metadata()
         del example_cache_buffer
         example_cache_buffer: list[MistakeDetectionExample] = []
+
+def combine_ego4d_partitions(datasets: list[Ego4DMistakeDetectionDataset], debug_n_examples_per_class: int=None) -> Ego4DMistakeDetectionDataset:
+    """
+    Combines Ego4DMistakeDetectionDataset partitions generated from parallelization. Make sure all data partitions have been copletely generated before calling this.
+
+    :param datasets: List of datasets.
+    """
+    # Check that appropriate partitions were passed in
+    assert len(datasets) > 1, "Need at least 2 datasets to combine!"
+    assert all(dataset.data_generated for dataset in datasets), "All dataset partitions must be finished generating before combining!"
+    cache_dirs = [dataset.cache_dir for dataset in datasets]
+    assert all("_partition" in cache_dir for cache_dir in cache_dirs), "You should only combine dataset partitions that were generated through the parallelization implemented in Ego4DMistakeDetectionDataset class."
+    assert len(set([dataset.data_split for dataset in datasets])) == 1, "All partitions should be from the same split (e.g., train, val, test)."
+
+    # Combine dataset metadata and save in new directory
+    new_dataset_metadata = {
+        "example_dirs": [],
+        "n_examples": 0,
+        "data_generated": True,
+    }
+    for dataset in datasets:
+        new_dataset_metadata["example_dirs"] += dataset.example_dirs
+        new_dataset_metadata["n_examples"] += dataset.n_examples
+    new_cache_dir = cache_dirs[0].split("_partition")[0]
+    new_dataset_metadata["cache_dir"] = new_cache_dir
+    new_dataset_metadata["mismatch_sampler"] = None
+    assert not os.path.exists(new_cache_dir), "Cache dir for combined dataset already exists. Please delete."
+    os.makedirs(new_cache_dir)
+    json.dump(new_dataset_metadata, 
+              open(os.path.join(new_cache_dir, "dataset.json"), "w"))
+    return Ego4DMistakeDetectionDataset(datasets[0].data_split,
+                                        debug_n_examples_per_class=debug_n_examples_per_class)

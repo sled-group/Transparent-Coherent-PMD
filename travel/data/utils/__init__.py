@@ -2,6 +2,7 @@ import ast
 import os
 import pandas as pd
 from pathlib import Path
+import shutil
 from tqdm import tqdm
 
 def generate_float_series(start: float, end: float, step: float) -> list[float]:
@@ -96,3 +97,62 @@ def count_subdirectories(dir: str) -> int:
         return len([x for x in p.iterdir() if x.is_dir()])
     else:
         return 0
+    
+def split_list_into_partitions(lst, n):
+    """
+    Split a list into n partitions as evenly as possible.
+
+    :param lst: The list to split.
+    :param n: The number of partitions to create.
+    :return: A list of partitions, each a list of elements from the original list.
+    """
+    # Ensure that we do not exceed the number of elements in the original list
+    n = min(n, len(lst))
+
+    # Calculate the size of each partition
+    base_size = len(lst) // n
+    remainder = len(lst) % n
+
+    # Initialize variables for partitioning
+    partitions = []
+    start_index = 0
+
+    for i in range(n):
+        # Determine the size of the current partition
+        current_partition_size = base_size + (1 if i < remainder else 0)
+        
+        # Append the current partition to the partitions list
+        partitions.append(lst[start_index:start_index + current_partition_size])
+        
+        # Move the start index to the next chunk of the list
+        start_index += current_partition_size
+
+    return partitions
+
+def copy_directory_contents(source, target):
+    """
+    Copies contents of source directory into target directory.
+
+    :param source: Source directory.
+    :param target: Target directory.
+    """
+
+    # Ensure the target directory exists
+    if not os.path.exists(target):
+        os.makedirs(target)
+        print(f"Created target directory {target}.")
+
+    # List each item in the source directory
+    for item in os.listdir(source):
+        source_item = os.path.join(source, item)
+        target_item = os.path.join(target, item)
+
+        # Check if the item is a directory
+        if os.path.isdir(source_item):
+            # Recursively copy the entire directory
+            shutil.copytree(source_item, target_item)
+        else:
+            # Copy the file
+            shutil.copy2(source_item, target_item)
+
+        print(f"Copied {source_item} to {target_item}.")

@@ -84,7 +84,6 @@ class MistakeDetectionExample:
         return_dict['frame_times'] = [float(round(t, 9)) for t in return_dict['frame_times']]
         return return_dict
 
-# TODO: add option to not call generate_examples() at all to save some time?
 class MistakeDetectionDataset:
     """Superclass for loading and storing a mistake detection dataset."""
     def __init__(self, data_split: str, **kwargs: dict[str, Any]):
@@ -97,6 +96,7 @@ class MistakeDetectionDataset:
         self.cache_dir = self.get_cache_dir(data_split, **kwargs)
         self.example_dirs: list[str] = []
         self.n_examples: int = 0
+        self.data_generated: bool = False
 
         if not os.path.exists(self.cache_dir):
             # Loading dataset for the first time
@@ -104,7 +104,9 @@ class MistakeDetectionDataset:
         else:
             # Dataset directory already exists, but may or may not be fully generated
             self.load_dataset_metadata()
-            self.generate_examples(data_split, **kwargs)
+            if not self.data_generated:
+                self.generate_examples(data_split, **kwargs)
+        self.data_generated = True
         self.save_dataset_metadata()
 
     def __len__(self):
@@ -130,10 +132,7 @@ class MistakeDetectionDataset:
 
     def get_cache_dir(self, **kwargs: dict[str, Any]) -> str:
         raise NotImplementedError("Subclass should implement logic for generating cached data directory.")
-    
-    def get_cache_fname(self, **kwargs: dict[str, Any]) -> str:
-        raise NotImplementedError("Subclass should implement logic for generating cached data filename.")
-    
+        
     def get_example_dir(self, example_id: str) -> str:
         """
         Gets directory name for an example by its unique ID.
@@ -182,8 +181,10 @@ class MistakeDetectionDataset:
         """
         if os.path.exists(os.path.join(self.cache_dir, "dataset.json")):
             data = json.load(open(os.path.join(self.cache_dir, "dataset.json"), "r"))
+            self.cache_dir = data["cache_dir"]
             self.example_dirs = data["example_dirs"]
             self.n_examples = data["n_examples"]
+            self.data_generated = data["data_generated"]
     
 def get_cutoff_time_by_proportion(example: MistakeDetectionExample, proportion: float):
     """Returns a cutoff time for the last N% of frames to support HeuristicMistakeDetectionEvaluator."""
