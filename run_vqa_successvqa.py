@@ -5,6 +5,7 @@ init_travel()
 import argparse
 import datetime
 import json
+import os
 import pickle
 from pprint import pprint
 import shutil

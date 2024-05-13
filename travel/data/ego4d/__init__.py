@@ -696,6 +696,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         # Handle Ego4D-specific initialization logic
         if mismatch_augmentation:
             # TODO: this takes several minutes - if we already have the data cached, we don't even need this - add logic for this
+            # TODO: also, need to make sure random seeds for mismatch_sampler are appropriately configured if we're generating in parallel
             self.mismatch_sampler = MisalignSRL(
                 EGO4D_ANNOTATION_PATH,
                 EGO4D_MISMATCH_FHO2SRL_PATH,
@@ -753,7 +754,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
 
         # Prepare list to hold examples ready for caching
         example_cache_buffer = []
-        for clip_index, clip in enumerate(tqdm(ego4d)):
+        for clip_index, clip in enumerate(tqdm(ego4d, desc="generating ego4d data")):
             # Index procedure based on video and clip index (each narration is unique)
             procedure_id = 1000 * clip['video_index'] + clip['clip_index']
             clip_id = f"{clip['video_uid']}_{clip['clip_index']}"

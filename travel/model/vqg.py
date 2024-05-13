@@ -1,9 +1,28 @@
 from dataclasses import dataclass, field, asdict
 import os
 import json
-from typing import Any
+import torch
+from tqdm import tqdm
+from transformers import TextGenerationPipeline
+from transformers.pipelines.pt_utils import KeyDataset
+from typing import Any, Optional
 
+from travel.constants import CACHE_FREQUENCY
 from travel.model.vqa import VQAResponse
+
+@dataclass
+class VQGInputs:
+    """Dataclass to hold all LM inputs for visual question generation (VQG)."""
+    procedure_id: int
+    procedure_description: str
+    prompt: str
+
+    def to_dict(self):
+        return asdict(self)
+    
+    @staticmethod
+    def from_dict(self, data):
+        return VQGInputs(**data)
 
 @dataclass
 class VQGOutputs:
@@ -138,6 +157,27 @@ def generate_vqg_example(vqg_output: VQGOutputs) -> str:
                                             answer=answer.name
                                        ) for question_idx, (question, answer) in enumerate(zip(vqg_output.questions, vqg_output.answers))]))
 
+def save_vqg_inputs(inputs: list[VQGInputs], path: str):
+    """
+    Saves generated VQG inputs to a json file.
+    
+    :param inputs: List of VQGInputs holding prompts for VQG.
+    :param path: Filename ending with .json to save inputs at.
+    """
+    assert path.endswith(".json"), "save_vqg_inputs expects a json filename!"
+    json.dump(
+        [inp.to_dict() for inp in inputs],
+        open(path, "w")
+    )
+
+def load_vqg_inputs(path: str) -> list[VQGInputs]:
+    """
+    Loads generated VQG inputs from a json file.
+
+    :param path: json filename to load from.
+    """
+    return [VQGInputs.from_dict(inp) for inp in json.load(open(path, "r"))]
+
 # TODO: later may need to account for chat-based prompts
 def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3) -> str:
     """
@@ -152,6 +192,70 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
     examples = [generate_vqg_example(demo) for demo in VQG_DEMONSTRATIONS[:n_demonstrations]]
     examples += [generate_vqg_prompt(procedure_description)]
     return "\n\n".join(examples)
+
+# TODO: include Ruixuan's improvements here... some of which are below
+# TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name?
+# TODO: does there need to be a single target object for VQG?
+# TODO: increase number of questions to 3? or use a variable number
+def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}) -> dict[str, VQGOutputs]:
+    """
+    Runs VQG with a given LM text generation pipeline and list of VQG inputs.
+
+    :param lm: TextGenerationPipeline from `transformers` library.
+    :param inputs: List of VQG inputs, including procedures, prompts, etc.
+    :param input_ids: Unique string identifiers for inputs. These may characterize a specific prompt or run of a prompt (e.g., at a different temperature).
+    :param save_path: Optional path to save VQG outputs during and after running. Must either be a json filename or path to a directory.
+    :param vqg_outputs: Partly filled dictionary of VQG outputs to start from; only pass this if starting from a partially completed run of VQG, and make sure complete/incomplete prompts are managed appropriately outside of this method.
+    """
+    assert len(inputs) == len(input_ids), "run_vqg expected the same number of inputs and input IDs!"
+    prompt_idx = 0
+    with torch.no_grad():
+        # TODO: implement data parallelism over multiple GPUs?
+        for inp, inp_id, out in tqdm(zip(inputs,
+                                    input_ids,
+                                    lm(KeyDataset([inp.to_dict() for inp in inputs], "prompt"), 
+                                        batch_size=8, 
+                                        max_new_tokens=128, 
+                                        return_full_text=False, 
+                                        truncation="do_not_truncate")),
+                            desc="running VQG",
+                            total=len(inputs)):
+
+            procedure_id = int(inp.procedure_id)
+            step = inp.procedure_description
+
+            text = out[0]['generated_text']
+            
+            # Hack: sometimes output from LLaMA 2 starts with Љ and whitespace characters, and sometimes Љ replaces the first "T" in "Target object:"
+            text_fixed = text.replace("Љ", "").strip() 
+            if not text_fixed.startswith("Target object:") and ":" in text_fixed:
+                text_fixed = "Target object: " + ":".join(text_fixed.split(":")[1:]).strip()
+            
+            # Parse reported target object and questions and answers
+            try:
+                try:
+                    output = parse_vqg_outputs(text_fixed, procedure_id, step)
+                except:
+                    print("Warning: failed to parse a VQG output.")
+                    continue
+            except:
+                print("Error parsing VQG outputs:")
+                print(text)
+                print('======')
+                print(text_fixed)
+                raise
+
+            vqg_outputs[inp_id] = output
+
+            if prompt_idx % CACHE_FREQUENCY == 0 and save_path is not None:
+                print("Saving progress...")
+                save_vqg_outputs(vqg_outputs, save_path)
+
+            prompt_idx += 1
+
+    # Save progress one last time after completion
+    save_vqg_outputs(vqg_outputs, save_path)
+    return vqg_outputs
 
 def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_description: str) -> VQGOutputs:
     """

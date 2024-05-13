@@ -38,12 +38,14 @@ class FrameVQAMistakeDetectionExample:
         return_dict = {
             k: v for k, v in asdict(self).items() if k not in ["frame"]
         }
+        image_base_path = os.path.join(image_base_path, "frames")
         if image_base_path is not None:
             if not os.path.exists(image_base_path):
                 os.makedirs(image_base_path)
-            image_path = os.path.join(image_base_path, f"frame_{self.example_id}.jpg")
+            image_path = os.path.join(image_base_path, f"frame_{self.example_id.replace('/', '-')}.jpg")
             self.frame.save(image_path)
             return_dict["frame"] = image_path
+            self.frame.close()
         return_dict['frame_time'] = float(round(return_dict['frame_time'], 9))
         return return_dict
     
@@ -71,8 +73,7 @@ def save_frameVQA_examples(frameVQA_examples: list[FrameVQAMistakeDetectionExamp
     fname = f"frameVQA_examples_{partition}.json"
     if not os.path.exists(path):
         os.makedirs(path)
-        os.makedirs(os.path.join(path, "frames"))
-    json.dump([example.to_dict(os.path.join(path, "frames")) for example in frameVQA_examples], 
+    json.dump([example.to_dict(path) for example in frameVQA_examples], 
               open(os.path.join(path, fname), "w"),
               indent=4)
 

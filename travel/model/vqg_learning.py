@@ -78,6 +78,7 @@ class FrameVQAMistakeDetectionScorer:
         :param examples: List of FrameVQAMistakeDetectionExample objects to run through the VLM, each of which include a single frame, question, and expected answer for the frame.
         :param return_vqa_outputs: Whether to return VQAOutputs from VQA inference instead of scores per example.
         :param batch_size: Batch size for VQA inference. Note that quantized LLaVA may return nan logits if greater than 1.
+        :param cache_path: Path to save a .pt file for logits generated so far.
         :return: FloatTensor of scores of shape (len(examples), # questions per example) and a list of VQAOutputs.
         """
         # Extract parallel frames, questions, answers, and mistake labels
@@ -111,6 +112,7 @@ class FrameVQAMistakeDetectionScorer:
                 batch_frames = frames[i:i+batch_size]
                 batch_prompts = prompts[i:i+batch_size]
 
+                # Run through VLM to get logits
                 inputs = self.processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
                 inputs = inputs.to(self.vlm.device)
                 this_logits = self.vlm(**inputs).logits
@@ -130,7 +132,7 @@ class FrameVQAMistakeDetectionScorer:
         vqa_outputs = []
         parallel_idx = 0
         for example in examples: 
-            for question_set in example.candidate_question_sets: # TODO: this causes an attributeerror near end of VQA script
+            for question_set in example.candidate_question_sets:
                 this_vqa_outputs = []
                 for _, answer in zip(question_set.questions, question_set.answers):
                     assert answers[parallel_idx] == answer, "Parallel input examples and VQA outputs are out of sync!"

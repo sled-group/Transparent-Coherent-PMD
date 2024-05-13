@@ -5,7 +5,6 @@ import os
 from PIL import Image
 from typing import Optional, Any, Union, Iterable
 
-from travel.data.utils import list_files_by_extension
 from travel.data.utils.image import FRAME_DIMENSION
 
 class MistakeDetectionTasks(str, Enum):
@@ -40,7 +39,7 @@ class MistakeDetectionExample:
         :param data: Dictionary of instance data.
         """
         assert "frames" in data, "Can't use from_dict on this class without including `frames` list of images."
-        data["frames"] = [Image.open(fname) for fname in data["frame"]]
+        data["frames"] = [Image.open(fname) for fname in data["frames"]]
         example = MistakeDetectionExample(**data)
         return example
     
@@ -80,8 +79,12 @@ class MistakeDetectionExample:
         
         # Convert to dictionary
         return_dict = {
-            k: v for k, v in asdict(self).items() if k not in ["frames"]
+            k: v for k, v in asdict(self).items()
         }
+        # If we didn't cache the images, delete them since we can't serialize them directly in json
+        if image_base_path is None:
+            del return_dict['frames']
+        # And round off floating point values
         return_dict['frame_times'] = [float(round(t, 9)) for t in return_dict['frame_times']]
         return return_dict
 
@@ -151,7 +154,7 @@ class MistakeDetectionDataset:
         """
         example_cache_dir = self.get_example_dir(example.example_id)
         os.makedirs(example_cache_dir), f"Tried to save an example {example.example_id} that already exists! Check to make sure example IDs are unique or there aren't untracked files in cache directory."
-        json.dump(example.to_dict(example_cache_dir), 
+        json.dump(example.to_dict(image_base_path=example_cache_dir), 
                   open(os.path.join(example_cache_dir, "example.json"), "w"),
                   indent=4)
         self.example_dirs.append(example_cache_dir)
