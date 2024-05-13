@@ -72,6 +72,7 @@ if args.mistake_detection_strategy == "heuristic":
 else:
     target_frames_proportion = None
 
+# TODO: adapt this into new run_vqa script - will need to pregenerate frames and questions
 # Run VQA inference on questions generated in VQG
 vqa_outputs = []
 for example in tqdm(eval_dataset):

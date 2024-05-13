@@ -8,7 +8,7 @@ from typing import Union, Optional
 from travel.constants import DATA_CACHE_DIR, CACHE_FREQUENCY
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES
+from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, run_vqa
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
 # NOTE: we may need to implement scorers for different types of inputs, e.g., video
@@ -96,37 +96,12 @@ class FrameVQAMistakeDetectionScorer:
             response_tokens[response_type] = self.processor.tokenizer(response_type.name, add_special_tokens=False)['input_ids'][0]
             
         # Run VQA in batches
-        logits = torch.zeros((0,self.vlm.vocab_size)).float()
-        if cache_path is not None:
-            assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
-            if os.path.exists(cache_path):
-                logits = torch.load(cache_path)
-            else:
-                if not os.path.exists("/".join(cache_path.split("/")[:-1])):
-                    os.makedirs("/".join(cache_path.split("/")[:-1]))
-
-        last_save = 0
-        with torch.no_grad():
-            for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc="running VQA"):
-                # Prepare the batch
-                batch_frames = frames[i:i+batch_size]
-                batch_prompts = prompts[i:i+batch_size]
-
-                # Run through VLM to get logits
-                inputs = self.processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
-                inputs = inputs.to(self.vlm.device)
-                this_logits = self.vlm(**inputs).logits
-                this_logits = this_logits[:, -1].detach().cpu()
-                logits = torch.cat([logits, this_logits], dim=0)
-
-                # Cache logits so far
-                if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
-                    torch.save(logits, cache_path)
-                    last_save = i
-
-        # Cache one more time
-        if cache_path is not None:
-            torch.save(logits, cache_path)        
+        logits = run_vqa(vlm=self.vlm,
+                         processor=self.processor,
+                         prompts=prompts,
+                         frames=frames,
+                         batch_size=batch_size,
+                         cache_path=cache_path)
         
         # Gather up VQAOutputs (# examples, # questions per example)
         vqa_outputs = []

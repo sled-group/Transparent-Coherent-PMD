@@ -5,9 +5,12 @@ import json
 import os
 from PIL import Image
 import torch
-from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
+from tqdm import tqdm
+from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, PreTrainedModel
+from transformers.processing_utils import ProcessorMixin
 from typing import Optional
 
+from travel.constants import CACHE_FREQUENCY
 from travel.data.mistake_detection import MistakeDetectionTasks
 
 COMPLETION_PROMPT_TEMPLATES = {
@@ -79,7 +82,61 @@ class VQAOutputs:
         for response in return_dict['answer_probs']:
             return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
         return return_dict
-    
+
+def run_vqa(vlm: PreTrainedModel, 
+            processor: ProcessorMixin,
+            prompts: list[str],
+            frames: list[Image.Image],
+            batch_size: int=1,
+            cache_path: Optional[str]=None) -> torch.FloatTensor:
+    """
+    Runs VQA for given prompts and frames in batches with a given VLM and its processor.
+
+    :param vlm: VLM for conditional generation from `transformers`.
+    :param process: VLM processor from `transformers`, including tokenizer and image processor.
+    :param prompts: List of prompts including visual questions.
+    :param frames: List of images to ask visual questions about.
+    :param batch_size: Batch size for running inference.
+    :param cache_path: .pt file to cache incomplete logits in.
+    :return: Full tensor of logits output from each question. The process of mapping this into VQAOutputs instances requires task/process-specific information, so it should be done outside of this method.
+    """
+    assert len(prompts) == len(frames), "Need same number of prompts and frames to run VQA!"
+        
+    # Run VQA in batches
+    logits = torch.zeros((0, vlm.vocab_size)).float()
+    if cache_path is not None:
+        assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
+        if os.path.exists(cache_path):
+            logits = torch.load(cache_path)
+        else:
+            if not os.path.exists("/".join(cache_path.split("/")[:-1])):
+                os.makedirs("/".join(cache_path.split("/")[:-1]))
+
+    last_save = 0
+    with torch.no_grad():
+        for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc="running VQA"):
+            # Prepare the batch
+            batch_frames = frames[i:i+batch_size]
+            batch_prompts = prompts[i:i+batch_size]
+
+            # Run through VLM to get logits
+            inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
+            inputs = inputs.to(vlm.device)
+            this_logits = vlm(**inputs).logits
+            this_logits = this_logits[:, -1].detach().cpu()
+            logits = torch.cat([logits, this_logits], dim=0)
+
+            # Cache logits so far
+            if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
+                torch.save(logits, cache_path)
+                last_save = i
+
+    # Cache one more time
+    if cache_path is not None:
+        torch.save(logits, cache_path) 
+
+    return logits
+
 def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str, partition: str):
     """
     Saves list of VQAOutputs.

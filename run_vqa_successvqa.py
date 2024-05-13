@@ -58,6 +58,7 @@ else:
 
 # Run SuccessVQA inference
 # TODO: should we apply "contrastive region guidance" as a normalization for this baseline?
+# TODO: adapt this into new run_vqa script - will need to pregenerate frames and questions
 vqa_outputs = []
 for example in tqdm(eval_dataset, "running inference on clips"):
     this_vqa_outputs = []

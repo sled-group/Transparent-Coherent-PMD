@@ -22,7 +22,7 @@ parser.add_argument("--batch_size", type=int, default=10, help="Batch size for V
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 args = parser.parse_args()
 
-for partition in ["train", "val", "test"]:
+for partition in ["train", "val"]: #, "test"]:
     # Load outputs
     frameVQA_examples = load_frameVQA_examples(args.vqg_directory, partition)
     if "_debug" in args.vqg_directory:
@@ -47,11 +47,10 @@ for partition in ["train", "val", "test"]:
         this_results_dir = args.resume_dir
     cache_path = os.path.join(this_results_dir, f"VQA_cache_{partition}.pt")
 
-    # TODO: pass caching stuff into here and implement caching
     vqg_training_examples, vqa_outputs = scorer(frameVQA_examples,
                                                 return_vqa_outputs=True,
                                                 batch_size=args.batch_size,
-                                                cache_path=cache_path) # TODO: this may cause nans
+                                                cache_path=cache_path)
 
     save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, partition)
     save_vqg_training_examples(vqg_training_examples, this_results_dir, partition)
