@@ -55,6 +55,7 @@ class MistakeDetectionExample:
             image_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}_{fi}.jpg")
 
             frame.save(image_path)
+            frame.close()
             frame_paths.append(image_path)
 
         self.frames = frame_paths
