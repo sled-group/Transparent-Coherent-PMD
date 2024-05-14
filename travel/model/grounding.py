@@ -1,10 +1,12 @@
 import dataclasses
+import numpy as np
+from PIL import Image
 import spacy
 from spacy.lang.en import English
 import torch
 from tqdm import tqdm
 from transformers import Owlv2Processor, Owlv2ForObjectDetection
-from typing import Optional
+from typing import Optional, Any
 import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
@@ -15,6 +17,7 @@ with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 
 OWL_THRESHOLD = config["data"]["owl_threshold"] # Directory to cache model outputs and other temporary data
+OWLV2_PATH = config["data"]["owlv2_path"]
 
 def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
                                     detector: Owlv2ForObjectDetection,
@@ -101,45 +104,134 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     dataset.examples = filtered_examples
     return dataset
     
-# TODO: this needs more testing and fine-tuning
-def parse_question_for_spatial_attention_filter(nlp: English, question: str) -> tuple[bool, str]:
-    """
-    Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
 
-    :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_sm", disable=["lemmatizer"])`
-    :param question: A yes/no question about an image (e.g., are there any cherry tomatoes in the bowl?).
-    :return: 
-    """
-    doc = nlp(question)
-    target_noun = ""
-    negation_present = False
-    look_at_noun = True
-    spatial_relation = False
+class AdaptiveVisualAttentionFilter:
+    """Parent class for adaptive attention filters that use phrase grounding models to mask/crop images based on visual questions."""
 
-    # Function to extract the compound noun if it exists
-    def get_compound_noun(token):
-        compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
-        return compound + " " + token.text if compound else token.text
+    def __init__(self):
+        # Load OWL object detector for filtering frames, and filter frames
+        self.detector_processor = Owlv2Processor.from_pretrained(OWLV2_PATH)
+        self.detector = Owlv2ForObjectDetection.from_pretrained(OWLV2_PATH, load_in_8bit=True)
 
-    for token in doc:
-        # Detect negation
-        if token.dep_ == "neg":
-            negation_present = True
+    def run_detection(self, objects: list[list[str]], frames: list[Image.Image]) -> tuple[Any, Any]:
+        """
+        Runs OWLv2 object detection.
 
-        # For subjects and objects, capture the noun considering compound modifiers
-        if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
-            target_noun = get_compound_noun(token)
-        
-        # Identify spatial relations based on specific dependencies
-        if token.dep_ == "prep":
-            spatial_relation = True
+        :param objects: List of lists of objects (one list of objects per frame).
+        :param frames: List of images to check for objects (one image per list of objects).
+        :return: Results and preprocessed padded images that can be .
+        """
+        assert len(objects) == len(frames), "Expected same number of object lists and frames!"
+        owl_prompts = [[f"a photo of {'an' if input_obj[0] in ['a','e','i','o','u'] else 'a'} {input_obj}" for input_obj in input_objs] for input_objs, _ in zip(objects, frames)]
 
-    # Adjust the logic based on question type and negation
-    # Spatial questions with negation direct attention away from the noun
-    if spatial_relation:
-        look_at_noun = not negation_present
-    # State questions focus on the noun, negation doesn't change the focus
-    else:
-        look_at_noun = True
+        inputs = self.detector_processor(text=owl_prompts, images=frames, return_tensors="pt").to(self.detector.device)
+        outputs = self.detector(**inputs)
+        inputs = inputs.to("cpu")
 
-    return (look_at_noun, target_noun)
+        padded_images = [get_preprocessed_image(inputs.pixel_values[j].detach().to('cpu')) for j in range(len(frames))]
+
+        # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+        target_sizes = torch.Tensor([pi.size[::-1] for pi in padded_images])
+        # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+        results = self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
+
+        return results, padded_images
+    
+    def __call__(self) -> list[Image.Image]:
+        raise NotImplementedError("Subclass must implement __call__!")
+
+class SpatialVisualAttentionFilter(AdaptiveVisualAttentionFilter):
+    """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
+    def __init__(self):
+        super().__init__()
+
+    @staticmethod
+    def parse_questions_for_spatial_attention_filter(nlp: English, questions: list[str]) -> list[tuple[bool, str]]:
+        """
+        Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
+
+        :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_sm", disable=["lemmatizer"])`
+        :param questions: List of yes/no questions about an image (e.g., are there any cherry tomatoes in the bowl?).
+        :return: List of tuples of bools and objects indicating regions of interest.
+        """
+        results = []
+        for question in questions:
+            doc = nlp(question)
+            target_noun = ""
+            negation_present = False
+            look_at_noun = True
+            spatial_relation = False
+
+            # Function to extract the compound noun if it exists
+            def get_compound_noun(token):
+                compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
+                return compound + " " + token.text if compound else token.text
+
+            for token in doc:
+                # Detect negation
+                if token.dep_ == "neg":
+                    negation_present = True
+
+                # For subjects and objects, capture the noun considering compound modifiers
+                if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
+                    target_noun = get_compound_noun(token)
+                
+                # Identify spatial relations based on specific dependencies
+                if token.dep_ == "prep":
+                    spatial_relation = True
+
+            # Adjust the logic based on question type and negation
+            # Spatial questions with negation direct attention away from the noun
+            if spatial_relation:
+                look_at_noun = not negation_present
+            # State questions focus on the noun, negation doesn't change the focus
+            else:
+                look_at_noun = True
+
+            results.append((look_at_noun, target_noun))
+        return results
+
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
+        # Parse spatial dependencies from questions
+        spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions)
+        detection_results, padded_images = self.run_detection([[noun] for _, noun in spatial_parse_results], frames)
+
+        new_frames = []
+        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
+        for (look_at_noun, noun), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
+            boxes, scores, labels = detection_result["boxes"], detection_result["scores"], detection_result["labels"]
+            bboxes = boxes.detach().cpu().numpy() # (# boxes, 4)
+
+            mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
+            
+            # Mask out the areas for this noun
+            # TODO: crop image to the clustered bounding box?
+            for bbox in bboxes:
+                # Set the area within the bounding box to 0
+                # Note the order: (ymin:ymax, xmin:xmax)
+                mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0
+                
+            if look_at_noun:
+                mask = 1 - mask
+                            
+            mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
+
+            # Apply mask and undo padding of masked/cropped image to pass to VLM later
+            new_frame = np.array(frame_padded) * mask
+            new_frame = Image.fromarray(new_frame.astype(np.uint8))
+            frame = Image.fromarray(frame)
+            new_height = new_frame.width / frame.width * frame.height
+            new_frame = new_frame.crop((0, 0, new_frame.width - 1, new_height))
+
+            if look_at_noun:
+                # If we're blocking out everything but some bboxes
+                min_x = np.min(bboxes[:, 0])
+                min_y = np.min(bboxes[:, 1])
+                max_x = np.max(bboxes[:, 2])
+                max_y = np.max(bboxes[:, 3])
+                new_frame = new_frame.crop((min_x, min_y, max_x, max_y))
+            
+            new_frames.append(new_frame)
+
+        # TODO: remove spatial dependencies from questions
+        return new_frames, questions

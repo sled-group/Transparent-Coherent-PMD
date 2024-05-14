@@ -14,7 +14,7 @@ parser.add_argument("--n_workers", type=int, default=1, help="Number of workers 
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
-# TODO: Lower memory consumption for MistakeDetectionDataset - list of dirs can be a dataframe?
+# TODO: this may run faster if we just run this script 4 separate times, then have a separate script to combine the partitions.
 
 def generate_ego4d_partition(n_workers: int,
                              worker_index: int,
