@@ -3,7 +3,9 @@ import os
 import pandas as pd
 from pathlib import Path
 import shutil
+import torch
 from tqdm import tqdm
+from typing import Iterator, Sized, Optional, Any, Callable
 
 def generate_float_series(start: float, end: float, step: float) -> list[float]:
     """
@@ -91,14 +93,33 @@ def list_files_by_extension(directory, extension):
 
     return json_files
 
+def get_subdirectories(dir: str) -> list[str]:
+    """
+    Returns list of immediate subdirectories (relative paths) given a directory.
+
+    :param dir: Directory to list subdirectories of.
+    :return: List of relative paths to subdirectories of `dir`.
+    """
+    if os.path.exists(dir):
+        p = Path(dir)
+        return [os.path.relpath(x, dir) for x in p.iterdir() if x.is_dir()]
+    else:
+        return []
+
 def count_subdirectories(dir: str) -> int:
+    """
+    Counts immediate subdirectories of a directory.
+
+    :param dir: Directory to count subdirectories of.
+    :return: Number of immediate subdirectories of `dir`.
+    """
     if os.path.exists(dir):
         p = Path(dir)
         return len([x for x in p.iterdir() if x.is_dir()])
     else:
         return 0
     
-def split_list_into_partitions(lst, n):
+def split_list_into_partitions(lst: list[Any], n: int) -> list[Any]:
     """
     Split a list into n partitions as evenly as possible.
 
@@ -156,3 +177,51 @@ def copy_directory_contents(source, target):
             shutil.copy2(source_item, target_item)
 
         print(f"Copied {source_item} to {target_item}.")
+
+class ResumableParallelSequentialSampler(torch.utils.data.Sampler):
+    """
+    Sequential sampler that allows resuming and parallelization of a list.
+
+    :param data_source: Source of data to sample from.
+    :param completed_elements: List of completed element IDs.
+    :param element_id_fn: Function to convert an element in `data_source` to an ID that can be matched to `completed_elements`.
+    """
+    data_source: list[Any]
+    completed_elements: list[Any]
+    n_workers: int
+    worker_index: int
+
+    def __init__(self, 
+                 data_source: list[Any], 
+                 completed_elements: list[Any]=[],
+                 element_id_fn: Optional[Callable[[Any], Any]]=None,
+                 n_workers: Optional[int]=None, 
+                 worker_index: Optional[int]=None,) -> None:
+        
+        self.data_source = data_source
+        self.element_id_fn = element_id_fn
+        self.completed_elements = completed_elements
+        self.n_workers = n_workers
+        self.worker_index = worker_index
+
+        # Pre-run this since it's slow
+        self.already_completed_index = [self.is_already_completed(self.data_source[i]) for i in range(len(self.data_source))]
+
+    def __iter__(self) -> Iterator[int]:
+        it = [i for i in range(len(self.data_source)) if not self.already_completed_index[i]]
+        if self.n_workers is not None:
+            assert self.worker_index is not None, "ResumableParallelSequentialSampler expected worker_index to be passed with n_workers!"
+            it = split_list_into_partitions(it, self.n_workers)[self.worker_index]
+        return iter(it)
+
+    def __len__(self) -> int:
+        if self.n_workers is None:
+            return len(self.data_source) - len(self.completed_elements)
+        else:
+            assert self.worker_index is not None, "ResumableParallelSequentialSampler expected worker_index to be passed with n_workers!"
+            return split_list_into_partitions(list(range(len(self.data_source) - len(self.completed_elements))), self.n_workers)[self.worker_index]
+        
+    def is_already_completed(self, data: Any):
+        if self.element_id_fn is not None:
+            data = self.element_id_fn(data)
+        return data in self.completed_elements

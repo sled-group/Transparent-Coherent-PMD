@@ -2,17 +2,16 @@
 import ast
 from collections.abc import Callable, Iterable
 from fractions import Fraction
+from functools import partial
 import json
 import numpy as np
 import os
 import pandas as pd
-import pickle
 from pprint import pprint
 from pytorchvideo.data import ClipSampler, LabeledVideoDataset
 from pytorchvideo.data.clip_sampling import ClipInfo
 import random
 import re
-import shutil
 import spacy
 import string
 import time
@@ -27,10 +26,10 @@ from travel.constants import DATA_CACHE_DIR, RANDOM_SEED, CACHE_FREQUENCY
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
                                         EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
-from travel.data.utils import read_large_csv, count_subdirectories, split_list_into_partitions, copy_directory_contents
+from travel.data.utils import read_large_csv, get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler
 from travel.data.utils.text import simple_present_to_imperative
 
-# Some verbs would not be expected in the task-oriented mistake detection setting, so we can filter them out
+# Some verbs would not be expected in the task-oriented mistake detection setting (don't really cause a meaningful state change toward a task goal), so we can filter them out
 EGO4D_IGNORE_VERBS = ['scroll', # Scrolling on phone, tablet, etc.
                      'touch', # Touching an object
                      'walk', # Walking around, sometimes to a destination
@@ -284,7 +283,7 @@ def parse_timestamp(timestamp: str) -> float:
 
 
 class NarratedActionClipSampler(ClipSampler):
-    def __init__(self, random: bool, n_workers: Optional[int]=None, worker_index: Optional[int]=None) -> None:
+    def __init__(self, random: bool) -> None:
         """The vast majority of narrated actions are 8 seconds long, and none
         are longer.
 
@@ -295,8 +294,6 @@ class NarratedActionClipSampler(ClipSampler):
         super().__init__(8)
         self.random = random
         self.sample_clip_indices: list[int] | None = None
-        self.n_workers = n_workers
-        self.worker_index = worker_index
 
     def __call__(
         self,
@@ -312,11 +309,9 @@ class NarratedActionClipSampler(ClipSampler):
             See https://ego4d-data.org/docs/data/annotations-schemas/ for more details.
         """
         if self.sample_clip_indices is None:
+            # pprint(annotation["narrated_actions"])
             # first time sampling from this video, so create a clip index list
             self.sample_clip_indices = list(range(len(annotation["narrated_actions"])))
-            if self.n_workers is not None and self.n_workers > 1:
-                assert self.worker_index is not None, "Need to pass worker index into NarratedActionClipSampler!"
-                self.sample_clip_indices = split_list_into_partitions(self.sample_clip_indices, self.n_workers)[self.worker_index]
             if self.random:
                 # shuffle them if random
                 random.shuffle(self.sample_clip_indices)
@@ -359,6 +354,7 @@ class NarratedActionClipSampler(ClipSampler):
             is_last_clip,
         )
 
+    # TODO: this only can be used for resuming within a single clip - need to rethink how resuming is done
     def skip_to_index(self, idx: int):
         self._current_clip_index = idx
 
@@ -585,6 +581,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
         video_dir_path: str,
         transform: Callable[[dict], Any] | None = None,
         random_clip: bool = False,
+        already_processed_videos: Optional[list[str]] = [],
         n_workers: Optional[int] = None,
         worker_index: Optional[int] = None,
     ) -> None:
@@ -606,7 +603,15 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
             split_data = json.load(f)
 
         self.split = split_data["split"]
-        self.num_narrated_actions = sum(split_data["videos"].values())
+        if len(already_processed_videos) == 0:
+            self.num_narrated_actions = sum(split_data["videos"].values()) # TODO: adjust to account for parallelism and resuming
+        else:
+            # If some videos were already processed, exclude them from count of narrated actions
+            self.num_narrated_actions = sum([v for k, v in split_data["videos"].items() if k not in already_processed_videos])
+
+        if n_workers is not None and worker_index is not None:
+            # If parallelizing, only count the narrated actions for this worker
+            self.num_narrated_actions = split_list_into_partitions(list(range(self.num_narrated_actions)), n_workers)[worker_index]
 
         def _transform(item: dict) -> Any:
             """The first transform function that formats `narrated_actions` and
@@ -620,6 +625,22 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
             if transform is not None:
                 item = transform(item)
             return item
+
+        debug_data = [
+            {
+                "narrated_actions": [
+                    1            
+                    for interval in video_dict[video_uid]["annotated_intervals"]
+                    for action in preprocess_actions(interval["narrated_actions"])
+                    if filter_action(action)
+                ],
+                "video_uid": video_uid,
+                "video_metadata": video_dict[video_uid]["video_metadata"],
+            }
+        for video_uid in split_data["videos"]]
+
+        def _extract_video_id(data: tuple[str, dict[str, Any]]) -> str:
+            return data[1]['video_uid']
 
         super().__init__(
             [
@@ -652,7 +673,12 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                 )
                 for video_uid in split_data["videos"]
             ],
-            NarratedActionClipSampler(random_clip, n_workers, worker_index),
+            NarratedActionClipSampler(random_clip),
+            video_sampler=partial(ResumableParallelSequentialSampler, 
+                                  completed_elements=already_processed_videos,
+                                  element_id_fn=_extract_video_id,
+                                  n_workers=n_workers,
+                                  worker_index=worker_index),
             transform=_transform,
             decode_audio=False,
         )
@@ -736,28 +762,37 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                           n_workers: Optional[int]=None,
                           worker_index: Optional[int]=None) -> list[MistakeDetectionExample]:
         
+        # Resume from partial generation (Ego4D is very large so we need this to avoid wasting time in generating the mistake detection data)
+        already_processed_videos = get_subdirectories(self.cache_dir) # Each subdirectory of Ego4D's cache dir should be a video ID
+
         ego4d = Ego4dFHOMainDataset(
             EGO4D_ANNOTATION_PATH,
             EGO4D_SPLIT_PATHS[data_split],
             EGO4D_VIDEO_PATH,
             random_clip=True if debug_n_examples_per_class is not None else False,
+            already_processed_videos=already_processed_videos,
             n_workers=n_workers,
             worker_index=worker_index,
         )
-
-        # Resume from partial generation (Ego4D is very large so we need this to avoid wasting time)
-        n_clips_processed = count_subdirectories(self.cache_dir)
-        ego4d._clip_sampler.skip_to_index(n_clips_processed)
 
         nlp = spacy.load('en_core_web_sm')
         SIMILARITY_THRESHOLD = 0.95
 
         # Prepare list to hold examples ready for caching
         example_cache_buffer = []
-        for clip_index, clip in enumerate(tqdm(ego4d, desc="generating ego4d data")):
+        for clip in tqdm(ego4d, desc="generating ego4d data", total=ego4d.num_narrated_actions):
+            # Cache if we're starting a new video
+            if ego4d._clip_sampler._current_clip_index == 0 and len(example_cache_buffer) > 0:  
+                # Cache examples in buffer
+                for new_example in example_cache_buffer:
+                    self.save_example_to_file(new_example)
+                self.save_dataset_metadata()
+                del example_cache_buffer
+                example_cache_buffer: list[MistakeDetectionExample] = []
+
             # Index procedure based on video and clip index (each narration is unique)
             procedure_id = 1000 * clip['video_index'] + clip['clip_index']
-            clip_id = f"{clip['video_uid']}_{clip['clip_index']}"
+            clip_id = f"{clip['video_uid']}/{clip['clip_index']}"
 
             # Skip some actions based on conditions specified in filter_action_for_mistake_detection
             if not filter_action_for_mistake_detection(clip):
@@ -776,6 +811,9 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
                 continue
             
+            # Generate examples from this clip
+            # NOTE: example IDs intentionally have "/"s in them to ensure there's one directory per video and per clip (enables easy resuming of incomplete runs, and easy inspection of data)
+
             # Generate positive example from effect frame
             # TODO: maybe want to get entire clip later - OR just write new code to extract single frames from video files
             positive_example = MistakeDetectionExample(
@@ -811,14 +849,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 pprint(clip.keys())
                 print("==========")
                 pprint(mismatch_examples)
-
-            if clip_index % CACHE_FREQUENCY == 0:  
-                # Cache examples in buffer
-                for new_example in example_cache_buffer:
-                    self.save_example_to_file(new_example)
-                self.save_dataset_metadata()
-                del example_cache_buffer
-                example_cache_buffer: list[MistakeDetectionExample] = []
 
             if debug_n_examples_per_class is not None and self.n_examples + len(example_cache_buffer) >= 2 * debug_n_examples_per_class:
                 break
