@@ -12,17 +12,15 @@ import shutil
 import torch
 from tqdm import tqdm
 from transformers import pipeline, BitsAndBytesConfig
-from transformers.pipelines.pt_utils import KeyDataset
 
-from travel.constants import RESULTS_DIR, HF_TOKEN, CACHE_FREQUENCY
-from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, parse_vqg_outputs, save_vqg_outputs, load_vqg_outputs
+from travel.constants import RESULTS_DIR, HF_TOKEN
+from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, run_vqg
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, save_frameVQA_examples
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--lm_name", type=str, default="/nfs/turbo/coe-chaijy-unreplicated/pre-trained-weights/Llama-3-hf/models--meta-llama--Meta-Llama-3-8B/snapshots/b6887ce03ea47d068bf8502ba6ed27f8c5c12a6b", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-parser.add_argument("--partition", type=str, default="train", help="Dataset partition name to generate from.")
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument('--temperatures', nargs='+', type=float, default=[0.0, 0.5, 1.0])
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
@@ -35,9 +33,6 @@ assert len(set(args.temperatures)) == len(args.temperatures), "Must pass a list 
 
 # NOTE: we need to think about how to control the LMs used for question generation and answering:
 # Start with: LLaMA 2-7B ( -> Vicuna-7B chat fine-tuned) -> LLaVA 1.5
-
-# TODO: need to include Ruixuan's updates to VQG strategies here - maybe need a consistent method for VQG so we can reuse in other scripts
-
 
 print("Setting up LM...")
 bnb_config = BitsAndBytesConfig(
@@ -74,9 +69,10 @@ else:
     assert os.path.exists(this_results_dir), "Specified cache directory must already exist!"    
 
 # Run data generation for all partitions
-for partition in ["train", "val", "test"]:
+for partition in ["train", "val"]: #, "test"]: # TODO: generating test data consumes too much memory for some reason
     # Load Ego4D for mistake detection
     dataset = Ego4DMistakeDetectionDataset(data_split=partition,
+                                           mismatch_augmentation=False,
                                            debug_n_examples_per_class=20 if args.debug else None)
     print(f"{len(dataset)} Ego4D mistake detection examples loaded from {partition} partition")
 
@@ -94,86 +90,45 @@ for partition in ["train", "val", "test"]:
             
             prompt = generate_vqg_prompt_icl(example.procedure_description, n_demonstrations=args.n_demonstrations)
             prompts.append(
-                {
-                    "procedure_id": example.procedure_id,
-                    "procedure_description": example.procedure_description,
-                    "prompt": prompt,
-                }
+                VQGInputs(
+                    procedure_id=example.procedure_id,
+                    procedure_description=example.procedure_description,
+                    prompt=prompt
+                )
             )
         print(f"{len(prompts)} prompts generated for {partition} partition")
 
         # Save prompts
-        json.dump(prompts, open(os.path.join(this_results_dir, prompts_fname), "w"))
+        save_vqg_inputs(prompts, os.path.join(this_results_dir, prompts_fname))
 
         # Initialize empty dictionary of VQG outputs
         vqg_outputs = {}
     else: 
         # Load prompts and already generated VQG outputs from previous run
-        prompts = json.load(open(os.path.join(this_results_dir, prompts_fname)))
+        prompts = load_vqg_inputs(os.path.join(this_results_dir, prompts_fname))
         vqg_outputs = load_vqg_outputs(os.path.join(this_results_dir, vqg_outputs_fname))
 
     # Run prompts through LM to generate visual questions
-    # TODO: consider making this a method to reuse in VQG script
-    with torch.no_grad():
-        # Try all temperatures
-        for temperature in tqdm(args.temperatures, desc="temperatures"):
-            if temperature == 0.0:
-                lm.model.generation_config.temperature = None
-                lm.model.generation_config.do_sample = False
-                lm.model.generation_config.top_p = None
-            else:
-                lm.model.generation_config.temperature = temperature
-                lm.model.generation_config.do_sample = True
-                lm.model.generation_config.top_p = args.top_p
+    # Try all temperatures
+    for temperature in tqdm(args.temperatures, desc="temperatures"):
+        if temperature == 0.0:
+            lm.model.generation_config.temperature = None
+            lm.model.generation_config.do_sample = False
+            lm.model.generation_config.top_p = None
+        else:
+            lm.model.generation_config.temperature = temperature
+            lm.model.generation_config.do_sample = True
+            lm.model.generation_config.top_p = args.top_p
 
-            this_prompt_idxs = [i for i in range(len(prompts)) if f"{temperature}_{i}" not in vqg_outputs]
-            this_prompts = [prompts[i] for i in this_prompt_idxs]
+        this_prompt_idxs = [i for i in range(len(prompts)) if f"{temperature}_{i}" not in vqg_outputs]
+        this_prompt_ids = [f"{temperature}_{i}" for i in range(len(prompts)) if f"{temperature}_{i}" not in vqg_outputs]
+        this_prompts = [prompts[i] for i in this_prompt_idxs]
 
-            # Generate for each prompt
-            for prompt_idx, inp, out in tqdm(zip(this_prompt_idxs,
-                                                    this_prompts,
-                                                    lm(KeyDataset(this_prompts, "prompt"), 
-                                                    batch_size=8, 
-                                                    max_new_tokens=128, 
-                                                    return_full_text=False, 
-                                                    truncation="do_not_truncate")),
-                                                desc="running VQG",
-                                                total=len(this_prompts)):
-
-                procedure_id = int(inp['procedure_id'])
-                step = inp['procedure_description']
-
-                text = out[0]['generated_text']
-                
-                # Hack: sometimes output from LLaMA 2 starts with Љ and whitespace characters, and sometimes Љ replaces the first "T" in "Target object:"
-                text_fixed = text.replace("Љ", "").strip() 
-                if not text_fixed.startswith("Target object:") and ":" in text_fixed:
-                    text_fixed = "Target object: " + ":".join(text_fixed.split(":")[1:]).strip()
-                
-                # Parse reported target object and questions and answers
-                try:
-                    try:
-                        output = parse_vqg_outputs(text_fixed, procedure_id, step)
-                    except:
-                        print("Warning: failed to parse a VQG output.")
-                        continue
-                except:
-                    print("Error parsing VQG outputs:")
-                    print(text)
-                    print('======')
-                    print(text_fixed)
-                    raise
-
-                vqg_outputs[f"{temperature}_{prompt_idx}"] = output
-
-                if prompt_idx % CACHE_FREQUENCY == 0:
-                    print("Saving progress...")
-                    save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
-
-                prompt_idx += 1
-
-    # Save progress one last time after completion
-    save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
+        vqg_outputs = run_vqg(lm=lm,
+                              inputs=this_prompts,
+                              input_ids=this_prompt_ids,
+                              save_path=os.path.join(this_results_dir, vqg_outputs_fname),
+                              vqg_outputs=vqg_outputs)
 
     # Reorganize VQG outputs by procedure ID
     vqg_outputs_new = defaultdict(list)
@@ -205,5 +160,6 @@ for partition in ["train", "val", "test"]:
     # Save generated data, config, and args
     save_frameVQA_examples(frameVQA_examples, this_results_dir, partition)
 
+# TODO: move the below 2 steps to a method
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

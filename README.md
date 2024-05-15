@@ -40,7 +40,7 @@ poetry install
 poetry shell
 ```
 
-Note that the same CUDA installation must be available whenever you activate the environment using `poetry shell`.
+Note that the same CUDA installation must be available whenever you activate the environment using `poetry shell`. The script `prepare_great_lakes.sh` provides the set of commands to run to prepare the Great Lakes environment after initial setup; run it from this repo.
 
 ### Jupyter Notebook Support
 
@@ -100,6 +100,4 @@ python run_vqg_learning_vqa.py --vqg_directory /saved_results/path/to/generated/
 
 TBA
 
-#### Evaluating Trained Pipeline
-
-TBA
+Evaluate the trained pipeline with `run_vqa_vqg2vqa.py` following the above.

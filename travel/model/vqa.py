@@ -4,10 +4,14 @@ from enum import Enum
 import json
 import os
 from PIL import Image
+import spacy
 import torch
-from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
+from tqdm import tqdm
+from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, PreTrainedModel
+from transformers.processing_utils import ProcessorMixin
 from typing import Optional
 
+from travel.constants import CACHE_FREQUENCY
 from travel.data.mistake_detection import MistakeDetectionTasks
 
 COMPLETION_PROMPT_TEMPLATES = {
@@ -44,6 +48,7 @@ def get_vqa_response_token_ids(tokenizer):
         assert type(token_id) == int, "Getting response tokens for members of VQAResponse failed."
     return responses
 
+# TODO: support saving images
 @dataclass
 class VQAOutputs:
     """Dataclass to hold all VLM outputs from visual question answering (VQA)."""
@@ -71,15 +76,79 @@ class VQAOutputs:
         this_probs = this_probs.numpy()
         self.answer_probs = {response_type: this_probs[response_type.value] for response_type in VQAResponse}
 
-    def to_dict(self):
+    def to_dict(self, image_base_path: Optional[str]=None):
         """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""
         return_dict = {
             k: v for k, v in asdict(self).items() if k not in ["frame", "response_token_ids", "logits"]
         }
         for response in return_dict['answer_probs']:
             return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
+        
+        image_base_path = os.path.join(image_base_path, "frames")
+        if image_base_path is not None:
+            if not os.path.exists(image_base_path):
+                os.makedirs(image_base_path)
+            image_path = os.path.join(image_base_path, f"frame_{self.example_id.replace('/', '-')}.jpg")
+            self.frame.save(image_path)
+            return_dict["frame"] = image_path
+            # self.frame.close()
+
         return return_dict
     
+def run_vqa(vlm: PreTrainedModel, 
+            processor: ProcessorMixin,
+            prompts: list[str],
+            frames: list[Image.Image],
+            batch_size: int=1,
+            cache_path: Optional[str]=None) -> torch.FloatTensor:
+    """
+    Runs VQA for given prompts and frames in batches with a given VLM and its processor.
+
+    :param vlm: VLM for conditional generation from `transformers`.
+    :param process: VLM processor from `transformers`, including tokenizer and image processor.
+    :param prompts: List of prompts including visual questions.
+    :param frames: List of images to ask visual questions about.
+    :param batch_size: Batch size for running inference.
+    :param cache_path: .pt file to cache incomplete logits in.
+    :return: Full tensor of logits output from each question. The process of mapping this into VQAOutputs instances requires task/process-specific information, so it should be done outside of this method.
+    """
+    assert len(prompts) == len(frames), "Need same number of prompts and frames to run VQA!"
+
+    # Run VQA in batches
+    logits = torch.zeros((0, vlm.vocab_size)).float()
+    if cache_path is not None:
+        assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
+        if os.path.exists(cache_path):
+            logits = torch.load(cache_path)
+        else:
+            if not os.path.exists("/".join(cache_path.split("/")[:-1])):
+                os.makedirs("/".join(cache_path.split("/")[:-1]))
+
+    last_save = 0
+    with torch.no_grad():
+        for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc="running VQA"):
+            # Prepare the batch
+            batch_frames = frames[i:i+batch_size]
+            batch_prompts = prompts[i:i+batch_size]
+
+            # Run through VLM to get logits
+            inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
+            inputs = inputs.to(vlm.device)
+            this_logits = vlm(**inputs).logits
+            this_logits = this_logits[:, -1].detach().cpu()
+            logits = torch.cat([logits, this_logits], dim=0)
+
+            # Cache logits so far
+            if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
+                torch.save(logits, cache_path)
+                last_save = i
+
+    # Cache one more time
+    if cache_path is not None:
+        torch.save(logits, cache_path) 
+
+    return logits
+
 def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str, partition: str):
     """
     Saves list of VQAOutputs.
@@ -90,7 +159,7 @@ def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str, partition: str):
     fname = f"vqa_outputs_{partition}.json"
     if not os.path.exists(path):
         os.makedirs(path)
-    json.dump([ex.to_dict() for ex in vqa_outputs], 
+    json.dump([ex.to_dict(image_base_path=path) for ex in vqa_outputs], 
               open(os.path.join(path, fname), "w"),
               indent=4)    
 

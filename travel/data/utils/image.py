@@ -8,6 +8,12 @@ import torch
 import torchvision.transforms as T
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from typing import Union, Any
+import yaml
+
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+
+FRAME_DIMENSION = config["data"]["video_frame_dimension"]
 
 class BoundingBox:
     """
@@ -129,7 +135,7 @@ class BoundingBoxCluster:
 
 def get_preprocessed_image(pixel_values: torch.FloatTensor) -> Image.Image:
     """
-    Preprocesses pixel values of an image to pad a non-square image into a square.
+    Preprocesses pixel values of an image to pad a non-square image into a square (for some object detection models).
 
     :param pixel_values: tensor of pixel values.
     :return: padded image.

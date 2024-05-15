@@ -1,20 +1,21 @@
-import json
-import os
+import spacy
 import torch
-from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
-from typing import Union, Optional
+from typing import Optional, Union
 
-from travel.constants import DATA_CACHE_DIR, CACHE_FREQUENCY
+from travel.constants import DATA_CACHE_DIR
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter
+from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, run_vqa
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
 # NOTE: we may need to implement scorers for different types of inputs, e.g., video
 class FrameVQAMistakeDetectionScorer:
     """Class that provides preference scores for visual questions to facilitate mistake detection on individual video frames."""
-    def __init__(self, vlm_name):
+    def __init__(self, 
+                 vlm_name: str,
+                 visual_filter_type: Optional[VisualFilterTypes]=None):
         super().__init__()
         self.model_name = vlm_name
         self.processor = AutoProcessor.from_pretrained(vlm_name)
@@ -33,6 +34,17 @@ class FrameVQAMistakeDetectionScorer:
         self.vlm.language_model.generation_config.temperature = None
         self.vlm.language_model.generation_config.do_sample = False
         self.processor.tokenizer.padding_side = "left"
+
+        # if torch.cuda.device_count() >= 2:
+        #     self.vlm = self.vlm.to(torch.cuda.device(0))
+
+        if visual_filter_type == VisualFilterTypes.Spatial:
+            # Load spatial filter onto separate GPU if available
+            self.visual_filter = SpatialVisualFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+        else:
+            self.visual_filter = None
+        self.visual_filter_type = visual_filter_type
+        self.nlp = spacy.load('en_core_web_sm')
         
     def get_scores(self,
                    mistake_labels: list[bool],
@@ -77,7 +89,8 @@ class FrameVQAMistakeDetectionScorer:
         
         :param examples: List of FrameVQAMistakeDetectionExample objects to run through the VLM, each of which include a single frame, question, and expected answer for the frame.
         :param return_vqa_outputs: Whether to return VQAOutputs from VQA inference instead of scores per example.
-        :param batch_size: Batch size for VQA inference. Note that quantized LLaVA may return nan logits if greater than 1.
+        :param batch_size: Batch size for VQA inference.
+        :param cache_path: Path to save a .pt file for logits generated so far.
         :return: FloatTensor of scores of shape (len(examples), # questions per example) and a list of VQAOutputs.
         """
         # Extract parallel frames, questions, answers, and mistake labels
@@ -87,6 +100,10 @@ class FrameVQAMistakeDetectionScorer:
         assert len(questions) == len(answers) == len(frames), "Need same number of questions, answers, and frames to score questions on frame-based VQA!"
         mistake_labels = [example.mistake for example in examples for _ in example.candidate_question_sets] # One scoring per each question set
              
+        # Process frames using visual attention filter
+        if self.visual_filter is not None:
+            frames, questions = self.visual_filter(self.nlp, frames, questions)
+
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
         
@@ -95,42 +112,18 @@ class FrameVQAMistakeDetectionScorer:
             response_tokens[response_type] = self.processor.tokenizer(response_type.name, add_special_tokens=False)['input_ids'][0]
             
         # Run VQA in batches
-        logits = torch.zeros((0,self.vlm.vocab_size)).float()
-        if cache_path is not None:
-            assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
-            if os.path.exists(cache_path):
-                logits = torch.load(cache_path)
-            else:
-                if not os.path.exists("/".join(cache_path.split("/")[:-1])):
-                    os.makedirs("/".join(cache_path.split("/")[:-1]))
-
-        last_save = 0
-        with torch.no_grad():
-            for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc="running VQA"):
-                # Prepare the batch
-                batch_frames = frames[i:i+batch_size]
-                batch_prompts = prompts[i:i+batch_size]
-
-                inputs = self.processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
-                inputs = inputs.to(self.vlm.device)
-                this_logits = self.vlm(**inputs).logits
-                this_logits = this_logits[:, -1].detach().cpu()
-                logits = torch.cat([logits, this_logits], dim=0)
-
-                # Cache logits so far
-                if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
-                    torch.save(logits, cache_path)
-                    last_save = i
-
-        # Cache one more time
-        if cache_path is not None:
-            torch.save(logits, cache_path)        
+        logits = run_vqa(vlm=self.vlm,
+                         processor=self.processor,
+                         prompts=prompts,
+                         frames=frames,
+                         batch_size=batch_size,
+                         cache_path=cache_path)
         
         # Gather up VQAOutputs (# examples, # questions per example)
         vqa_outputs = []
         parallel_idx = 0
         for example in examples: 
-            for question_set in example.candidate_question_sets: # TODO: this causes an attributeerror near end of VQA script
+            for question_set in example.candidate_question_sets:
                 this_vqa_outputs = []
                 for _, answer in zip(question_set.questions, question_set.answers):
                     assert answers[parallel_idx] == answer, "Parallel input examples and VQA outputs are out of sync!"
@@ -139,7 +132,7 @@ class FrameVQAMistakeDetectionScorer:
                             example.task_name,
                             example.example_id,
                             example.procedure_id,
-                            example.frame,
+                            frames[parallel_idx], # Use manipulated frame after visual filter (if any)
                             prompts[parallel_idx],
                             answers[parallel_idx],
                             response_tokens,

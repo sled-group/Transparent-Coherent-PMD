@@ -1,7 +1,11 @@
 from dataclasses import dataclass, asdict
 from enum import Enum
+import json
+import os
 from PIL import Image
-from typing import Optional, Any
+from typing import Optional, Any, Union, Iterable
+
+from travel.data.utils.image import FRAME_DIMENSION
 
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
@@ -15,19 +19,73 @@ class MistakeDetectionExample:
     video_id: str
     procedure_id: int
     example_id: str
-    frames: list[Image.Image]
+    frames: Union[list[Image.Image], list[str]]
     frame_times: list[float]
     procedure_description: str
     mistake: bool
     mistake_type: Optional[str] = None
     mistake_description: Optional[str] = None
+    
+    def __post_init__(self):
+        """Resizes frames to save space in caching."""
+        new_sizes = [(int(FRAME_DIMENSION * (frame.width / frame.height)), FRAME_DIMENSION) if frame.width > frame.height else (FRAME_DIMENSION, int(FRAME_DIMENSION * (frame.height / frame.width))) for frame in self.frames]
+        self.frames = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, self.frames)]
 
-    def to_dict(self):
-        """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""        
+    @staticmethod
+    def from_dict(data: dict):
+        """
+        Loads an instance of MistakeDetectionExample from a dictionary. This adds special logic to account for loading the frame image.
+
+        :param data: Dictionary of instance data.
+        """
+        assert "frames" in data, "Can't use from_dict on this class without including `frames` list of images."
+        data["frames"] = [Image.open(fname) for fname in data["frames"]]
+        example = MistakeDetectionExample(**data)
+        return example
+    
+    def cache_frames(self, image_base_path: str):
+        assert all(type(frame) == Image.Image for frame in self.frames), "Can only cache PIL images!"
+
+        if not os.path.exists(os.path.join(image_base_path, "frames")):
+            os.makedirs(os.path.join(image_base_path, "frames"))
+
+        frame_paths = []
+        for fi, frame in enumerate(self.frames):
+            image_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}_{fi}.jpg")
+
+            frame.save(image_path)
+            frame.close()
+            frame_paths.append(image_path)
+
+        self.frames = frame_paths
+
+    def uncache_frames(self):
+        assert all(type(frame) == str and frame.endswith(".jpg") for frame in self.frames), "Can only uncache string .jpg filenames!"
+        self.frames = [Image.open(frame) for frame in self.frames]
+        
+    def is_cached(self):
+        return True if type(self.frames[0]) == str else False
+
+    def to_dict(self, image_base_path: Optional[str]=None):
+        """
+        Helper method to create a JSON-serializable version of the class instance.
+
+        :param image_base_path: Include this to save the 'frame' key to file, and replace it with its file path. Otherwise, the 'frame' key will be discarded.
+        """        
+        # Cache frames if possible and if not cached already
+        if image_base_path is not None:
+            if not self.is_cached():
+                self.cache_frames(image_base_path)
+        
+        # Convert to dictionary
         return_dict = {
-            k: v for k, v in asdict(self).items() if k not in ["frames"]
+            k: v for k, v in asdict(self).items()
         }
-        return_dict['frame_times'] = [float(round(ft, 3)) for ft in return_dict['frame_times']]
+        # If we didn't cache the images, delete them since we can't serialize them directly in json
+        if image_base_path is None:
+            del return_dict['frames']
+        # And round off floating point values
+        return_dict['frame_times'] = [float(round(t, 9)) for t in return_dict['frame_times']]
         return return_dict
 
 class MistakeDetectionDataset:
@@ -38,19 +96,99 @@ class MistakeDetectionDataset:
 
         :param kwargs: Task-specific arguments for dataset compilation.
         """
-        self.examples: list[MistakeDetectionExample] = self.load_examples(data_split, **kwargs)
+        self.data_split: str = data_split
+        self.cache_dir = self.get_cache_dir(data_split, **kwargs)
+        self.example_dirs: list[str] = []
+        self.n_examples: int = 0
+        self.data_generated: bool = False
+
+        if not os.path.exists(self.cache_dir):
+            # Loading dataset for the first time
+            self.generate_examples(data_split, **kwargs)
+        else:
+            # Dataset directory already exists, but may or may not be fully generated
+            self.load_dataset_metadata()
+            if not self.data_generated:
+                self.generate_examples(data_split, **kwargs)
+        self.data_generated = True
+        self.save_dataset_metadata()
 
     def __len__(self):
-        return len(self.examples)
+        return len(self.example_dirs)
 
     def __getitem__(self, index):
-        return self.examples[index]
+        return self.load_example_from_file[self.example_dirs[index]]
+    
+    def get_batches(self, batch_size: int) -> Iterable[list[MistakeDetectionExample]]:
+        assert batch_size >= 1, "Batch size must be positive!"
+        if batch_size > 1:
+            for i in range(0, len(self.example_dirs), batch_size):
+                yield [self.load_example_from_file(d) for d in self.example_dirs[i : i + batch_size]]
+        else:
+            for d in self.example_dirs:
+                yield self.load_example_from_file(d)
     
     def __iter__(self):
-        return iter(self.examples)
-
-    def load_examples(self, data_split: str, **kwargs: dict[str, Any]) -> list[MistakeDetectionExample]:
+        return self.get_batches(1)
+    
+    def generate_examples(self, data_split: str, **kwargs: dict[str, Any]) -> list[MistakeDetectionExample]:
         raise NotImplementedError("Subclass should implement dataset loading procedure.")
+
+    def get_cache_dir(self, **kwargs: dict[str, Any]) -> str:
+        raise NotImplementedError("Subclass should implement logic for generating cached data directory.")
+        
+    def get_example_dir(self, example_id: str) -> str:
+        """
+        Gets directory name for an example by its unique ID.
+
+        :param example_id: Unique example ID.
+        :return: Directory name.
+        """
+        return os.path.join(self.cache_dir, example_id)
+
+    def save_example_to_file(self, example: MistakeDetectionExample):
+        """
+        Caches a preprocessed dataset example in a centralized cache folder to reuse later.
+        
+        :param example: Example to save.
+        """
+        example_cache_dir = self.get_example_dir(example.example_id)
+        os.makedirs(example_cache_dir), f"Tried to save an example {example.example_id} that already exists! Check to make sure example IDs are unique or there aren't untracked files in cache directory."
+        json.dump(example.to_dict(image_base_path=example_cache_dir), 
+                  open(os.path.join(example_cache_dir, "example.json"), "w"),
+                  indent=4)
+        self.example_dirs.append(example_cache_dir)
+        self.n_examples += 1
+        
+    def load_example_from_file(self, example_dir: str) -> MistakeDetectionExample:
+        """
+        Loads an example from cache by the directory it's saved in.
+
+        :param example_dir: Directory to load example from.
+        :return: MistakeDetectionExample object.
+        """
+        example = json.load(open(os.path.join(example_dir, "example.json"), "r"))
+        example = MistakeDetectionExample.from_dict(example)
+        return example
+    
+    def save_dataset_metadata(self):
+        """
+        Saves dataset metadata for later.
+        """
+        json.dump(self.__dict__,
+                  open(os.path.join(self.cache_dir, "dataset.json"), "w"),
+                  indent=4)
+        
+    def load_dataset_metadata(self):
+        """
+        Loads cached dataset metadata, including the example directories and count.
+        """
+        if os.path.exists(os.path.join(self.cache_dir, "dataset.json")):
+            data = json.load(open(os.path.join(self.cache_dir, "dataset.json"), "r"))
+            self.cache_dir = data["cache_dir"]
+            self.example_dirs = data["example_dirs"]
+            self.n_examples = data["n_examples"]
+            self.data_generated = data["data_generated"]
     
 def get_cutoff_time_by_proportion(example: MistakeDetectionExample, proportion: float):
     """Returns a cutoff time for the last N% of frames to support HeuristicMistakeDetectionEvaluator."""
