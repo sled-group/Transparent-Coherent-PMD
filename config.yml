@@ -21,6 +21,7 @@ data:
 grounding:
   owlv2_path: "google/owlv2-base-patch16"
   owl_threshold: 0.2
+  owl_batch_size: 32
 mistake_detection_strategies:
   heuristic:
     target_frames_proportion: 0.1

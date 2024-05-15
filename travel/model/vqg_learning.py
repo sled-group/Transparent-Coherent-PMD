@@ -35,9 +35,12 @@ class FrameVQAMistakeDetectionScorer:
         self.vlm.language_model.generation_config.do_sample = False
         self.processor.tokenizer.padding_side = "left"
 
-        # TODO: may need to make sure this is on a different GPU than self.vlm
+        # if torch.cuda.device_count() >= 2:
+        #     self.vlm = self.vlm.to(torch.cuda.device(0))
+
         if visual_filter_type == VisualFilterTypes.Spatial:
-            self.visual_filter = SpatialVisualFilter() # TODO: or quantize OWL if possible?
+            # Load spatial filter onto separate GPU if available
+            self.visual_filter = SpatialVisualFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
         else:
             self.visual_filter = None
         self.visual_filter_type = visual_filter_type
@@ -86,7 +89,7 @@ class FrameVQAMistakeDetectionScorer:
         
         :param examples: List of FrameVQAMistakeDetectionExample objects to run through the VLM, each of which include a single frame, question, and expected answer for the frame.
         :param return_vqa_outputs: Whether to return VQAOutputs from VQA inference instead of scores per example.
-        :param batch_size: Batch size for VQA inference. Note that quantized LLaVA may return nan logits if greater than 1.
+        :param batch_size: Batch size for VQA inference.
         :param cache_path: Path to save a .pt file for logits generated so far.
         :return: FloatTensor of scores of shape (len(examples), # questions per example) and a list of VQAOutputs.
         """
@@ -99,7 +102,7 @@ class FrameVQAMistakeDetectionScorer:
              
         # Process frames using visual attention filter
         if self.visual_filter is not None:
-            frames, questions = self.visual_filter(self.nlp, frames, questions, batch_size=batch_size)
+            frames, questions = self.visual_filter(self.nlp, frames, questions)
 
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
@@ -129,7 +132,7 @@ class FrameVQAMistakeDetectionScorer:
                             example.task_name,
                             example.example_id,
                             example.procedure_id,
-                            example.frame,
+                            frames[parallel_idx], # Use manipulated frame after visual filter (if any)
                             prompts[parallel_idx],
                             answers[parallel_idx],
                             response_tokens,

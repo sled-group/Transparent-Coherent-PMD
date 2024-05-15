@@ -48,6 +48,7 @@ def get_vqa_response_token_ids(tokenizer):
         assert type(token_id) == int, "Getting response tokens for members of VQAResponse failed."
     return responses
 
+# TODO: support saving images
 @dataclass
 class VQAOutputs:
     """Dataclass to hold all VLM outputs from visual question answering (VQA)."""
@@ -75,15 +76,25 @@ class VQAOutputs:
         this_probs = this_probs.numpy()
         self.answer_probs = {response_type: this_probs[response_type.value] for response_type in VQAResponse}
 
-    def to_dict(self):
+    def to_dict(self, image_base_path: Optional[str]=None):
         """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""
         return_dict = {
             k: v for k, v in asdict(self).items() if k not in ["frame", "response_token_ids", "logits"]
         }
         for response in return_dict['answer_probs']:
             return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
-        return return_dict
+        
+        image_base_path = os.path.join(image_base_path, "frames")
+        if image_base_path is not None:
+            if not os.path.exists(image_base_path):
+                os.makedirs(image_base_path)
+            image_path = os.path.join(image_base_path, f"frame_{self.example_id.replace('/', '-')}.jpg")
+            self.frame.save(image_path)
+            return_dict["frame"] = image_path
+            # self.frame.close()
 
+        return return_dict
+    
 def run_vqa(vlm: PreTrainedModel, 
             processor: ProcessorMixin,
             prompts: list[str],
@@ -148,7 +159,7 @@ def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str, partition: str):
     fname = f"vqa_outputs_{partition}.json"
     if not os.path.exists(path):
         os.makedirs(path)
-    json.dump([ex.to_dict() for ex in vqa_outputs], 
+    json.dump([ex.to_dict(image_base_path=path) for ex in vqa_outputs], 
               open(os.path.join(path, fname), "w"),
               indent=4)    
 

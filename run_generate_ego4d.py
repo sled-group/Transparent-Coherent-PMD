@@ -1,10 +1,10 @@
 # Need this call at the beginning of every script to set random seeds and set the HF cache
+from travel import init_travel
+init_travel()
+
 import argparse
 import concurrent.futures
 import requests
-
-from travel import init_travel
-init_travel()
 
 from travel.data.ego4d import Ego4DMistakeDetectionDataset, combine_ego4d_partitions
 
