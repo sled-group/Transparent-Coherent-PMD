@@ -36,10 +36,11 @@ class FrameVQAMistakeDetectionScorer:
         self.processor.tokenizer.padding_side = "left"
 
         # TODO: may need to make sure this is on a different GPU than self.vlm
-        if self.visual_filter_type == VisualFilterTypes.Spatial:
+        if visual_filter_type == VisualFilterTypes.Spatial:
             self.visual_filter = SpatialVisualFilter() # TODO: or quantize OWL if possible?
         else:
             self.visual_filter = None
+        self.visual_filter_type = visual_filter_type
         self.nlp = spacy.load('en_core_web_sm')
         
     def get_scores(self,
@@ -98,7 +99,7 @@ class FrameVQAMistakeDetectionScorer:
              
         # Process frames using visual attention filter
         if self.visual_filter is not None:
-            frames, questions = self.visual_filter(self.nlp, frames, questions)
+            frames, questions = self.visual_filter(self.nlp, frames, questions, batch_size=batch_size)
 
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]

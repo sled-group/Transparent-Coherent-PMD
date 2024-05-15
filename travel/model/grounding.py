@@ -114,7 +114,7 @@ class AdaptiveVisualFilter:
         self.detector_processor = Owlv2Processor.from_pretrained(OWLV2_PATH)
         self.detector = Owlv2ForObjectDetection.from_pretrained(OWLV2_PATH, load_in_8bit=True)
 
-    def run_detection(self, objects: list[list[str]], frames: list[Image.Image]) -> tuple[Any, Any]:
+    def run_detection(self, objects: list[list[str]], frames: list[Image.Image], batch_size: int=8) -> tuple[Any, Any]:
         """
         Runs OWLv2 object detection.
 
@@ -125,16 +125,25 @@ class AdaptiveVisualFilter:
         assert len(objects) == len(frames), "Expected same number of object lists and frames!"
         owl_prompts = [[f"a photo of {'an' if input_obj[0] in ['a','e','i','o','u'] else 'a'} {input_obj}" for input_obj in input_objs] for input_objs, _ in zip(objects, frames)]
 
-        inputs = self.detector_processor(text=owl_prompts, images=frames, return_tensors="pt").to(self.detector.device)
-        outputs = self.detector(**inputs)
-        inputs = inputs.to("cpu")
+        padded_images = []
+        results = []
+        for i in tqdm(range(0, len(frames), batch_size), desc="running VQA"):
+            # Prepare the batch
+            batch_prompts = owl_prompts[i:i+batch_size]
+            batch_frames = frames[i:i+batch_size]
 
-        padded_images = [get_preprocessed_image(inputs.pixel_values[j].detach().to('cpu')) for j in range(len(frames))]
+            inputs = self.detector_processor(text=batch_prompts, images=batch_frames, return_tensors="pt").to(self.detector.device)
+            outputs = self.detector(**inputs)
+            inputs = inputs.to("cpu")
 
-        # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
-        target_sizes = torch.Tensor([pi.size[::-1] for pi in padded_images])
-        # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
-        results = self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
+            this_padded_images = [get_preprocessed_image(inputs.pixel_values[j].detach().to('cpu')) for j in range(len(frames))]
+
+            # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+            target_sizes = torch.Tensor([pi.size[::-1] for pi in this_padded_images])
+
+            # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+            padded_images += this_padded_images
+            results += self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
 
         return results, padded_images
     
@@ -239,3 +248,4 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial"
+    GroundTruthSpatial = "gt_spatial"    
