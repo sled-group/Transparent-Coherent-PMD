@@ -1,4 +1,5 @@
 import dataclasses
+from enum import Enum
 import numpy as np
 from PIL import Image
 import spacy
@@ -16,8 +17,8 @@ from travel.model.vqg import VQGOutputs
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 
-OWL_THRESHOLD = config["data"]["owl_threshold"] # Directory to cache model outputs and other temporary data
-OWLV2_PATH = config["data"]["owlv2_path"]
+OWL_THRESHOLD = config["grounding"]["owl_threshold"] # Directory to cache model outputs and other temporary data
+OWLV2_PATH = config["grounding"]["owlv2_path"]
 
 def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
                                     detector: Owlv2ForObjectDetection,
@@ -104,8 +105,8 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     dataset.examples = filtered_examples
     return dataset
     
-
-class AdaptiveVisualAttentionFilter:
+# TODO: debug the below 2 classes
+class AdaptiveVisualFilter:
     """Parent class for adaptive attention filters that use phrase grounding models to mask/crop images based on visual questions."""
 
     def __init__(self):
@@ -140,7 +141,7 @@ class AdaptiveVisualAttentionFilter:
     def __call__(self) -> list[Image.Image]:
         raise NotImplementedError("Subclass must implement __call__!")
 
-class SpatialVisualAttentionFilter(AdaptiveVisualAttentionFilter):
+class SpatialVisualFilter(AdaptiveVisualFilter):
     """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
     def __init__(self):
         super().__init__()
@@ -235,3 +236,6 @@ class SpatialVisualAttentionFilter(AdaptiveVisualAttentionFilter):
 
         # TODO: remove spatial dependencies from questions
         return new_frames, questions
+
+class VisualFilterTypes(Enum):
+    Spatial = "spatial"

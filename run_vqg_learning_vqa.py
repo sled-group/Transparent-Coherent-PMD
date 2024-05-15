@@ -10,14 +10,14 @@ import pickle
 import shutil
 
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples
-from travel.model.grounding import filter_frames_by_target_objects
+from travel.model.grounding import filter_frames_by_target_objects, VisualFilterTypes
 from travel.model.vqa import save_vqa_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired frameVQA_examples.json is stored.")
 parser.add_argument("--vlm_name", type=str, default="/nfs/turbo/coe-chaijy-unreplicated/pre-trained-weights/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
-parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
+parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--batch_size", type=int, default=10, help="Batch size for VQA inference. For quantized models, a batch size greater than 1 can cause nans.") # TODO: can we fix nans problem
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 args = parser.parse_args()
@@ -28,8 +28,6 @@ for partition in ["train", "val"]: #, "test"]:
     if "_debug" in args.vqg_directory:
         frameVQA_examples = frameVQA_examples[:20]
 
-    # TODO: introduce spatial filter - maybe need a consistent way to do this so we can reuse in vqa scripts
-
     # Load OWL object detector for filtering frames, and filter frames
     # detector_processor = Owlv2Processor.from_pretrained(args.detector_name)
     # detector = Owlv2ForObjectDetection.from_pretrained(args.detector_name, load_in_8bit=True)
@@ -38,7 +36,8 @@ for partition in ["train", "val"]: #, "test"]:
     # del detector_processor
     # del detector
 
-    scorer = FrameVQAMistakeDetectionScorer(args.vlm_name)
+    scorer = FrameVQAMistakeDetectionScorer(args.vlm_name,
+                                            visual_filter_type=VisualFilterTypes(args.visual_filter_mode),)
 
     # Save training examples for VQG in the same folder
     if args.resume_dir is None:

@@ -4,6 +4,7 @@ from enum import Enum
 import json
 import os
 from PIL import Image
+import spacy
 import torch
 from tqdm import tqdm
 from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, PreTrainedModel
@@ -101,7 +102,7 @@ def run_vqa(vlm: PreTrainedModel,
     :return: Full tensor of logits output from each question. The process of mapping this into VQAOutputs instances requires task/process-specific information, so it should be done outside of this method.
     """
     assert len(prompts) == len(frames), "Need same number of prompts and frames to run VQA!"
-        
+
     # Run VQA in batches
     logits = torch.zeros((0, vlm.vocab_size)).float()
     if cache_path is not None:

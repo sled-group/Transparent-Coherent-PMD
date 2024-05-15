@@ -603,6 +603,8 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
             split_data = json.load(f)
 
         self.split = split_data["split"]
+
+        # Count number of narrated actions for __len__
         if len(already_processed_videos) == 0:
             self.num_narrated_actions = sum(split_data["videos"].values()) # TODO: adjust to account for parallelism and resuming
         else:
@@ -611,7 +613,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
 
         if n_workers is not None and worker_index is not None:
             # If parallelizing, only count the narrated actions for this worker
-            self.num_narrated_actions = split_list_into_partitions(list(range(self.num_narrated_actions)), n_workers)[worker_index]
+            self.num_narrated_actions = len(split_list_into_partitions(list(range(self.num_narrated_actions)), n_workers)[worker_index])
 
         def _transform(item: dict) -> Any:
             """The first transform function that formats `narrated_actions` and
@@ -625,20 +627,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
             if transform is not None:
                 item = transform(item)
             return item
-
-        debug_data = [
-            {
-                "narrated_actions": [
-                    1            
-                    for interval in video_dict[video_uid]["annotated_intervals"]
-                    for action in preprocess_actions(interval["narrated_actions"])
-                    if filter_action(action)
-                ],
-                "video_uid": video_uid,
-                "video_metadata": video_dict[video_uid]["video_metadata"],
-            }
-        for video_uid in split_data["videos"]]
-
+        
         def _extract_video_id(data: tuple[str, dict[str, Any]]) -> str:
             return data[1]['video_uid']
 
@@ -780,7 +769,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
 
         # Prepare list to hold examples ready for caching
         example_cache_buffer = []
-        for clip in tqdm(ego4d, desc="generating ego4d data", total=ego4d.num_narrated_actions):
+        for clip in tqdm(ego4d, desc="generating ego4d data"):
             # Cache if we're starting a new video
             if ego4d._clip_sampler._current_clip_index == 0 and len(example_cache_buffer) > 0:  
                 # Cache examples in buffer

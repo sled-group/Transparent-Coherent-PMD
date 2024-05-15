@@ -1,20 +1,21 @@
-import json
-import os
+import spacy
 import torch
-from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
-from typing import Union, Optional
+from typing import Optional, Union
 
-from travel.constants import DATA_CACHE_DIR, CACHE_FREQUENCY
+from travel.constants import DATA_CACHE_DIR
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter
 from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, run_vqa
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
 # NOTE: we may need to implement scorers for different types of inputs, e.g., video
 class FrameVQAMistakeDetectionScorer:
     """Class that provides preference scores for visual questions to facilitate mistake detection on individual video frames."""
-    def __init__(self, vlm_name):
+    def __init__(self, 
+                 vlm_name: str,
+                 visual_filter_type: Optional[VisualFilterTypes]=None):
         super().__init__()
         self.model_name = vlm_name
         self.processor = AutoProcessor.from_pretrained(vlm_name)
@@ -33,6 +34,13 @@ class FrameVQAMistakeDetectionScorer:
         self.vlm.language_model.generation_config.temperature = None
         self.vlm.language_model.generation_config.do_sample = False
         self.processor.tokenizer.padding_side = "left"
+
+        # TODO: may need to make sure this is on a different GPU than self.vlm
+        if self.visual_filter_type == VisualFilterTypes.Spatial:
+            self.visual_filter = SpatialVisualFilter() # TODO: or quantize OWL if possible?
+        else:
+            self.visual_filter = None
+        self.nlp = spacy.load('en_core_web_sm')
         
     def get_scores(self,
                    mistake_labels: list[bool],
@@ -88,6 +96,10 @@ class FrameVQAMistakeDetectionScorer:
         assert len(questions) == len(answers) == len(frames), "Need same number of questions, answers, and frames to score questions on frame-based VQA!"
         mistake_labels = [example.mistake for example in examples for _ in example.candidate_question_sets] # One scoring per each question set
              
+        # Process frames using visual attention filter
+        if self.visual_filter is not None:
+            frames, questions = self.visual_filter(self.nlp, frames, questions)
+
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
         
