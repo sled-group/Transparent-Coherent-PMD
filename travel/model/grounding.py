@@ -248,4 +248,3 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial"
-    GroundTruthSpatial = "gt_spatial"    
