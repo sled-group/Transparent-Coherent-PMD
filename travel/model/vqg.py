@@ -197,7 +197,7 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
 # TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name?
 # TODO: does there need to be a single target object for VQG?
 # TODO: increase number of questions to 3? or use a variable number
-def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}) -> dict[str, VQGOutputs]:
+def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}) -> dict[str, VQGOutputs]:
     """
     Runs VQG with a given LM text generation pipeline and list of VQG inputs.
 
@@ -214,7 +214,7 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
         for inp, inp_id, out in tqdm(zip(inputs,
                                     input_ids,
                                     lm(KeyDataset([inp.to_dict() for inp in inputs], "prompt"), 
-                                        batch_size=8, 
+                                        batch_size=batch_size, 
                                         max_new_tokens=128, 
                                         return_full_text=False, 
                                         truncation="do_not_truncate")),
@@ -304,9 +304,12 @@ def load_vqg_outputs(path: str) -> dict[Any, VQGOutputs]:
     """
     if not path.endswith(".json"):
         path = os.path.join(path, "vqg_outputs.json")
-    vqg_outputs = json.load(open(path, "r"))
-    try:
-        vqg_outputs = {int(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
-    except:
-        vqg_outputs = {str(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
-    return vqg_outputs
+    if os.path.exists(path):
+        vqg_outputs = json.load(open(path, "r"))
+        try:
+            vqg_outputs = {int(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
+        except:
+            vqg_outputs = {str(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
+        return vqg_outputs
+    else:
+        return {}
