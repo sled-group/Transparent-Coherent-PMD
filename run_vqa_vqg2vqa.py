@@ -50,8 +50,7 @@ vlm.language_model.generation_config.top_p = None
 vlm.language_model.generation_config.do_sample = False
 
 if args.visual_filter_mode is not None:
-    args.visual_filter_mode = VisualFilterTypes(args.visual_filter_mode)
-    if args.visual_filter_mode == VisualFilterTypes.Spatial:
+    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
         visual_filter = SpatialVisualFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
         nlp = spacy.load('en_core_web_sm')
 
@@ -100,14 +99,13 @@ for eval_partition in args.eval_partitions:
                 example_ids.append(example.example_id)
 
     # Run visual filter if we have one
-    if args.visual_filter_mode == VisualFilterTypes.Spatial:
-        frames, questions = visual_filter(nlp, frames, questions)
+    if args.visual_filter_mode is not None:
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
+            frames, questions = visual_filter(nlp, frames, questions)
 
     prompts = []
     for question in questions:
         prompts.append(prompt_template.format(question=question.strip()))
-
-    print(len(prompts), len(frames))
 
     # Run SuccessVQA inference
     logits = run_vqa(vlm,
