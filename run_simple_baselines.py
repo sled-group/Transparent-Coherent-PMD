@@ -22,6 +22,12 @@ parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.v
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 args = parser.parse_args()
 
+timestamp = datetime.datetime.now()
+this_results_dir = f"simple_baselines"
+this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
+this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
+os.makedirs(this_results_dir)
+
 for eval_partition in args.eval_partitions:
     # Load mistake detection dataset
     if args.task == "captaincook4d":
@@ -35,7 +41,7 @@ for eval_partition in args.eval_partitions:
     # Run simple baseline inference
     random_preds = []
     majority_preds = []
-    for example in tqdm(eval_dataset, "running inference on clips"):
+    for _ in tqdm(range(len(eval_dataset)), "running inference on clips"):
         random_preds.append(bool(randint(0,1)))
         majority_preds.append(majority_class)
 
@@ -49,16 +55,10 @@ for eval_partition in args.eval_partitions:
     pprint(metrics_majority)
 
     # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
-    timestamp = datetime.datetime.now()
-    this_results_dir = f"simple_baselines"
-    this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
-    this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
-    os.makedirs(this_results_dir)
-
-    metrics_filename = f"metrics_random_{args.eval_split}.json"
+    metrics_filename = f"metrics_random_{eval_partition}.json"
     json.dump(metrics_random, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
-    metrics_filename = f"metrics_majority_{args.eval_split}.json"
+    metrics_filename = f"metrics_majority_{eval_partition}.json"
     json.dump(metrics_majority, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
