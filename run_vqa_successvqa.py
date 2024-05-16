@@ -22,6 +22,7 @@ from travel.data.captaincook4d import CaptainCook4DDataset
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(SUCCESSVQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--batch_size", type=int, default=10, help="Batch size for VQA inference.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
@@ -61,7 +62,7 @@ if args.resume_dir is None:
 else:
     this_results_dir = args.resume_dir
 
-for eval_partition in ["val", "test"]:
+for eval_partition in args.eval_partitions:
 
     # Load mistake detection dataset
     if args.task == "captaincook4d":
@@ -70,7 +71,7 @@ for eval_partition in ["val", "test"]:
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
 
-    # Run SuccessVQA inference
+    # Generate SuccessVQA prompts
     # TODO: should we apply "contrastive region guidance" as a normalization for this baseline?
     frames = []
     prompts = []
@@ -91,6 +92,7 @@ for eval_partition in ["val", "test"]:
             answers.append(expected_answer)
             example_ids.append(example.example_id)
         
+    # Run SuccessVQA inference
     logits = run_vqa(vlm,
                     vlm_processor,
                     prompts,

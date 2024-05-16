@@ -142,7 +142,7 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
             
         # Heuristic: average likelihood of mistake then use a threshold to decide if there's a mistake
         agg_preds = []
-        for mistake_prob, example in tqdm(zip(mistake_probs, self.examples), desc="evaluating mistake detection", total=len(self.examples)):
+        for mistake_prob, example in tqdm(zip(mistake_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
             if len(mistake_prob) > 0:
                 example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
                 assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
