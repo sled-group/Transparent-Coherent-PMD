@@ -12,7 +12,7 @@ from random import randint
 import shutil
 from tqdm import tqdm
 
-from travel.constants import MODEL_CACHE_DIR, RESULTS_DIR
+from travel.constants import RESULTS_DIR
 from travel.model.mistake_detection import mistake_detection_metrics
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d import CaptainCook4DDataset
