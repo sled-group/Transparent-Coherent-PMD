@@ -1,7 +1,7 @@
 hf_token: "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"
 random_seed: 222
 cache:
-  data_cache_dir: "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl_preprocessed_data"
+  data_cache_dir: "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl_cache_dir"
   model_cache_dir: "/scratch/chaijy_root/chaijy0/sstorks/.cache/huggingface"
   cache_frequency: 50
   results_dir: "saved_results"
