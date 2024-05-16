@@ -84,8 +84,8 @@ class VQAOutputs:
         for response in return_dict['answer_probs']:
             return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
         
-        image_base_path = os.path.join(image_base_path, "frames")
         if image_base_path is not None:
+            image_base_path = os.path.join(image_base_path, "frames")
             if not os.path.exists(image_base_path):
                 os.makedirs(image_base_path)
             image_path = os.path.join(image_base_path, f"frame_{self.example_id.replace('/', '-')}.jpg")

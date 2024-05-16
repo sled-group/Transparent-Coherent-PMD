@@ -10,7 +10,7 @@ import pickle
 import shutil
 
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples
-from travel.model.grounding import filter_frames_by_target_objects, VisualFilterTypes
+from travel.model.grounding import VisualFilterTypes
 from travel.model.vqa import save_vqa_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 

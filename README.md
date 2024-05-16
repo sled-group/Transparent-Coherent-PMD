@@ -96,6 +96,8 @@ python run_vqg_learning_generation.py
 python run_vqg_learning_vqa.py --vqg_directory /saved_results/path/to/generated/questions/from/previous/step/
 ```
 
+Add `--visual_filter_mode spatial` to the second command if you want to use the spatial attention filter.
+
 #### Training VQG from Generated Data
 
 TBA

@@ -7,6 +7,10 @@ from typing import Optional, Any, Union, Iterable
 
 from travel.data.utils.image import FRAME_DIMENSION
 
+def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
+    """Returns a cutoff time for the last N% of frames to support MistakeDetectionEvaluator classes."""
+    return max(frame_times) - ((max(frame_times) - min(frame_times)) * proportion)
+
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
     Ego4D = "ego4d"
@@ -87,6 +91,14 @@ class MistakeDetectionExample:
         # And round off floating point values
         return_dict['frame_times'] = [float(round(t, 9)) for t in return_dict['frame_times']]
         return return_dict
+
+    def cutoff_to_last_frames(self, proportion: float):
+        """
+        Cuts off example's frames and frame times to the last `proportion`% of frames based on their times.
+        """
+        cutoff_time = get_cutoff_time_by_proportion(self.frame_times, proportion)
+        self.frames = [f for f, t in zip(self.frames, self.frame_times) if t >= cutoff_time]
+        self.frame_times = [t for t in self.frame_times if t >= cutoff_time]
 
 class MistakeDetectionDataset:
     """Superclass for loading and storing a mistake detection dataset."""
@@ -175,6 +187,8 @@ class MistakeDetectionDataset:
         """
         Saves dataset metadata for later.
         """
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
         json.dump(self.__dict__,
                   open(os.path.join(self.cache_dir, "dataset.json"), "w"),
                   indent=4)
@@ -190,6 +204,3 @@ class MistakeDetectionDataset:
             self.n_examples = data["n_examples"]
             self.data_generated = data["data_generated"]
     
-def get_cutoff_time_by_proportion(example: MistakeDetectionExample, proportion: float):
-    """Returns a cutoff time for the last N% of frames to support HeuristicMistakeDetectionEvaluator."""
-    return max(example.frame_times) - ((max(example.frame_times) - min(example.frame_times)) * proportion)

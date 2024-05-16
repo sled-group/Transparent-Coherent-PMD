@@ -14,7 +14,6 @@ from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FR
 class CaptainCook4DDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
-                 load_videos: bool=True,
                  debug_n_examples_per_class: Optional[int]=None):
         """
         Method to initialize and load CaptainCook4D dataset.
@@ -22,7 +21,6 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         :param kwargs: Task-specific arguments for dataset compilation.
         """
         super().__init__(data_split,
-                         load_videos,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
     def get_cache_dir(self,
@@ -44,8 +42,6 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         cache_fname = os.path.join(cache_dir, "captaincook4d.json")
         return cache_fname
 
-    # TODO: don't load videos on init? Instead can just load annotations and frame times, then load actual frames when accessing specific items
-    # TODO: or just consider parallelizing
     def generate_examples(self,
                           data_split: str,
                           load_videos: bool=True,
@@ -64,7 +60,6 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
         success_examples = []
         error_examples = []
-        all_examples = []
         for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos", total=len(all_video_ids)):
             try:
                 sample_video = get_video(sample_video_path)
@@ -96,43 +91,46 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                     verb, procedure_description = step['description'].split("-")[0], "-".join(step['description'].split("-")[1:])
 
                     if "errors" in step and len(step["errors"]) > 0:               
-                        mistake_type = step['errors'][0]["tag"] # TODO: group mistake types across evaluation datasets into consistent types? doesn't really matter
+                        mistake_type = step['errors'][0]["tag"]
                         mistake_description = step['errors'][0]['description']
                         # altered_procedure_description = step['modified_description'] # NOTE: can use this later if needed
 
                         if len(step['errors']) > 1:
                             print("Warning: Some error information discarded from only using the first annotated error.")            
 
-                        error_examples.append(
-                            MistakeDetectionExample(
-                                task_name=MistakeDetectionTasks.CaptainCook4D,
-                                video_id=sample_video_id,
-                                procedure_id=step_id,
-                                example_id=f"{sample_video_id}_{step_idx}",
-                                frames=frames,
-                                frame_times=[time - min(times) for time in times],
-                                procedure_description=procedure_description,
-                                mistake=True,
-                                mistake_type=mistake_type,
-                                mistake_description=mistake_description
-                            )
+                        example = MistakeDetectionExample(
+                            task_name=MistakeDetectionTasks.CaptainCook4D,
+                            video_id=sample_video_id,
+                            procedure_id=step_id,
+                            example_id=f"{sample_video_id}_{step_idx}",
+                            frames=frames,
+                            frame_times=[time - min(times) for time in times],
+                            procedure_description=procedure_description,
+                            mistake=True,
+                            mistake_type=mistake_type,
+                            mistake_description=mistake_description
                         )
-                        all_examples.append(error_examples[-1])
+                        self.save_example_to_file(example)
+
+                        if debug_n_examples_per_class is not None:
+                            error_examples.append(example)
                         # pprint(error_examples[-1])
                     else:
-                        success_examples.append(
-                            MistakeDetectionExample(
-                                task_name=MistakeDetectionTasks.CaptainCook4D,
-                                video_id=sample_video_id,
-                                procedure_id=step_id,
-                                example_id=f"{sample_video_id}_{step_idx}",
-                                frames=frames,
-                                frame_times=[time - min(times) for time in times],
-                                procedure_description=procedure_description,
-                                mistake=False
-                            )
-                        )        
-                        all_examples.append(success_examples[-1])
+                        example = MistakeDetectionExample(
+                            task_name=MistakeDetectionTasks.CaptainCook4D,
+                            video_id=sample_video_id,
+                            procedure_id=step_id,
+                            example_id=f"{sample_video_id}_{step_idx}",
+                            frames=frames,
+                            frame_times=[time - min(times) for time in times],
+                            procedure_description=procedure_description,
+                            mistake=False
+                        )
+                        self.save_example_to_file(example)
+                        if debug_n_examples_per_class is not None:
+                            success_examples.append(example)
+                    self.save_dataset_metadata()
+
                 except:
                     print(f"Warning: Video {sample_video_id} step {step_id} could not be processed!")
                     continue
@@ -147,7 +145,4 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
             sample_video.release()
       
-        if debug_n_examples_per_class is not None:
-            return error_examples[:debug_n_examples_per_class] + success_examples[:debug_n_examples_per_class]
-        else:
-            return all_examples
+        self.save_dataset_metadata()

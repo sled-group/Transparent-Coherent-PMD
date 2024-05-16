@@ -11,10 +11,9 @@ import torch
 from transformers import pipeline, BitsAndBytesConfig
 from tqdm import tqdm
 
-from travel.constants import MODEL_CACHE_DIR, RESULTS_DIR, HF_TOKEN
-from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, VQGOutputs, run_vqg, save_vqg_outputs, parse_vqg_outputs
-from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
-from travel.data.captaincook4d import CaptainCook4DDataset
+from travel.constants import RESULTS_DIR, HF_TOKEN
+from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, run_vqg, load_vqg_outputs
+from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d.constants import RECIPE_STEPS
 
 parser = argparse.ArgumentParser()
@@ -24,8 +23,11 @@ parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, 
 # parser.add_argument("--n_questions_to_generate", type=int, default=2, choices=range(1, len(VQG_DEMONSTRATIONS[0].questions) + 1), help="Number of questions to generate per procedure.")
 parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
+parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
+
+# TODO: we may want to split the CaptainCook4D data by recipe and support that here
 
 # Load LM
 print("Setting up LM...")
@@ -49,7 +51,6 @@ print("Generation config:")
 print(lm.model.generation_config)
 
 # Generate prompts for VQG
-# TODO: enable resuming from partly completed run
 prompts = []
 if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
     indexed_procedures = RECIPE_STEPS
@@ -67,20 +68,24 @@ for procedure_id, step in indexed_procedures.items():
         break
 
 # Prepare output directory
-timestamp = datetime.datetime.now()
-this_results_dir = f"VQG" # Can change this name later if we have other approaches for VQG besides prompting LM with ICL
-if args.debug:
-    this_results_dir += f"_debug"
-this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
-this_results_dir = os.path.join(RESULTS_DIR, "vqg", this_results_dir)
-os.makedirs(this_results_dir)
+if args.resume_dir is None:
+    timestamp = datetime.datetime.now()
+    this_results_dir = f"VQG" # Can change this name later if we have other approaches for VQG besides prompting LM with ICL
+    if args.debug:
+        this_results_dir += f"_debug"
+    this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    this_results_dir = os.path.join(RESULTS_DIR, "vqg", this_results_dir)
+    os.makedirs(this_results_dir)
+else:
+    this_results_dir = args.resume_dir
 
 # Run prompts through LM to generate visual questions (and save VQG outputs)
 vqg_outputs = run_vqg(
     lm,
     prompts,
-    [int(inp['procedure_id']) for inp in prompts],
-    save_path=this_results_dir
+    [int(inp.procedure_id) for inp in prompts],
+    save_path=this_results_dir,
+    vqg_outputs=load_vqg_outputs(this_results_dir) # Will send in partly completed VQG outputs if we have them
 )
 
 # Save config and args
