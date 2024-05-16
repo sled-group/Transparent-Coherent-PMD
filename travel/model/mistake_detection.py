@@ -12,7 +12,7 @@ from transformers import AutoProcessor, AutoModelForVision2Seq
 from typing import Union, Any
 import yaml
 
-from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, get_cutoff_time_by_proportion
+from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
 from travel.data.utils import generate_float_series
 from travel.model.vqa import VQAOutputs, VQAResponse
 
@@ -59,7 +59,7 @@ class MistakeDetectionOutputs:
 @dataclass
 class MistakeDetectionEvaluator:
     """Superclass to implement different types of evaluators based on VQAOutputs."""
-    examples: list[MistakeDetectionExample] # (# examples)
+    examples: MistakeDetectionDataset
     vqa_outputs: list[list[list[VQAOutputs]]] # (# examples, frames per example, questions per frame)
     
     def __post_init__(self):
@@ -115,14 +115,14 @@ class MistakeDetectionEvaluator:
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
-HEURISTIC_TARGET_FRAMES_PROPORTION = int(config["mistake_detection_strategies"]["heuristic"]["target_frames_proportion"]) # Use last N% of frames for heuristic mistake detection
+DETECTION_FRAMES_PROPORTION = int(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 
 class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
-    """Heuristic mistake detection evaluator which simply takes a majority vote over the last `mistake_frames_proportion` proportion of video frames."""
+    """Heuristic mistake detection evaluator which simply takes the average mistake probability over the passed chunk of video frames."""
         
     def check_mistakes(self, detection_threshold: float=0.5) -> list[MistakeDetectionOutputs]:
         """
-        Given `examples` and `vqa_outputs`, determine whether there is a mistake. Uses a simple heuristic: for the last `self.mistake_frames_proportion` percent of frames, judge whether there is a mistake based on VQA responses versus expected answers, then take the majority vote.
+        Given `examples` and `vqa_outputs`, determine whether there is a mistake. Uses a simple heuristic by averaging the mistake probability over all passed frames to determine whether there is a mistake. Typically, we should pass only a small percentage of the last frames of a clip to judge the completion of an action.
         
         :param detection_threshold: Confidence threshold for evaluator to predict there's a mistake, typically based on an LM's logits.
         :return: True if there is believed to be a mistake, else False.
@@ -140,33 +140,27 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 example_mistake_probs.append(frame_mistake_probs)
             mistake_probs.append(example_mistake_probs)
             
-        # Heuristic: for last n% of frames (based on step duration), average likelihood of mistake then use a threshold to decide if there's a mistake
-        # In the future, can prompt LLaMA again for this information?
+        # Heuristic: average likelihood of mistake then use a threshold to decide if there's a mistake
         agg_preds = []
-        for mistake_prob, example in zip(mistake_probs, self.examples):
+        for mistake_prob, example in tqdm(zip(mistake_probs, self.examples), desc="evaluating mistake detection", total=len(self.examples)):
             if len(mistake_prob) > 0:
-                cutoff_time = get_cutoff_time_by_proportion(example, HEURISTIC_TARGET_FRAMES_PROPORTION)
-                assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue."
-                mistake_prob_cut = [prob for prob, ft in zip(mistake_prob, example.frame_times) if ft >= cutoff_time] # (# heuristic frames, # questions)
+                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
+                assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
                 
-                mean_mistake_prob_cut = np.max(mistake_prob_cut, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-                mean_mistake_prob_cut = np.mean(mistake_prob_cut) # Get mean mistakeprobability over all frames
-                frame_times_cut = [ft for ft in example.frame_times if ft >= cutoff_time]
+                mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
+                mean_mistake_prob = np.mean(mistake_prob) # Get mean mistakeprobability over all frames
                                 
-                mistake_pred_final = True if mean_mistake_prob_cut > detection_threshold else False
-                # mistake_pred_cut = [pred for pred, ft in zip(mistake_pred, example.frame_times) if ft >= cutoff_time]
-                # mistake_pred_majority = Counter(mistake_pred_cut)
-                # mistake_pred_majority, _ = mistake_pred_majority.most_common()[0]                
+                mistake_pred_final = True if mean_mistake_prob > detection_threshold else False
             else:
                 # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;
                 # in this case, the target object is likely not present at all in the video, suggesting an incorrect object is used instead
-                mistake_prob_cut = [[]]
+                mistake_prob = [[]]
                 mistake_pred_final = True
 
             pred_object = MistakeDetectionOutputs(
                 example_id=example.example_id,
-                frame_times=frame_times_cut,
-                mistake_probs=mistake_prob_cut,
+                frame_times=example.frame_times,
+                mistake_probs=mistake_prob,
                 detection_threshold=detection_threshold,
                 final_mistake_prediction=mistake_pred_final
             )

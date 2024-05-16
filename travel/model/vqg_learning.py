@@ -7,7 +7,7 @@ from travel.constants import DATA_CACHE_DIR
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter
-from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, run_vqa
+from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, run_vqa, get_vqa_response_token_ids
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
 # NOTE: we may need to implement scorers for different types of inputs, e.g., video
@@ -107,9 +107,7 @@ class FrameVQAMistakeDetectionScorer:
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
         
-        response_tokens = {}
-        for response_type in VQAResponse:
-            response_tokens[response_type] = self.processor.tokenizer(response_type.name, add_special_tokens=False)['input_ids'][0]
+        response_tokens = get_vqa_response_token_ids(self.processor.tokenizer)
             
         # Run VQA in batches
         logits = run_vqa(vlm=self.vlm,

@@ -14,7 +14,6 @@ from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FR
 class CaptainCook4DDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
-                 load_videos: bool=True,
                  debug_n_examples_per_class: Optional[int]=None):
         """
         Method to initialize and load CaptainCook4D dataset.
@@ -22,7 +21,6 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         :param kwargs: Task-specific arguments for dataset compilation.
         """
         super().__init__(data_split,
-                         load_videos,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
     def get_cache_dir(self,
@@ -148,6 +146,10 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
             sample_video.release()
       
         if debug_n_examples_per_class is not None:
-            return error_examples[:debug_n_examples_per_class] + success_examples[:debug_n_examples_per_class]
+            examples = error_examples[:debug_n_examples_per_class] + success_examples[:debug_n_examples_per_class]
         else:
-            return all_examples
+            examples = all_examples
+
+        for example in examples:
+            self.save_example_to_file(example)
+        self.save_dataset_metadata()
