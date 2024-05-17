@@ -35,7 +35,6 @@ if args.n_workers == 1:
                                            debug_n_examples_per_class=20 if args.debug else None)
 else:
     # Generate in parallel
-    # TODO: still getting memory errors in parallel mode
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
         partitions = list(executor.map(generate_ego4d_partition, 
                                        [args.n_workers] * args.n_workers, 

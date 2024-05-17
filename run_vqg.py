@@ -23,6 +23,7 @@ parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, 
 # parser.add_argument("--n_questions_to_generate", type=int, default=2, choices=range(1, len(VQG_DEMONSTRATIONS[0].questions) + 1), help="Number of questions to generate per procedure.")
 parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
+parser.add_argument("--batch_size", type=int, default=48, help="Batch size for VQG.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
@@ -79,11 +80,14 @@ if args.resume_dir is None:
 else:
     this_results_dir = args.resume_dir
 
+# TODO: finish implementing resuming here and parallelization following run_vqg_learning_generation.py - may be needed if we do ego4d evaluations
+
 # Run prompts through LM to generate visual questions (and save VQG outputs)
 vqg_outputs = run_vqg(
     lm,
     prompts,
     [int(inp.procedure_id) for inp in prompts],
+    batch_size=args.batch_size,
     save_path=this_results_dir,
     vqg_outputs=load_vqg_outputs(this_results_dir) # Will send in partly completed VQG outputs if we have them
 )
