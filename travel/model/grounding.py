@@ -27,7 +27,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
                                     detector_processor: Owlv2Processor,
                                     vqg_outputs: Optional[dict[int, VQGOutputs]]) -> MistakeDetectionDataset:
     """
-    Filters the frames in MistakeDetectionExample objects within a MistakeDetectionDataset based on whether they have a target object present. The target object will be based on a dictionary of VQGOutputs if provided, otherwise it will be parsed from target recipe steps.
+    (Not in use.) Filters the frames in MistakeDetectionExample objects within a MistakeDetectionDataset based on whether they have a target object present. The target object will be based on a dictionary of VQGOutputs if provided, otherwise it will be parsed from target recipe steps.
 
     :param dataset: MistakeDetectionDataset to filter frames of.
     :param detector: Initialized OWL object detector.
@@ -136,6 +136,7 @@ class AdaptiveVisualFilter:
         """
         assert len(objects) == len(frames), "Expected same number of object lists and frames!"
         # Note the awkward hack where rare objects can be None due to failure of spatial parser
+        # TODO: this doesn't handle the case where the input_obj is plural
         owl_prompts = [[f"a photo of {'an' if input_obj[0] in ['a','e','i','o','u'] else 'a'} {input_obj}" if input_obj is not None else "" for input_obj in input_objs] for input_objs, _ in zip(objects, frames)]
         # skip_indices = [all(input_obj is None for input_obj in input_objs) for input_objs, _ in zip(objects, frames)]
 
@@ -182,7 +183,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
         :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_sm", disable=["lemmatizer"])`
         :param questions: List of yes/no questions about an image (e.g., are there any cherry tomatoes in the bowl?).
-        :return: List of tuples of bools and objects indicating regions of interest.
+        :return: List of tuples, each of which include a bool and object string indicating regions of interest, and a rephrased form of a question without spatial dependencies. 
         """
         results = []
         for question in questions:
@@ -201,6 +202,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # Detect negation
                 if token.dep_ == "neg":
                     negation_present = True
+                    negation_token = token.text
 
                 # For subjects and objects, capture the noun considering compound modifiers
                 if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
@@ -208,17 +210,26 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 
                 # Identify spatial relations based on specific dependencies
                 if token.dep_ == "prep":
+                    pprint(token.head)
+                    pprint([child for child in token.children])
                     spatial_relation = True
+                    spatial_object_tokens = [get_compound_noun(child) for child in token.children]
 
             # Adjust the logic based on question type and negation
             # Spatial questions with negation direct attention away from the noun
             if spatial_relation:
                 look_at_noun = not negation_present
+                for token in spatial_object_tokens:
+                    question = question.replace(token, "image")
+
+                if negation_present:
+                    question = question.replace(negation_token, "").replace("  ", " ")
+
             # State questions focus on the noun, negation doesn't change the focus
             else:
                 look_at_noun = True
 
-            results.append((look_at_noun, target_noun if target_noun != "" else None))
+            results.append((look_at_noun, target_noun if target_noun != "" else None, question))
         return results
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
@@ -227,8 +238,9 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         detection_results, padded_images = self.run_detection([[noun] for _, noun in spatial_parse_results], frames)
 
         new_frames = []
+        new_questions = []
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
-        for (look_at_noun, noun), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
+        for (look_at_noun, noun, rephrased_question), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
             boxes = detection_result["boxes"]
             bboxes = boxes.cpu().numpy() # (# boxes, 4)
 
@@ -266,8 +278,9 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # No detection - don't modify the image
                 new_frames.append(frame)
 
-        # TODO: remove spatial dependencies from questions
-        return new_frames, questions
+            new_frames.append(rephrased_question)
+
+        return new_frames, new_questions
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial"
