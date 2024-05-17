@@ -28,14 +28,6 @@ for partition in ["train", "val"]: #, "test"]:
     if "_debug" in args.vqg_directory:
         frameVQA_examples = frameVQA_examples[:20]
 
-    # Load OWL object detector for filtering frames, and filter frames
-    # detector_processor = Owlv2Processor.from_pretrained(args.detector_name)
-    # detector = Owlv2ForObjectDetection.from_pretrained(args.detector_name, load_in_8bit=True)
-
-    # Clear detector from memory
-    # del detector_processor
-    # del detector
-
     scorer = FrameVQAMistakeDetectionScorer(args.vlm_name,
                                             visual_filter_type=VisualFilterTypes(args.visual_filter_mode) if args.visual_filter_mode is not None else None,)
 
