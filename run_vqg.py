@@ -55,18 +55,7 @@ print(lm.model.generation_config)
 prompts = []
 if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
     indexed_procedures = RECIPE_STEPS
-
-for procedure_id, step in indexed_procedures.items():
-    prompt = generate_vqg_prompt_icl(step, n_demonstrations=args.n_demonstrations)
-    prompts.append(
-        VQGInputs(
-            procedure_id=procedure_id,
-            procedure_description=step,
-            prompt=prompt    
-        )
-    )
-    if args.debug and len(prompts) >= 10:
-        break
+# TODO: support Ego4D and multiple possible partitions in it
 
 # Prepare output directory
 if args.resume_dir is None:
@@ -79,6 +68,18 @@ if args.resume_dir is None:
     os.makedirs(this_results_dir)
 else:
     this_results_dir = args.resume_dir
+
+for procedure_id, step in indexed_procedures.items():
+    prompt = generate_vqg_prompt_icl(step, n_demonstrations=args.n_demonstrations)
+    prompts.append(
+        VQGInputs(
+            procedure_id=procedure_id,
+            procedure_description=step,
+            prompt=prompt    
+        )
+    )
+    if args.debug and len(prompts) >= 10:
+        break
 
 # TODO: finish implementing resuming here and parallelization following run_vqg_learning_generation.py - may be needed if we do ego4d evaluations
 
