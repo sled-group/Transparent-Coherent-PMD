@@ -126,6 +126,7 @@ def run_vqa(vlm: PreTrainedModel,
 
     last_save = 0
     with torch.no_grad():
+        # Start at logits.shape[0] so we don't rerun any logits that were already cached (resuming logic)
         for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc="running VQA"):
             # Prepare the batch
             batch_frames = frames[i:i+batch_size]

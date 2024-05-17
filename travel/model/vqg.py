@@ -21,7 +21,7 @@ class VQGInputs:
         return asdict(self)
     
     @staticmethod
-    def from_dict(self, data):
+    def from_dict(data):
         return VQGInputs(**data)
 
 @dataclass

@@ -4,6 +4,8 @@ init_travel()
 
 import argparse
 from collections import defaultdict
+import concurrent.futures
+from copy import deepcopy
 import datetime
 import json
 import os
@@ -17,6 +19,7 @@ from travel.constants import RESULTS_DIR, HF_TOKEN
 from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, run_vqg
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
+from travel.data.utils import split_list_into_partitions
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, save_frameVQA_examples
 
 parser = argparse.ArgumentParser()
@@ -24,6 +27,8 @@ parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", h
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument('--temperatures', nargs='+', type=float, default=[0.0, 0.5, 1.0])
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
+parser.add_argument("--batch_size", type=int, default=48, help="Batch size for VQG.")
+parser.add_argument("--n_workers", type=int, default=1, choices=range(1, torch.cuda.device_count() + 1), help="Number of workers for multi-GPU parallelism. Should not exceed number of available GPUs.")
 parser.add_argument("--output_dir", type=str, help="Directory name to output data generation results. If not provided, one will be generated.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -34,7 +39,6 @@ assert len(set(args.temperatures)) == len(args.temperatures), "Must pass a list 
 # NOTE: we need to think about how to control the LMs used for question generation and answering:
 # Start with: LLaMA 2-7B ( -> Vicuna-7B chat fine-tuned) -> LLaVA 1.5
 
-print("Setting up LM...")
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     llm_int8_threshold=6.0,
@@ -44,15 +48,33 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4",
 )
 model_kwargs = {"quantization_config": bnb_config}
-lm = pipeline("text-generation", 
-              model=args.lm_name, 
-              token=HF_TOKEN,
-              model_kwargs=model_kwargs)
-lm.tokenizer.padding_side = "left"
-lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
+if args.n_workers == 1:
+    print("Setting up LM...")
+    lm = pipeline("text-generation", 
+                model=args.lm_name, 
+                token=HF_TOKEN,
+                model_kwargs=model_kwargs)
+    lm.tokenizer.padding_side = "left"
+    lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
 
-print("Generation config:")
-print(lm.model.generation_config)
+    print("Generation config:")
+    print(lm.model.generation_config)
+else:
+    print(f"Setting up {args.n_workers} LMs...")
+    # Parallelize across multiple GPUs
+    lms = []
+    for device in range(args.n_workers):
+        torch.cuda.set_device(f"cuda:{device}")
+        lm = pipeline("text-generation", 
+                    model=args.lm_name, 
+                    token=HF_TOKEN,
+                    model_kwargs=model_kwargs)
+        lm.tokenizer.padding_side = "left"
+        lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
+        lms.append(lm)
+
+    print("Generation config:")
+    print(lm.model.generation_config)    
 
 # Set results directory
 if args.resume_dir is None:
@@ -73,7 +95,7 @@ for partition in ["train", "val"]: #, "test"]: # TODO: generating test data cons
     # Load Ego4D for mistake detection
     dataset = Ego4DMistakeDetectionDataset(data_split=partition,
                                            mismatch_augmentation=False,
-                                           debug_n_examples_per_class=20 if args.debug else None)
+                                           debug_n_examples_per_class=100 if args.debug else None)
     print(f"{len(dataset)} Ego4D mistake detection examples loaded from {partition} partition")
 
     prompts_fname = f"prompts_{partition}.json"
@@ -124,11 +146,30 @@ for partition in ["train", "val"]: #, "test"]: # TODO: generating test data cons
         this_prompt_ids = [f"{temperature}_{i}" for i in range(len(prompts)) if f"{temperature}_{i}" not in vqg_outputs]
         this_prompts = [prompts[i] for i in this_prompt_idxs]
 
-        vqg_outputs = run_vqg(lm=lm,
-                              inputs=this_prompts,
-                              input_ids=this_prompt_ids,
-                              save_path=os.path.join(this_results_dir, vqg_outputs_fname),
-                              vqg_outputs=vqg_outputs)
+        if args.n_workers == 1:
+            vqg_outputs = run_vqg(lm=lm,
+                                inputs=this_prompts,
+                                input_ids=this_prompt_ids,
+                                save_path=os.path.join(this_results_dir, vqg_outputs_fname),
+                                vqg_outputs=vqg_outputs)
+        else:
+            # Parallelize across GPUs
+            this_prompts_split = split_list_into_partitions(this_prompts, args.n_workers)
+            this_prompt_ids_split = split_list_into_partitions(this_prompt_ids, args.n_workers)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
+                partitions = list(executor.map(run_vqg, 
+                                               lms,
+                                               [this_prompts_split[i] for i in range(args.n_workers)],
+                                               [this_prompt_ids_split[i] for i in range(args.n_workers)],
+                                               [args.batch_size for _ in range(args.n_workers)],
+                                               [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(args.n_workers)],
+                                               [deepcopy(vqg_outputs) for _ in range(args.n_workers)]
+                ))
+        
+
+            # Combine all VQG outputs from workers
+            for p in partitions:
+                vqg_outputs |= p
 
     # Reorganize VQG outputs by procedure ID
     vqg_outputs_new = defaultdict(list)
