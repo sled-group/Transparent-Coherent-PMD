@@ -202,6 +202,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # Detect negation
                 if token.dep_ == "neg":
                     negation_present = True
+                    negation_token = token.text
 
                 # For subjects and objects, capture the noun considering compound modifiers
                 if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
@@ -209,12 +210,21 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 
                 # Identify spatial relations based on specific dependencies
                 if token.dep_ == "prep":
+                    pprint(token.head)
+                    pprint([child for child in token.children])
                     spatial_relation = True
+                    spatial_object_tokens = [get_compound_noun(child) for child in token.children]
 
             # Adjust the logic based on question type and negation
             # Spatial questions with negation direct attention away from the noun
             if spatial_relation:
                 look_at_noun = not negation_present
+                for token in spatial_object_tokens:
+                    question = question.replace(token, "image")
+
+                if negation_present:
+                    question = question.replace(negation_token, "").replace("  ", " ")
+
             # State questions focus on the noun, negation doesn't change the focus
             else:
                 look_at_noun = True
