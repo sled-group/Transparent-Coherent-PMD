@@ -282,5 +282,96 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
         return new_frames, new_questions
 
+class ContrastiveRegionFilter(AdaptiveVisualFilter):
+    """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
+    def __init__(self, **kwargs: dict[str, Any]):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def parse_questions_for_spatial_attention_filter(nlp: English, questions: list[str]) -> list[tuple[bool, str]]:
+        """
+        Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
+
+        :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_sm", disable=["lemmatizer"])`
+        :param questions: List of yes/no questions about an image (e.g., are there any cherry tomatoes in the bowl?).
+        :return: List of tuples, each of which include a bool and object string indicating regions of interest, and a rephrased form of a question without spatial dependencies. 
+        """
+        results = []
+        for question in questions:
+            doc = nlp(question)
+            target_noun = ""
+            negation_present = False
+            look_at_noun = True
+            spatial_relation = False
+
+            # Function to extract the compound noun if it exists
+            def get_compound_noun(token):
+                compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
+                return compound + " " + token.text if compound else token.text
+
+            for token in doc:
+                # Detect negation
+                if token.dep_ == "neg":
+                    negation_present = True
+                    negation_token = token.text
+
+                # For subjects and objects, capture the noun considering compound modifiers
+                if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
+                    target_noun = get_compound_noun(token)
+                
+                # Identify spatial relations based on specific dependencies
+                if token.dep_ == "prep":
+                    pprint(token.head)
+                    pprint([child for child in token.children])
+                    spatial_relation = True
+                    spatial_object_tokens = [get_compound_noun(child) for child in token.children]
+
+            # Adjust the logic based on question type and negation
+            # Spatial questions with negation direct attention away from the noun
+            if spatial_relation:
+                look_at_noun = not negation_present
+                for token in spatial_object_tokens:
+                    question = question.replace(token, "image")
+
+                if negation_present:
+                    question = question.replace(negation_token, "").replace("  ", " ")
+
+            # State questions focus on the noun, negation doesn't change the focus
+            else:
+                look_at_noun = True
+
+            results.append((look_at_noun, target_noun if target_noun != "" else None, question))
+        return results
+
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
+        # Parse spatial dependencies from questions
+        spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions)
+        detection_results, padded_images = self.run_detection([[noun] for _, noun in spatial_parse_results], frames)
+
+        new_frames = []
+        new_questions = []
+        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
+        for (look_at_noun, noun, rephrased_question), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
+            boxes = detection_result["boxes"]
+            bboxes = boxes.cpu().numpy() # (# boxes, 4)
+
+            if bboxes.shape[0] > 0:
+                frame_blackout = frame.copy()
+                pixels = frame_blackout.load()
+                for bbox in bboxes:
+                    box = [int(b) for b in bbox]
+                    for i in range(bbox[0], bbox[2]):
+                        for j in range(bbox[1],bbox[3]):
+                            pixels[i,j] = (0,0,0)
+            
+                new_frames.append(frame_blackout)
+            else:
+                # No detection - don't modify the image
+                new_frames.append(frame)
+
+            new_frames.append(rephrased_question)
+
+        return new_frames, new_questions
+
 class VisualFilterTypes(Enum):
     Spatial = "spatial"
