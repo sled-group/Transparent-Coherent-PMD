@@ -276,7 +276,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # No detection - don't modify the image
                 new_frames.append(frame)
 
-            new_frames.append(rephrased_question)
+            new_questions.append(rephrased_question)
 
         return new_frames, new_questions
 
