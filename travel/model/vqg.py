@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field, asdict
 import os
+from pprint import pprint
 import json
 import torch
 from tqdm import tqdm
@@ -291,7 +292,6 @@ def save_vqg_outputs(vqg_outputs: dict[Any, VQGOutputs], path: str):
     else:
         if not os.path.exists("/".join(path.split("/")[:-1])):
             os.makedirs("/".join(path.split("/")[:-1]))
-
     json.dump({k: v.to_dict() for k, v in vqg_outputs.items()}, 
               open(path, "w"),
               indent=4)    

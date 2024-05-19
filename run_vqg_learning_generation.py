@@ -16,7 +16,7 @@ from tqdm import tqdm
 from transformers import pipeline, BitsAndBytesConfig
 
 from travel.constants import RESULTS_DIR, HF_TOKEN
-from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, run_vqg
+from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs, run_vqg
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.utils import split_list_into_partitions
@@ -88,7 +88,7 @@ if args.resume_dir is None:
 else:
     # Resuming from previous run
     this_results_dir = args.resume_dir
-    assert os.path.exists(this_results_dir), "Specified cache directory must already exist!"    
+    assert os.path.exists(this_results_dir), "Specified resuming directory must already exist!"    
 
 # Run data generation for all partitions
 for partition in ["train", "val"]: #, "test"]: # TODO: generating test data consumes too much memory for some reason
@@ -130,46 +130,80 @@ for partition in ["train", "val"]: #, "test"]: # TODO: generating test data cons
         prompts = load_vqg_inputs(os.path.join(this_results_dir, prompts_fname))
         vqg_outputs = load_vqg_outputs(os.path.join(this_results_dir, vqg_outputs_fname))
 
+        print(f"{len(prompts)} prompts loaded for {partition} partition")
+
     # Run prompts through LM to generate visual questions
     # Try all temperatures
     for temperature in tqdm(args.temperatures, desc="temperatures"):
-        if temperature == 0.0:
-            lm.model.generation_config.temperature = None
-            lm.model.generation_config.do_sample = False
-            lm.model.generation_config.top_p = None
-        else:
-            lm.model.generation_config.temperature = temperature
-            lm.model.generation_config.do_sample = True
-            lm.model.generation_config.top_p = args.top_p
-
         this_prompt_idxs = [i for i in range(len(prompts)) if f"{temperature}_{i}" not in vqg_outputs]
         this_prompt_ids = [f"{temperature}_{i}" for i in range(len(prompts)) if f"{temperature}_{i}" not in vqg_outputs]
         this_prompts = [prompts[i] for i in this_prompt_idxs]
+        if len(this_prompts) == 0:
+            continue
 
         if args.n_workers == 1:
+            if temperature == 0.0:
+                lm.model.generation_config.temperature = None
+                lm.model.generation_config.do_sample = False
+                lm.model.generation_config.top_p = None
+            else:
+                lm.model.generation_config.temperature = temperature
+                lm.model.generation_config.do_sample = True
+                lm.model.generation_config.top_p = args.top_p
+
+            print("Running sequentially...")
             vqg_outputs = run_vqg(lm=lm,
-                                inputs=this_prompts,
-                                input_ids=this_prompt_ids,
-                                save_path=os.path.join(this_results_dir, vqg_outputs_fname),
-                                vqg_outputs=vqg_outputs)
+                                  inputs=this_prompts,
+                                  input_ids=this_prompt_ids,
+                                  save_path=os.path.join(this_results_dir, vqg_outputs_fname),
+                                  vqg_outputs=vqg_outputs)
         else:
-            # Parallelize across GPUs
+            for lm in lms:
+                if temperature == 0.0:
+                    lm.model.generation_config.temperature = None
+                    lm.model.generation_config.do_sample = False
+                    lm.model.generation_config.top_p = None
+                else:
+                    lm.model.generation_config.temperature = temperature
+                    lm.model.generation_config.do_sample = True
+                    lm.model.generation_config.top_p = args.top_p
+
+            # Split up remaining prompts and prompt IDs by GPU
             this_prompts_split = split_list_into_partitions(this_prompts, args.n_workers)
             this_prompt_ids_split = split_list_into_partitions(this_prompt_ids, args.n_workers)
+
+            # Then gather up any existing VQG outputs and exclude them from prompts and prompt IDs
+            all_worker_vqg_outputs = []
+            all_worker_prompt_ids = []
+            all_worker_prompts = []
+            for i in range(args.n_workers):
+                worker_vqg_outputs_path = os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json")
+                worker_vqg_outputs = load_vqg_outputs(worker_vqg_outputs_path)
+                worker_prompt_ids = [pid for pid in this_prompt_ids_split[i] if pid not in worker_vqg_outputs]
+                worker_prompts = [prompt for pid, prompt in zip(this_prompt_ids_split[i], this_prompts_split[i]) if pid not in worker_vqg_outputs]
+
+                all_worker_vqg_outputs.append(worker_vqg_outputs)
+                all_worker_prompt_ids.append(worker_prompt_ids)
+                all_worker_prompts.append(worker_prompts)
+
+            # Parallelize across GPUs
+            print(f"Parallelizing across {args.n_workers} GPUs...")
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
                 partitions = list(executor.map(run_vqg, 
                                                lms,
-                                               [this_prompts_split[i] for i in range(args.n_workers)],
-                                               [this_prompt_ids_split[i] for i in range(args.n_workers)],
+                                               all_worker_prompts,
+                                               all_worker_prompt_ids,
                                                [args.batch_size for _ in range(args.n_workers)],
                                                [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(args.n_workers)],
-                                               [deepcopy(vqg_outputs) for _ in range(args.n_workers)]
+                                               all_worker_vqg_outputs
                 ))
         
-
             # Combine all VQG outputs from workers
             for p in partitions:
                 vqg_outputs |= p
+
+            # Save combined VQG outputs for this temperature
+            save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
 
     # Reorganize VQG outputs by procedure ID
     vqg_outputs_new = defaultdict(list)
@@ -201,6 +235,5 @@ for partition in ["train", "val"]: #, "test"]: # TODO: generating test data cons
     # Save generated data, config, and args
     save_frameVQA_examples(frameVQA_examples, this_results_dir, partition)
 
-# TODO: move the below 2 steps to a method
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
