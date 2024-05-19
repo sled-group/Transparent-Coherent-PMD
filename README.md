@@ -62,7 +62,7 @@ Before running experiments, be sure to configure the directories in `config.yml`
 
 ### Configuration
 
-You can configure some arguments and hyperparameters in `config.yml`, including video frame sampling frequency and caching frequency.
+Make a copy of `config_sample.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the cache directories).
 
 ### SuccessVQA Baseline
 
