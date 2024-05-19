@@ -210,8 +210,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 
                 # Identify spatial relations based on specific dependencies
                 if token.dep_ == "prep":
-                    pprint(token.head)
-                    pprint([child for child in token.children])
                     spatial_relation = True
                     spatial_object_tokens = [get_compound_noun(child) for child in token.children]
 
@@ -235,7 +233,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
         # Parse spatial dependencies from questions
         spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions)
-        detection_results, padded_images = self.run_detection([[noun] for _, noun in spatial_parse_results], frames)
+        detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], frames)
 
         new_frames = []
         new_questions = []
@@ -278,7 +276,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # No detection - don't modify the image
                 new_frames.append(frame)
 
-            new_frames.append(rephrased_question)
+            new_questions.append(rephrased_question)
 
         return new_frames, new_questions
 
