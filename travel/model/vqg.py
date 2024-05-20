@@ -219,7 +219,7 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
                                         max_new_tokens=128, 
                                         return_full_text=False, 
                                         truncation="do_not_truncate")),
-                            desc="running VQG" if worker_index is None else f"running VQG ({worker_index})",
+                            desc="running VQG" if worker_index is None else f"({worker_index}) running VQG",
                             total=len(inputs)):
 
             procedure_id = int(inp.procedure_id)
@@ -255,7 +255,7 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
                 save_vqg_outputs(vqg_outputs, save_path)
 
             prompt_idx += 1
-            
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 

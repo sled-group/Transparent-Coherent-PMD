@@ -10,6 +10,9 @@ import itertools
 import os
 from peft import get_peft_model, LoraConfig, TaskType
 import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel
+from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from trl import DPOTrainer
@@ -20,8 +23,10 @@ from travel.data.vqg_learning import load_vqg_training_examples
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_directory", type=str, required=True, help="Directory where desired vqg_training_examples.json is stored.")
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
-parser.add_argument("--eval_batch_size", type=int, default=2, help="Batch size for evaluation.")
+parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
+parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
+parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
+parser.add_argument("--local-rank", type=int, default=None, help="Local rank for DistributedDataParallel in PyTorch.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
@@ -30,6 +35,11 @@ data = {
     "train": load_vqg_training_examples(args.data_directory, "train"),
     "val": load_vqg_training_examples(args.data_directory, "val")
 }
+
+# Initialize the process group
+is_parallel = torch.cuda.device_count() > 1 and args.local_rank is not None
+if is_parallel:
+    dist.init_process_group(backend='nccl')
 
 # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
 
@@ -77,6 +87,7 @@ for partition in data:
 
 # Set up LM for training
 print("Loading LM...")
+torch.cuda.set_device(f"cuda:{args.local_rank if is_parallel and args.local_rank is not None else 0}")
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     llm_int8_threshold=6.0,
@@ -90,6 +101,7 @@ tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "left"
 model = AutoModelForCausalLM.from_pretrained(args.lm_name,
                                              quantization_config=bnb_config)
+
 # TODO: is there a better option for PEFT on this model?
 peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text classification
                          inference_mode=False,        # enable training - for inference, we can pre-compute the weight update matrix
@@ -98,6 +110,12 @@ peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text clas
                          lora_dropout=0.1,            # dropout regularization on LoRA weights
                          bias="all")                  # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 model = get_peft_model(model, peft_config)
+
+# Set up data parallelism if we have access to multiple GPUs
+if is_parallel:
+    model = DistributedDataParallel(model, 
+                                    device_ids=[args.local_rank],
+                                    find_unused_parameters=False)
 
 # Set up output directory, training args, and wandb
 timestamp = datetime.datetime.now()
@@ -109,7 +127,10 @@ wandb_run_name = f"{output_dir_name}_{'_'.join(args.data_directory.split('/')[-2
 training_args = TrainingArguments(output_dir=this_results_dir,
                                   per_device_train_batch_size=args.train_batch_size,
                                   per_device_eval_batch_size=args.eval_batch_size,
+                                  learning_rate=args.learning_rate,
                                   num_train_epochs=10,
+                                  fp16=True,
+                                  gradient_accumulation_steps=1 if args.debug else 10,
                                   save_strategy="epoch",
                                   save_only_model=False,
                                   remove_unused_columns=False,
@@ -117,16 +138,23 @@ training_args = TrainingArguments(output_dir=this_results_dir,
                                   evaluation_strategy="epoch",
                                   report_to="wandb",
                                   logging_strategy="steps",
-                                  logging_steps=1,
+                                  logging_steps=1 if args.debug else 10,
                                   run_name=wandb_run_name)
+
 dpo_trainer = DPOTrainer(
-    model,
+    model.module if is_parallel else model,
     args=training_args,
     beta=0.1,
     max_prompt_length=2 * max([len(p.split()) for p in prompt]),
     max_length=2 * max([len(g.split()) for g in chosen + rejected]),
     train_dataset=datasets["train"],
-    eval_dataset=datasets["val"],
+    eval_dataset=datasets["val"],    
     tokenizer=tokenizer,
 )
+
+print(f"({args.local_rank}) Starting model training...")
 dpo_trainer.train()
+
+# Clean up
+if is_parallel:
+    dist.destroy_process_group()
