@@ -93,9 +93,9 @@ for partition in args.generate_partitions:
                                            debug_n_examples_per_class=100 if args.debug else None)
     print(f"{len(dataset)} Ego4D mistake detection examples loaded from {partition} partition")
 
+    # Generate or load prompts
     prompts_fname = f"prompts_{partition}.json"
-    vqg_outputs_fname = f"VQG_cache_{partition}.json"
-    if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, prompts_fname)) or not os.path.exists(os.path.join(this_results_dir, vqg_outputs_fname)):
+    if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, prompts_fname)):
         # Starting from scratch
 
         # Generate prompts - one per example
@@ -117,15 +117,19 @@ for partition in args.generate_partitions:
 
         # Save prompts
         save_vqg_inputs(prompts, os.path.join(this_results_dir, prompts_fname))
+    else: 
+        # Load prompts
+        prompts = load_vqg_inputs(os.path.join(this_results_dir, prompts_fname))
+        print(f"{len(prompts)} prompts loaded for {partition} partition")
 
+    # Load combined VQG outputs if we have any
+    vqg_outputs_fname = f"VQG_cache_{partition}.json"
+    if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, vqg_outputs_fname)):
         # Initialize empty dictionary of VQG outputs
         vqg_outputs = {}
-    else: 
-        # Load prompts and already generated VQG outputs from previous run
-        prompts = load_vqg_inputs(os.path.join(this_results_dir, prompts_fname))
+    else:
+        # Load already generated VQG outputs from previous run
         vqg_outputs = load_vqg_outputs(os.path.join(this_results_dir, vqg_outputs_fname))
-
-        print(f"{len(prompts)} prompts loaded for {partition} partition")
         print(f"{len(vqg_outputs)} pre-generated VQG outputs loaded for {partition} partition")
 
     # Run prompts through LM to generate visual questions
@@ -179,22 +183,35 @@ for partition in args.generate_partitions:
                 worker_prompts = [prompt for pid, prompt in zip(this_prompt_ids_split[i], this_prompts_split[i]) if pid not in worker_vqg_outputs]
 
                 all_worker_vqg_outputs.append(worker_vqg_outputs)
-                all_worker_prompt_ids.append(worker_prompt_ids)
-                all_worker_prompts.append(worker_prompts)
+                all_worker_prompt_ids += worker_prompt_ids
+                all_worker_prompts += worker_prompts
+
+            # Combine VQG outputs we have so far and save
+            for vqgo in all_worker_vqg_outputs:
+                vqg_outputs |= vqgo
+            save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
+
+            # Redistribute prompts across workers in case one GPU ran slower than others in the previous run
+            assert len(all_worker_prompt_ids) == len(all_worker_prompts), "Size issue with collecting prompts and prompt IDs from earlier run workers!"
+            all_worker_prompts = split_list_into_partitions(all_worker_prompts, args.n_workers)
+            all_worker_prompt_ids = split_list_into_partitions(all_worker_prompt_ids, args.n_workers)
 
             print(f"Loaded prompts split across {args.n_workers} GPUs: " + ", ".join([str(len(p)) for p in all_worker_prompts]))
 
-            # Parallelize across GPUs
-            print(f"Parallelizing VQG across {args.n_workers} GPUs...")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
-                partitions = list(executor.map(run_vqg, 
-                                               lms,
-                                               all_worker_prompts,
-                                               all_worker_prompt_ids,
-                                               [args.batch_size for _ in range(args.n_workers)],
-                                               [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(args.n_workers)],
-                                               all_worker_vqg_outputs
-                ))
+            if not all(len(p) == 0 for p in all_worker_prompts):
+                # Parallelize across GPUs
+                print(f"Parallelizing VQG across {args.n_workers} GPUs...")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
+                    partitions = list(executor.map(run_vqg, 
+                                                lms,
+                                                all_worker_prompts,
+                                                all_worker_prompt_ids,
+                                                [args.batch_size for _ in range(args.n_workers)],
+                                                [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(args.n_workers)],
+                                                [{} for _ in range(args.n_workers)]
+                    ))
+            else:
+                partitions = worker_vqg_outputs
         
             # Combine all VQG outputs from workers
             for p in partitions:

@@ -13,12 +13,13 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from trl import DPOTrainer
+import wandb
 
 from travel.data.vqg_learning import load_vqg_training_examples
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_directory", type=str, required=True, help="Directory where desired vqg_training_examples.json is stored.")
-parser.add_argument("--lm_name", type=str, default="/nfs/turbo/coe-chaijy-unreplicated/pre-trained-weights/Llama-3-hf/models--meta-llama--Meta-Llama-3-8B/snapshots/b6887ce03ea47d068bf8502ba6ed27f8c5c12a6b", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
+parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
 # parser.add_argument("--eval_batch_size", type=int, default=1, help="Batch size for evaluation.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -98,15 +99,22 @@ peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text clas
                          bias="all")                  # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 model = get_peft_model(model, peft_config)
 
+# Set up output directory and wandb name
 timestamp = datetime.datetime.now()
 output_dir_name = f"DPO_outputs_{timestamp.strftime('%Y%m%d%H%M%S')}"
-training_args = TrainingArguments(output_dir=os.path.join(args.data_directory, output_dir_name),
+this_results_dir = os.path.join(args.data_directory, output_dir_name)
+wandb_run_name = f"{output_dir_name}_{'_'.join(args.data_directory.split('/')[-2:])}"
+wandb.run.name = wandb_run_name
+
+training_args = TrainingArguments(output_dir=this_results_dir,
                                   per_device_train_batch_size=args.train_batch_size,
                                   num_train_epochs=10,
                                   save_strategy="epoch",
                                   save_only_model=True,
                                   remove_unused_columns=False,
-                                  report_to="wandb")
+                                  report_to="wandb",
+                                  do_eval=True,
+                                  evaluation_strategy="epoch")
 dpo_trainer = DPOTrainer(
     model,
     args=training_args,
