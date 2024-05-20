@@ -24,6 +24,7 @@ from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, save_frame
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
+parser.add_argument("--generate_partitions", nargs='+', type=str, default=["train", "val"], help="List of partitions to generate data for.")
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument('--temperatures', nargs='+', type=float, default=[0.0, 0.5, 1.0])
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
@@ -85,7 +86,7 @@ else:
     assert os.path.exists(this_results_dir), "Specified resuming directory must already exist!"    
 
 # Run data generation for all partitions
-for partition in ["train", "val"]: #, "test"]: # TODO: generating test data consumes too much memory for some reason
+for partition in args.generate_partitions:
     # Load Ego4D for mistake detection
     dataset = Ego4DMistakeDetectionDataset(data_split=partition,
                                            mismatch_augmentation=False,

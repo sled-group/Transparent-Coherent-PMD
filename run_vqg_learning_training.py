@@ -105,7 +105,8 @@ training_args = TrainingArguments(output_dir=os.path.join(args.data_directory, o
                                   num_train_epochs=10,
                                   save_strategy="epoch",
                                   save_only_model=True,
-                                  remove_unused_columns=False)
+                                  remove_unused_columns=False,
+                                  report_to="wandb")
 dpo_trainer = DPOTrainer(
     model,
     args=training_args,
