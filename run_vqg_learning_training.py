@@ -123,7 +123,7 @@ output_dir_name = f"DPO_{timestamp.strftime('%Y%m%d%H%M%S')}"
 if args.debug:
     output_dir_name += "_debug"
 this_results_dir = os.path.join(args.data_directory, output_dir_name)
-wandb_run_name = f"{output_dir_name}_{'_'.join(args.data_directory.split('/')[-2:])}"
+wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.data_directory.split('/')[-2:])}"
 training_args = TrainingArguments(output_dir=this_results_dir,
                                   per_device_train_batch_size=args.train_batch_size,
                                   per_device_eval_batch_size=args.eval_batch_size,
