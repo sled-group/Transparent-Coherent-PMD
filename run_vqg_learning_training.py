@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--data_directory", type=str, required=True, help="Directory where desired vqg_training_examples.json is stored.")
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
-# parser.add_argument("--eval_batch_size", type=int, default=1, help="Batch size for evaluation.")
+parser.add_argument("--eval_batch_size", type=int, default=2, help="Batch size for evaluation.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
@@ -99,22 +99,26 @@ peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text clas
                          bias="all")                  # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 model = get_peft_model(model, peft_config)
 
-# Set up output directory and wandb name
+# Set up output directory, training args, and wandb
 timestamp = datetime.datetime.now()
-output_dir_name = f"DPO_outputs_{timestamp.strftime('%Y%m%d%H%M%S')}"
+output_dir_name = f"DPO_{timestamp.strftime('%Y%m%d%H%M%S')}"
+if args.debug:
+    output_dir_name += "_debug"
 this_results_dir = os.path.join(args.data_directory, output_dir_name)
 wandb_run_name = f"{output_dir_name}_{'_'.join(args.data_directory.split('/')[-2:])}"
-wandb.run.name = wandb_run_name
-
 training_args = TrainingArguments(output_dir=this_results_dir,
                                   per_device_train_batch_size=args.train_batch_size,
+                                  per_device_eval_batch_size=args.eval_batch_size,
                                   num_train_epochs=10,
                                   save_strategy="epoch",
-                                  save_only_model=True,
+                                  save_only_model=False,
                                   remove_unused_columns=False,
-                                  report_to="wandb",
                                   do_eval=True,
-                                  evaluation_strategy="epoch")
+                                  evaluation_strategy="epoch",
+                                  report_to="wandb",
+                                  logging_strategy="steps",
+                                  logging_steps=1,
+                                  run_name=wandb_run_name)
 dpo_trainer = DPOTrainer(
     model,
     args=training_args,

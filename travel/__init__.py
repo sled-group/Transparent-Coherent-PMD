@@ -18,7 +18,12 @@ def set_hf_cache():
     """Sets Hugging Face cache directory as configured in config.yml. This must be called before importing transformers anywhere else."""
     os.environ['HF_HOME'] = MODEL_CACHE_DIR
 
+def configure_wandb():
+    """Sets Weights & Biases project name."""
+    os.environ["WANDB_PROJECT"] = "TRAVEl"
+
 def init_travel():
     """Call this method at the beginning of any script to set random seedsd and redirect the Hugging Face cache."""
     set_random_seed()
     set_hf_cache()
+    configure_wandb()

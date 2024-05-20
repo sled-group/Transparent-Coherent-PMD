@@ -28,7 +28,7 @@ parser.add_argument("--generate_partitions", nargs='+', type=str, default=["trai
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument('--temperatures', nargs='+', type=float, default=[0.0, 0.5, 1.0])
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
-parser.add_argument("--batch_size", type=int, default=48, help="Batch size for VQG.")
+parser.add_argument("--batch_size", type=int, default=40, help="Batch size for VQG.")
 parser.add_argument("--n_workers", type=int, default=1, choices=range(1, torch.cuda.device_count() + 1), help="Number of workers for multi-GPU parallelism. Should not exceed number of available GPUs.")
 parser.add_argument("--output_dir", type=str, help="Directory name to output data generation results. If not provided, one will be generated.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
@@ -208,7 +208,8 @@ for partition in args.generate_partitions:
                                                 all_worker_prompt_ids,
                                                 [args.batch_size for _ in range(args.n_workers)],
                                                 [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(args.n_workers)],
-                                                [{} for _ in range(args.n_workers)]
+                                                [{} for _ in range(args.n_workers)],
+                                                list(range(args.n_workers))
                     ))
             else:
                 partitions = worker_vqg_outputs
