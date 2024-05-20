@@ -100,6 +100,14 @@ Add `--visual_filter_mode spatial` to the second command if you want to use the 
 
 #### Training VQG from Generated Data
 
-TBA
+With only 1 GPU:
+```
+python run_vqg_learning_training.py --data_directory <path/to/generated/training/data/directory>
+```
+
+With multiple GPUs:
+```
+python -m torch.distributed.launch --nproc_per_node=2 run_vqg_learning_training.py --data_directory <path/to/generated/training/data/directory>
+```
 
 Evaluate the trained pipeline with `run_vqa_vqg2vqa.py` following the above.
