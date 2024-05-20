@@ -98,7 +98,6 @@ peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text clas
                          bias="all")                  # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 model = get_peft_model(model, peft_config)
 
-# TODO: need to better understand how this works
 timestamp = datetime.datetime.now()
 output_dir_name = f"DPO_outputs_{timestamp.strftime('%Y%m%d%H%M%S')}"
 training_args = TrainingArguments(output_dir=os.path.join(args.data_directory, output_dir_name),

@@ -56,9 +56,6 @@ if args.n_workers == 1:
                 model_kwargs=model_kwargs)
     lm.tokenizer.padding_side = "left"
     lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
-
-    print("Generation config:")
-    print(lm.model.generation_config)
 else:
     print(f"Setting up {args.n_workers} LMs...")
     # Parallelize across multiple GPUs
@@ -72,9 +69,6 @@ else:
         lm.tokenizer.padding_side = "left"
         lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
         lms.append(lm)
-
-    print("Generation config:")
-    print(lm.model.generation_config)    
 
 # Set results directory
 if args.resume_dir is None:
@@ -131,6 +125,7 @@ for partition in ["train", "val"]: #, "test"]: # TODO: generating test data cons
         vqg_outputs = load_vqg_outputs(os.path.join(this_results_dir, vqg_outputs_fname))
 
         print(f"{len(prompts)} prompts loaded for {partition} partition")
+        print(f"{len(vqg_outputs)} pre-generated VQG outputs loaded for {partition} partition")
 
     # Run prompts through LM to generate visual questions
     # Try all temperatures
@@ -151,7 +146,7 @@ for partition in ["train", "val"]: #, "test"]: # TODO: generating test data cons
                 lm.model.generation_config.do_sample = True
                 lm.model.generation_config.top_p = args.top_p
 
-            print("Running sequentially...")
+            print("Running VQG sequentially...")
             vqg_outputs = run_vqg(lm=lm,
                                   inputs=this_prompts,
                                   input_ids=this_prompt_ids,
@@ -186,8 +181,10 @@ for partition in ["train", "val"]: #, "test"]: # TODO: generating test data cons
                 all_worker_prompt_ids.append(worker_prompt_ids)
                 all_worker_prompts.append(worker_prompts)
 
+            print(f"Loaded prompts split across {args.n_workers} GPUs: " + ", ".join([str(len(p)) for p in all_worker_prompts]))
+
             # Parallelize across GPUs
-            print(f"Parallelizing across {args.n_workers} GPUs...")
+            print(f"Parallelizing VQG across {args.n_workers} GPUs...")
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
                 partitions = list(executor.map(run_vqg, 
                                                lms,
