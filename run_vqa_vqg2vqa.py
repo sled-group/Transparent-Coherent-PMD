@@ -127,7 +127,7 @@ for eval_partition in args.eval_partitions:
         example_vqa_outputs = []
 
         parallel_idx = 0
-        for frame in example.frames:
+        for _ in example.frames:
             frame_vqa_outputs = []
             for question, answer in zip(vqg_outputs[step_id].questions, vqg_outputs[step_id].answers):
                 output_index, frame, prompt, answer = outputs_by_id[example.example_id][parallel_idx]
@@ -155,7 +155,7 @@ for eval_partition in args.eval_partitions:
     pprint(metrics[0.5])
 
     # Compile preds per mistake detection example
-    preds = compile_mistake_detection_preds(eval_dataset, vqa_outputs, mistake_detection_preds)
+    preds = compile_mistake_detection_preds(eval_dataset, vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
 
     # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
     metrics_filename = f"metrics_{args.mistake_detection_strategy}_{eval_partition}.json"
