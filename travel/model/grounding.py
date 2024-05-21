@@ -178,7 +178,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         super().__init__(**kwargs)
 
     @staticmethod
-    def parse_questions_for_spatial_attention_filter(nlp: English, questions: list[str], rephrase_questions: bool=True) -> list[tuple[bool, str]]:
+    def parse_questions_for_spatial_attention_filter(nlp: English, questions: list[str], rephrase_questions: bool=True) -> list[tuple[bool, Optional[str], str]]:
         """
         Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
 
