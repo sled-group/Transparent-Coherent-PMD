@@ -51,8 +51,13 @@ vlm.language_model.generation_config.do_sample = False
 
 if args.visual_filter_mode is not None:
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
-        visual_filter = SpatialVisualFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+        visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
         nlp = spacy.load('en_core_web_sm')
+    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
+        visual_filter = SpatialVisualFilter(rephrase_questions=False, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+        nlp = spacy.load('en_core_web_sm')
+    else:
+        raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with VQG2VQA!")
 
 prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(vlm)]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)

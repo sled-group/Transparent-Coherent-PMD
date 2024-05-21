@@ -40,7 +40,10 @@ class FrameVQAMistakeDetectionScorer:
 
         if visual_filter_type == VisualFilterTypes.Spatial:
             # Load spatial filter onto separate GPU if available
-            self.visual_filter = SpatialVisualFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+        elif visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
+            # Load spatial filter onto separate GPU if available
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
         else:
             self.visual_filter = None
         self.visual_filter_type = visual_filter_type
