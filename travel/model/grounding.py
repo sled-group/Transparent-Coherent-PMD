@@ -173,11 +173,12 @@ class AdaptiveVisualFilter:
 
 class SpatialVisualFilter(AdaptiveVisualFilter):
     """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
-    def __init__(self, **kwargs: dict[str, Any]):
+    def __init__(self, rephrase_questions: bool=True, **kwargs: dict[str, Any]):
+        self.rephrase_questions = rephrase_questions
         super().__init__(**kwargs)
 
     @staticmethod
-    def parse_questions_for_spatial_attention_filter(nlp: English, questions: list[str]) -> list[tuple[bool, str]]:
+    def parse_questions_for_spatial_attention_filter(nlp: English, questions: list[str], rephrase_questions: bool=True) -> list[tuple[bool, Optional[str], str]]:
         """
         Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
 
@@ -217,11 +218,14 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             # Spatial questions with negation direct attention away from the noun
             if spatial_relation:
                 look_at_noun = not negation_present
-                for token in spatial_object_tokens:
-                    question = question.replace(token, "image")
 
-                if negation_present:
-                    question = question.replace(negation_token, "").replace("  ", " ")
+                # Rephrase question if needed
+                if rephrase_questions:
+                    for token in spatial_object_tokens:
+                        question = question.replace(token, "image")
+
+                    if negation_present:
+                        question = question.replace(negation_token, "").replace("  ", " ")
 
             # State questions focus on the noun, negation doesn't change the focus
             else:
@@ -232,13 +236,13 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
         # Parse spatial dependencies from questions
-        spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions)
+        spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions, rephrase_questions=self.rephrase_questions)
         detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], frames)
 
         new_frames = []
         new_questions = []
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
-        for (look_at_noun, noun, rephrased_question), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
+        for (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
             boxes = detection_result["boxes"]
             bboxes = boxes.cpu().numpy() # (# boxes, 4)
 
@@ -276,9 +280,10 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # No detection - don't modify the image
                 new_frames.append(frame)
 
-            new_questions.append(rephrased_question)
+            new_questions.append(new_question)
 
         return new_frames, new_questions
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial"
+    Spatial_NoRephrase = "spatial_norephrase"

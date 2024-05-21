@@ -12,24 +12,24 @@ git clone git@github.com:shanestorks/TRAVEl.git
 
 **Reconfigure `cache.model_cache_dir` in `config.yml` to point to a directory you own. If you're using Great Lakes, you should be able to replace `sstorks` with your own uniqname to use `scratch` storage.**
 
-In some environments, you may have issues getting Poetry to use the correct Python interpreter. In this case, you can specify which one to use by:
-
-```
-poetry env use /path/to/desired/python
-```
-
-If using Great Lakes, you can create a `conda` environment with Python 3.10 and activate it before running the above:
-
-```
-module load python3.10-anaconda/2023.03
-conda create --name python310 python=3.10.9
-poetry env use ~/.conda/envs/python310/bin/python
-```
-
 Install [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) if needed, and ensure a CUDA installation is available which is compatible with both `bitsandbytes` and `torch`. On Great Lakes, you will need to load an appropriate module before installing the dependencies. For example:
 
 ```
 module load cuda/11.7.1
+```
+
+In some environments, you may have issues getting Poetry to use the correct Python interpreter (also during installation of Poetry itself). You can consider creating a `conda` environment before installing Poetry and dependencies for this project:
+
+```
+module load python3.10-anaconda/2023.03
+conda create --name python310 python=3.10.9
+conda activate python310
+```
+
+Before running any other `poetry` commands, run the following:
+
+```
+poetry env use ~/.conda/envs/python310/bin/python
 ```
 
 Then set up the virtual environment:

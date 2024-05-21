@@ -129,7 +129,7 @@ for eval_partition in args.eval_partitions:
     pprint(metrics[0.5])
 
     # Compile preds per mistake detection example
-    preds = compile_mistake_detection_preds(eval_dataset, vqa_outputs, mistake_detection_preds)
+    preds = compile_mistake_detection_preds(eval_dataset, vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
 
     # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
     metrics_filename = f"metrics_{args.mistake_detection_strategy}_{eval_partition}.json"
