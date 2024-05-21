@@ -2,17 +2,14 @@ from dataclasses import dataclass, asdict
 from dataclasses_json import dataclass_json
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
 from pprint import pprint
 from scipy.stats import norm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-import torch
 from tqdm import tqdm
-from transformers import AutoProcessor, AutoModelForVision2Seq
-from typing import Union, Any
+from typing import Union, Any, Optional
 import yaml
 
-from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
+from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils import generate_float_series
 from travel.model.vqa import VQAOutputs, VQAResponse
 

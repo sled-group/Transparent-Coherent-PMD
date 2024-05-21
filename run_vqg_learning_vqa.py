@@ -16,7 +16,7 @@ from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired frameVQA_examples.json is stored.")
-parser.add_argument("--vlm_name", type=str, default="/nfs/turbo/coe-chaijy-unreplicated/pre-trained-weights/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--generate_partitions", nargs='+', type=str, default=["train", "val"], help="List of partitions to generate data for.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--batch_size", type=int, default=10, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
