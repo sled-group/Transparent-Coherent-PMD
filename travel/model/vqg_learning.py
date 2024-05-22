@@ -35,9 +35,6 @@ class FrameVQAMistakeDetectionScorer:
         self.vlm.language_model.generation_config.do_sample = False
         self.processor.tokenizer.padding_side = "left"
 
-        # if torch.cuda.device_count() >= 2:
-        #     self.vlm = self.vlm.to(torch.cuda.device(0))
-
         if visual_filter_type == VisualFilterTypes.Spatial:
             # Load spatial filter onto separate GPU if available
             self.visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)

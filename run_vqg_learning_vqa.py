@@ -3,12 +3,14 @@ from travel import init_travel
 init_travel()
 
 import argparse
-import datetime
 import json
 import os
-import pickle
+from PIL import Image
 import shutil
+from tqdm import tqdm
 
+from travel.constants import IMAGES_CHUNK_SIZE
+from travel.data.utils import split_list_into_partitions
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples
 from travel.model.grounding import VisualFilterTypes
 from travel.model.vqa import save_vqa_outputs
@@ -25,10 +27,12 @@ args = parser.parse_args()
 
 for partition in args.generate_partitions:
     # Load outputs
-    frameVQA_examples = load_frameVQA_examples(args.vqg_directory, partition)
+    print("Loading data...")
+    frameVQA_examples = load_frameVQA_examples(args.vqg_directory, partition, load_frames=False)
     if "_debug" in args.vqg_directory:
         frameVQA_examples = frameVQA_examples[:20]
 
+    print("Setting up mistake detection scorer...")
     scorer = FrameVQAMistakeDetectionScorer(args.vlm_name,
                                             visual_filter_type=VisualFilterTypes(args.visual_filter_mode) if args.visual_filter_mode is not None else None,)
 
@@ -41,10 +45,34 @@ for partition in args.generate_partitions:
         this_results_dir = args.resume_dir
     cache_path = os.path.join(this_results_dir, f"VQA_cache_{partition}.pt")
 
-    vqg_training_examples, vqa_outputs = scorer(frameVQA_examples,
-                                                return_vqa_outputs=True,
-                                                batch_size=args.batch_size,
-                                                cache_path=cache_path)
+    if len(frameVQA_examples) <= IMAGES_CHUNK_SIZE:
+        print("Running VQA scoring...")
+        vqg_training_examples, vqa_outputs = scorer(frameVQA_examples,
+                                                    return_vqa_outputs=True,
+                                                    batch_size=args.batch_size,
+                                                    cache_path=cache_path)
+    else:
+        vqg_training_examples = []
+        vqa_outputs = []
+        frameVQA_examples_split = split_list_into_partitions(frameVQA_examples, len(frameVQA_examples) // IMAGES_CHUNK_SIZE)
+        print(f"Running VQA scoring in {len(frameVQA_examples_split)} chunks: " + ", ".join([str(len(s)) for s in frameVQA_examples_split]))
+        for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_split, desc="chunks")):
+            # Load frames for this chunk
+            for example in frameVQA_examples_chunk:
+                example.uncache_frame()
+            
+            # Run VQA on this chunk
+            this_vqg_training_examples, this_vqa_outputs = scorer(frameVQA_examples_chunk,
+                                                                  return_vqa_outputs=True,
+                                                                  batch_size=args.batch_size,
+                                                                  cache_path=cache_path.replace(".pt", f"{chunk_idx}.pt"))
+            # Cache frames in VQAOutputs to conserve memory
+            for outputs in this_vqa_outputs:
+                for output in outputs:
+                    if type(output.frame) == Image.Image:
+                        output.cache_frame(this_results_dir)
+            vqg_training_examples += this_vqg_training_examples
+            vqa_outputs += this_vqa_outputs
 
     save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, partition)
     save_vqg_training_examples(vqg_training_examples, this_results_dir, partition)

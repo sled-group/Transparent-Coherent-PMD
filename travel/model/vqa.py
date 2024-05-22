@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, PreTrainedModel
 from transformers.processing_utils import ProcessorMixin
-from typing import Optional
+from typing import Optional, Union
 
 from travel.constants import CACHE_FREQUENCY
 from travel.data.mistake_detection import MistakeDetectionTasks
@@ -55,7 +55,7 @@ class VQAOutputs:
     task_name: MistakeDetectionTasks
     example_id: str
     procedure_id: int
-    frame: Image
+    frame: Union[Image.Image, str]
     prompt: str
     expected_answer: VQAResponse
     response_token_ids: dict[VQAResponse, int]
@@ -84,17 +84,31 @@ class VQAOutputs:
         for response in return_dict['answer_probs']:
             return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
         
-        if image_base_path is not None:
+        if image_base_path is not None and type(self.frame) == Image.Image:
             image_base_path = os.path.join(image_base_path, "frames")
             if not os.path.exists(image_base_path):
                 os.makedirs(image_base_path)
-            image_path = os.path.join(image_base_path, f"frame_{self.example_id.replace('/', '-')}.jpg")
-            self.frame.save(image_path)
-            return_dict["frame"] = image_path
-            # self.frame.close()
+            self.cache_frame(image_base_path)
+            return_dict["frame"] = self.frame
 
         return return_dict
     
+    def cache_frame(self, image_base_path: str):
+        assert type(self.frame) == Image.Image, "Can only cache PIL images!"
+
+        if not os.path.exists(os.path.join(image_base_path, "frames")):
+            os.makedirs(os.path.join(image_base_path, "frames"))
+
+        frame_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}.jpg")
+
+        self.frame.save(frame_path)
+
+        self.frame = frame_path
+
+    def uncache_frame(self):
+        assert type(self.frame) == str and self.frame.endswith(".jpg"), "Can only uncache string .jpg filenames!"
+        self.frame = Image.open(self.frame)
+
 def run_vqa(vlm: PreTrainedModel, 
             processor: ProcessorMixin,
             prompts: list[str],

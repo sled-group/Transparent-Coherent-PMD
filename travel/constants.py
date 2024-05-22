@@ -10,6 +10,7 @@ CACHE_FREQUENCY = int(config["cache"]["cache_frequency"])
 RESULTS_DIR = config["cache"]["results_dir"] # Directory to cache saved mistake detection results that should not be deleted
 HF_TOKEN = config["hf_token"]
 RANDOM_SEED = int(config["random_seed"])
+IMAGES_CHUNK_SIZE = int(config["data"]["images_chunk_size"]) # When processing large numbers of images, this is the maximum number of images to keep in memory at once
 
 for dir in DATA_CACHE_DIR, MODEL_CACHE_DIR, RESULTS_DIR:
     if not os.path.exists(dir):
