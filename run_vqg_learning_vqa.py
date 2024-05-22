@@ -4,6 +4,7 @@ init_travel()
 
 import argparse
 import concurrent.futures
+import datetime
 import json
 import os
 from PIL import Image

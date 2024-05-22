@@ -171,7 +171,6 @@ MISTAKE_DETECTION_STRATEGIES = {
     "heuristic": HeuristicMistakeDetectionEvaluator
 }
 
-# TODO: accept multiple sets of metrics as input for comparison; also add a legend where each curve has a name (e.g., SuccessVQA)
 def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_path: str):
     """
     Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`. A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point to set the threshold in the bottom left corner.
@@ -221,6 +220,67 @@ def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_
     plt.ylim([norm.ppf(0.01), norm.ppf(0.99)])
 
     plt.savefig(save_path)
+
+def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]], curve_names: list[str], save_paths: list[str]):
+    """
+    Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`. A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point to set the threshold in the bottom left corner.
+
+    :param metrics: List of `metrics` objects returned by `evaluate_mistake_detection()`.
+    :param curve_names: List of names of the approach associated with each passed entry of `metrics`, e.g., ["Random", "SuccessVQA", "VQG2VQA"].
+    :param save_paths: Paths to save copies of the PDF of the DET curve.
+    """
+    assert len(metrics) == len(curve_names), "Expected same number of metrics and curve names!"
+
+    colors = plt.get_cmap('tab10', len(metrics))
+    plt.figure(figsize=(8, 6))
+    for i, (metric, name) in enumerate(zip(metrics, curve_names)):
+        # Some of the keys in the metrics file may not be floats (for thresholds), e.g., a "best_metrics" key is also saved here
+        metric = {k: v for k, v in metric.items() if isinstance(k, float)}
+
+        # Gather FPR and FNR from metrics
+        false_positive_rates = [round(1.0 - metric[threshold]['false_positive_rate'], 3) for threshold in metric]
+        false_negative_rates = [round(1.0 - metric[threshold]['false_negative_rate'], 3) for threshold in metric]
+
+        # Ensure input rates are within the valid range for norm.ppf
+        false_positive_rates = np.clip(false_positive_rates, 0.0001, 0.9999)
+        false_negative_rates = np.clip(false_negative_rates, 0.0001, 0.9999)
+
+        # Convert FPR and FNR to normal deviate scale
+        x = norm.ppf(false_positive_rates)
+        y = norm.ppf(false_negative_rates)
+        
+        # Ensure all plotted values are finite by filtering out any non-finite values
+        finite_indices = np.isfinite(x) & np.isfinite(y)
+        x = x[finite_indices]
+        y = y[finite_indices]
+
+        # Plot DET curve
+        plt.plot(x, y, marker='o', linestyle='-', color=colors(i), label=name)
+
+    # Label axes with normal deviate scale
+    plt.xlabel('False Positive Rate (Normal Deviate Scale)')
+    plt.ylabel('False Negative Rate (Normal Deviate Scale)')
+    
+    # Set grid and title
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    
+    # Customize axes for better readability
+    tick_vals = np.linspace(0.00, 1.0, 11)
+    ticks = norm.ppf(tick_vals)
+    tick_labels = [f"{round(val, 2)}" for val in tick_vals]
+    plt.xticks(ticks, tick_labels)
+    plt.yticks(ticks, tick_labels)
+
+    plt.xlim([norm.ppf(0.01), norm.ppf(0.99)])
+    plt.ylim([norm.ppf(0.01), norm.ppf(0.99)])
+
+    # Add legend
+    plt.legend()
+
+    # Save to files
+    for save_path in save_paths:
+        plt.savefig(save_path)
+
 
 def compile_mistake_detection_preds(dataset: MistakeDetectionDataset,
                                     vqa_outputs: list[list[list[VQAOutputs]]],
