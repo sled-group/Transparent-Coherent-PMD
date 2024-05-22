@@ -263,3 +263,12 @@ def draw_entity_boxes_on_image(image: Union[Image.Image, str, torch.Tensor], ent
         plt.show()
     return new_image
 
+def save_images(images: list[Image.Image], save_paths: list[str]):
+    """
+    Saves a list of images.
+
+    :param images: List of images.
+    :param save_paths: List of image filenames.
+    """
+    for image, path in zip(images, save_paths):
+        image.save(path)
