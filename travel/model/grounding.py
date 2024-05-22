@@ -234,10 +234,12 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             results.append((look_at_noun, target_noun if target_noun != "" else None, question))
         return results
 
-    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE) -> tuple[list[Image.Image], list[str]]:
         # Parse spatial dependencies from questions
         spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions, rephrase_questions=self.rephrase_questions)
-        detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], frames)
+        detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], 
+                                                              frames,
+                                                              batch_size=batch_size)
 
         new_frames = []
         new_questions = []
