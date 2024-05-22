@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field, asdict
 import os
+from pprint import pprint
 import json
 import torch
 from tqdm import tqdm
@@ -197,7 +198,7 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
 # TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name?
 # TODO: does there need to be a single target object for VQG?
 # TODO: increase number of questions to 3? or use a variable number
-def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}) -> dict[str, VQGOutputs]:
+def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}, worker_index: Optional[int]=None) -> dict[str, VQGOutputs]:
     """
     Runs VQG with a given LM text generation pipeline and list of VQG inputs.
 
@@ -218,7 +219,7 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
                                         max_new_tokens=128, 
                                         return_full_text=False, 
                                         truncation="do_not_truncate")),
-                            desc="running VQG",
+                            desc="running VQG" if worker_index is None else f"({worker_index}) running VQG",
                             total=len(inputs)):
 
             procedure_id = int(inp.procedure_id)
@@ -247,11 +248,16 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
 
             vqg_outputs[inp_id] = output
 
+            del out
+
             if prompt_idx % CACHE_FREQUENCY == 0 and save_path is not None:
                 print("Saving progress...")
                 save_vqg_outputs(vqg_outputs, save_path)
 
             prompt_idx += 1
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     # Save progress one last time after completion
     save_vqg_outputs(vqg_outputs, save_path)
@@ -291,7 +297,6 @@ def save_vqg_outputs(vqg_outputs: dict[Any, VQGOutputs], path: str):
     else:
         if not os.path.exists("/".join(path.split("/")[:-1])):
             os.makedirs("/".join(path.split("/")[:-1]))
-
     json.dump({k: v.to_dict() for k, v in vqg_outputs.items()}, 
               open(path, "w"),
               indent=4)    

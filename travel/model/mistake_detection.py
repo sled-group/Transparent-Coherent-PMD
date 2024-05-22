@@ -2,17 +2,14 @@ from dataclasses import dataclass, asdict
 from dataclasses_json import dataclass_json
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
 from pprint import pprint
 from scipy.stats import norm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-import torch
 from tqdm import tqdm
-from transformers import AutoProcessor, AutoModelForVision2Seq
-from typing import Union, Any
+from typing import Union, Any, Optional
 import yaml
 
-from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
+from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils import generate_float_series
 from travel.model.vqa import VQAOutputs, VQAResponse
 
@@ -227,7 +224,8 @@ def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_
 
 def compile_mistake_detection_preds(dataset: MistakeDetectionDataset,
                                     vqa_outputs: list[list[list[VQAOutputs]]],
-                                    mistake_detection_preds: dict[float, list[MistakeDetectionOutputs]]) -> dict[str, dict[str, Any]]:
+                                    mistake_detection_preds: dict[float, list[MistakeDetectionOutputs]],
+                                    image_base_path: Optional[str]=None) -> dict[str, dict[str, Any]]:
     """
     Helper function to compile mistake detection examples with model predictions from VQA and mistake detection.
 
@@ -238,7 +236,7 @@ def compile_mistake_detection_preds(dataset: MistakeDetectionDataset,
     assert len(dataset) == len(vqa_outputs), "Expected same number of dataset examples and VQAOutputs lists."
     for example_outputs, example in zip(vqa_outputs, dataset):
         example_id = example.example_id
-        compiled_preds[example_id]["vqa"] = [[question_output.to_dict() for question_output in frame_outputs] for frame_outputs in example_outputs]
+        compiled_preds[example_id]["vqa"] = [[question_output.to_dict(image_base_path=image_base_path) for question_output in frame_outputs] for frame_outputs in example_outputs]
     for threshold in mistake_detection_preds:
         for pred in mistake_detection_preds[threshold]:
             example_id = pred.example_id
