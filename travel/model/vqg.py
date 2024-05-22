@@ -219,7 +219,7 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
                                         max_new_tokens=128, 
                                         return_full_text=False, 
                                         truncation="do_not_truncate")),
-                            desc="running VQG" if worker_index is None else f"({worker_index}) running VQG",
+                            desc=f"running VQG ({str(lm.device)})",
                             total=len(inputs)):
 
             procedure_id = int(inp.procedure_id)

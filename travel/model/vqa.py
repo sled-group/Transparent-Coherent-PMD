@@ -141,7 +141,7 @@ def run_vqa(vlm: PreTrainedModel,
     last_save = 0
     with torch.no_grad():
         # Start at logits.shape[0] so we don't rerun any logits that were already cached (resuming logic)
-        for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc="running VQA"):
+        for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc=f"running VQA ({str(vlm.device)})"):
             # Prepare the batch
             batch_frames = frames[i:i+batch_size]
             batch_prompts = prompts[i:i+batch_size]
@@ -157,6 +157,9 @@ def run_vqa(vlm: PreTrainedModel,
             if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
                 torch.save(logits, cache_path)
                 last_save = i
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     # Cache one more time
     if cache_path is not None:

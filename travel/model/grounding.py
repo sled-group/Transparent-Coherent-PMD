@@ -143,7 +143,7 @@ class AdaptiveVisualFilter:
         padded_images = []
         results = []
         with torch.no_grad():
-            for i in tqdm(range(0, len(frames), batch_size), desc="running detection"):
+            for i in tqdm(range(0, len(frames), batch_size), desc=f"running detection ({str(self.detector.device)})"):
                 # Prepare the batch
                 batch_prompts = owl_prompts[i:i+batch_size]
                 batch_frames = frames[i:i+batch_size]
