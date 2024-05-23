@@ -1,3 +1,4 @@
+import os
 import spacy
 import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
@@ -111,10 +112,18 @@ class FrameVQAMistakeDetectionScorer:
         frames = [example.frame for example in examples for question_set in example.candidate_question_sets for _ in question_set.questions]
         assert len(questions) == len(answers) == len(frames), "Need same number of questions, answers, and frames to score questions on frame-based VQA!"
         mistake_labels = [example.mistake for example in examples for _ in example.candidate_question_sets] # One scoring per each question set
-             
+
+        logits = torch.zeros((0, self.vlm.vocab_size)).float()
+        if cache_path is not None:
+            assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
+            if os.path.exists(cache_path):
+                logits = torch.load(cache_path)
+
         # Process frames using visual attention filter
-        if self.visual_filter is not None:
+        if self.visual_filter is not None and logits.shape[0] < len(frames):
             frames, questions = self.visual_filter(self.nlp, frames, questions)
+        
+        del logits # Intermediate results of detection aren't saved, so this is just a temporary hack just to check if we really need to run detection again
 
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
