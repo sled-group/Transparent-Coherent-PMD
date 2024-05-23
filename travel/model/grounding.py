@@ -164,6 +164,12 @@ class AdaptiveVisualFilter:
                 # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
                 padded_images += this_padded_images
                 results += self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
+                
+                del inputs
+                del outputs
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         # Filter results for cases where no objects were passed
         return results, padded_images

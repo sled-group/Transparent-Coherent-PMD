@@ -152,6 +152,7 @@ def run_vqa(vlm: PreTrainedModel,
             this_logits = vlm(**inputs).logits
             this_logits = this_logits[:, -1].detach().cpu()
             logits = torch.cat([logits, this_logits], dim=0)
+            del this_logits
 
             # Cache logits so far
             if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
