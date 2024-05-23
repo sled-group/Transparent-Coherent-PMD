@@ -87,7 +87,7 @@ for partition in args.generate_partitions:
         """Local method to run VQA scoring on a list of chunks of data."""
         vqg_training_examples = []
         vqa_outputs = []       
-        for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_chunks)):
+        for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_chunks), desc="chunks"):
             this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer,
                                                                                     frameVQA_examples_chunk,
                                                                                     chunk_idx)
