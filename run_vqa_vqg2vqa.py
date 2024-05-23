@@ -16,7 +16,7 @@ from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq
 
 from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, DETECTION_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
 from travel.model.vqa import VQAOutputs, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, run_vqa
 from travel.model.vqg import load_vqg_outputs
@@ -55,6 +55,9 @@ if args.visual_filter_mode is not None:
         nlp = spacy.load('en_core_web_sm')
     elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
         visual_filter = SpatialVisualFilter(rephrase_questions=False, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+        nlp = spacy.load('en_core_web_sm')
+    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+        visual_filter = ContrastiveRegionFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
         nlp = spacy.load('en_core_web_sm')
     else:
         raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with VQG2VQA!")
@@ -112,11 +115,23 @@ for eval_partition in args.eval_partitions:
     for question in questions:
         prompts.append(prompt_template.format(question=question.strip()))
 
+    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+        original_frames, original_questions = frames, questions
+        original_prompts = [prompt_template.format(question=question) for question in original_questions]
+
     # Run SuccessVQA inference
     logits = run_vqa(vlm,
                      vlm_processor,
                      prompts,
                      frames,
+                     batch_size=args.batch_size,
+                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}.pt"))
+    
+    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+            original_logits = run_vqa(vlm,
+                     vlm_processor,
+                     original_prompts,
+                     original_frames,
                      batch_size=args.batch_size,
                      cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}.pt"))
 
@@ -145,8 +160,18 @@ for eval_partition in args.eval_partitions:
                         prompt,
                         answer,
                         response_token_ids,
+                        original_logits[output_index] - logits[output_index],        
+                ) if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region else
+                    VQAOutputs(
+                        example.task_name,
+                        example.example_id,
+                        step_id,
+                        frame,
+                        prompt,
+                        answer,
+                        response_token_ids,
                         logits[output_index],        
-                    )               
+                    )
                 )
 
                 parallel_idx += 1

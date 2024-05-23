@@ -285,19 +285,11 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         return new_frames, new_questions
 
 class ContrastiveRegionFilter(AdaptiveVisualFilter):
-    """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
     def __init__(self, **kwargs: dict[str, Any]):
         super().__init__(**kwargs)
 
     @staticmethod
     def parse_questions_for_contrastive_region_filter(nlp: English, questions: list[str]) -> list[tuple[bool, str]]:
-        """
-        Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
-
-        :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_sm", disable=["lemmatizer"])`
-        :param questions: List of yes/no questions about an image (e.g., are there any cherry tomatoes in the bowl?).
-        :return: List of tuples, each of which include a bool and object string indicating regions of interest, and a rephrased form of a question without spatial dependencies. 
-        """
         results = []
         for question in questions:
             doc = nlp(question)
@@ -335,3 +327,4 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
 class VisualFilterTypes(Enum):
     Spatial = "spatial"
     Spatial_NoRephrase = "spatial_norephrase"
+    Contrastive_Region = "contrastive_region"
