@@ -42,8 +42,7 @@ class FrameVQAMistakeDetectionExample:
             if not os.path.exists(image_base_path):
                 os.makedirs(image_base_path)
             self.cache_frame(image_base_path)
-            return_dict["frame"] = image_path
-            self.frame.close()
+            return_dict["frame"] = self.frame
         return_dict['frame_time'] = float(round(return_dict['frame_time'], 9))
         return return_dict
 

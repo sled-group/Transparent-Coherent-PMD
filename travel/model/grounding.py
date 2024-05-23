@@ -240,6 +240,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], 
                                                               frames,
                                                               batch_size=batch_size)
+        # TODO: implement caching partial results?
 
         new_frames = []
         new_questions = []
