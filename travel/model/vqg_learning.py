@@ -115,15 +115,16 @@ class FrameVQAMistakeDetectionScorer:
         mistake_labels = [example.mistake for example in examples for _ in example.candidate_question_sets] # One scoring per each question set
              
         # Process frames using visual attention filter
+
+        if self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
+            original_frames, original_questions = frames, questions
+            original_prompts = [prompt_template.format(question=question) for question in original_questions]
+
         if self.visual_filter is not None:
             frames, questions = self.visual_filter(self.nlp, frames, questions)
 
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
-
-        if self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
-            original_frames, original_questions = frames, questions
-            original_prompts = [prompt_template.format(question=question) for question in original_questions]
         
         response_tokens = get_vqa_response_token_ids(self.processor.tokenizer)
             

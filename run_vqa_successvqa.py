@@ -108,16 +108,14 @@ for eval_partition in args.eval_partitions:
 
     # Run visual filter if we have one
     if args.visual_filter_mode is not None:
-        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+            original_frames, original_questions = frames, questions
+            original_prompts = [prompt_template.format(question=question) for question in original_questions]
             frames, questions = visual_filter(nlp, frames, questions)
 
     prompts = []
     for question in questions:
         prompts.append(prompt_template.format(question=question.strip()))
-
-    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-        original_frames, original_questions = frames, questions
-        original_prompts = [prompt_template.format(question=question) for question in original_questions]
         
     # Run SuccessVQA inference
     logits = run_vqa(vlm,
@@ -144,7 +142,7 @@ for eval_partition in args.eval_partitions:
         this_vqa_outputs = []
         for output_index, frame, prompt, answer in outputs_by_id[example.example_id]:
             this_vqa_outputs.append(
-                VQAOutputs(
+                [VQAOutputs(
                     example.task_name,
                     example.example_id,
                     step_id,
@@ -163,7 +161,7 @@ for eval_partition in args.eval_partitions:
                     answer,
                     response_token_ids,
                     logits[output_index],        
-                )
+                )]
             )
             
         vqa_outputs.append(this_vqa_outputs)

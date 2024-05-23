@@ -118,6 +118,10 @@ for eval_partition in args.eval_partitions:
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
         original_frames, original_questions = frames, questions
         original_prompts = [prompt_template.format(question=question) for question in original_questions]
+        frames, questions = visual_filter(nlp, frames, questions)
+        prompts = []
+        for question in questions:
+            prompts.append(prompt_template.format(question=question.strip()))
 
     # Run SuccessVQA inference
     logits = run_vqa(vlm,
