@@ -35,13 +35,12 @@ data = {
     "train": load_vqg_training_examples(args.data_directory, "train"),
     "val": load_vqg_training_examples(args.data_directory, "val")
 }
+# (Save testing data for downstream Ego4D-SuccessVQA evaluation)
 
 # Initialize the process group
 is_parallel = torch.cuda.device_count() > 1 and args.local_rank is not None
 if is_parallel:
     dist.init_process_group(backend='nccl')
-
-# (Save testing data for downstream Ego4D-SuccessVQA evaluation)
 
 # Pair examples based on preference scores
 datasets = {}
