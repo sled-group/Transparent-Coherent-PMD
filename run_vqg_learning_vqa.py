@@ -84,9 +84,10 @@ for partition in args.generate_partitions:
 
     def run_vqa_scoring_on_chunks(scorer: FrameVQAMistakeDetectionScorer,
                                   frameVQA_examples_chunks: list[list[FrameVQAMistakeDetectionExample]]) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
+        """Local method to run VQA scoring on a list of chunks of data."""
         vqg_training_examples = []
         vqa_outputs = []       
-        for chunk_idx, frameVQA_examples_chunk in enumerate(frameVQA_examples_chunks):
+        for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_chunks)):
             this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer,
                                                                                     frameVQA_examples_chunk,
                                                                                     chunk_idx)
@@ -109,10 +110,6 @@ for partition in args.generate_partitions:
 
         print(f"Parallelizing VQA scoring across {torch.cuda.device_count()} GPUs...")
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            # partitions = list(executor.map(run_vqa_scoring_on_chunk, 
-            #                                [scorers[chunk_idx % len(scorers)] for chunk_idx in range(len(frameVQA_examples_split))],
-            #                                frameVQA_examples_split,
-            #                                list(range(len(frameVQA_examples_split)))))
             frameVQA_examples_splits_by_scorer = split_list_into_partitions(frameVQA_examples_split, len(scorers))
             partitions = list(executor.map(run_vqa_scoring_on_chunks, 
                                            scorers,
