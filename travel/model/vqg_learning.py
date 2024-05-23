@@ -15,7 +15,17 @@ class FrameVQAMistakeDetectionScorer:
     """Class that provides preference scores for visual questions to facilitate mistake detection on individual video frames."""
     def __init__(self, 
                  vlm_name: str,
-                 visual_filter_type: Optional[VisualFilterTypes]=None):
+                 visual_filter_type: Optional[VisualFilterTypes]=None,
+                 vlm_device: Optional[int]=None,
+                 visual_filter_device: Optional[int]=None):
+        """
+        Initializes FrameVQAMistakeDetectionScorer.
+
+        :param vlm_name: Name of or path to Hugging Face VLM.
+        :param visual_filter_type: Class for visual filter, e.g., spatial filter.
+        :param vlm_device: Index of GPU device to put VLM on. If not specified, will use the first available GPU by default.
+        :param visual_filter_device: If using a visual filter, index of GPU device to put it on.
+        """
         super().__init__()
         self.model_name = vlm_name
         self.processor = AutoProcessor.from_pretrained(vlm_name)
@@ -27,6 +37,8 @@ class FrameVQAMistakeDetectionScorer:
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4",
         )
+        if vlm_device is not None:
+            torch.cuda.set_device(f"cuda:{vlm_device}")
         self.vlm = AutoModelForVision2Seq.from_pretrained(vlm_name, 
                                                           cache_dir=DATA_CACHE_DIR,
                                                           quantization_config=bnb_config)
@@ -35,15 +47,12 @@ class FrameVQAMistakeDetectionScorer:
         self.vlm.language_model.generation_config.do_sample = False
         self.processor.tokenizer.padding_side = "left"
 
-        # if torch.cuda.device_count() >= 2:
-        #     self.vlm = self.vlm.to(torch.cuda.device(0))
-
         if visual_filter_type == VisualFilterTypes.Spatial:
             # Load spatial filter onto separate GPU if available
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
             # Load spatial filter onto separate GPU if available
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, device=visual_filter_device)
         else:
             self.visual_filter = None
         self.visual_filter_type = visual_filter_type
