@@ -95,6 +95,7 @@ for eval_partition in args.eval_partitions:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
 
     # Generate VQG2VQA prompts
+    # TODO: load these from a cache if it exists
     frames = []
     questions = []
     answers = []

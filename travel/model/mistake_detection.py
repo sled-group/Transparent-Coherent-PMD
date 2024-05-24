@@ -5,8 +5,9 @@ import numpy as np
 from pprint import pprint
 from scipy.stats import norm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import torch
 from tqdm import tqdm
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
 from typing import Union, Any, Optional
 import yaml
 
@@ -177,60 +178,81 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
 class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
     """Mistake detection evaluator which uses a pre-trained natural language inference (NLI) model to judge whether answers to questions indicate mistakes."""
     def __post_init__(self):
-        self.nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH)
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            llm_int8_threshold=6.0,
+            llm_int8_has_fp16_weight=False,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
+        self.nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
         self.nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
+        self.mistake_probs = None
+        self.relevance_probs = None
         super().__post_init__()
 
     def run_nli(self, procedure_descriptions: list[str], questions: list[str], answers: list[VQAResponse]) -> tuple[list[float], list[float]]:
         # TODO: normalize entailment predictions using surface form competition methodology?
-        with torch.no_grad():
-            all_mistake_probs = torch.zeros((0, 1)).float()
-            all_relevance = torch.zeros((0, 1)).float()
+        if self.mistake_probs is None or self.relevance_probs is None:
+            with torch.no_grad():
+                all_mistake_probs = torch.zeros((0, 1)).float()
+                all_relevance = torch.zeros((0, 1)).float()
 
-            # Start at logits.shape[0] so we don't rerun any logits that were already cached (resuming logic)
-            for i in tqdm(range(0, len(procedure_descriptions), NLI_BATCH_SIZE), desc=f"running NLI ({str(self.nli_model.device)})"):
-                # Prepare the batch
-                batch_procedure_descriptions = procedure_descriptions[i:i+batch_size]
-                batch_questions = questions[i:i+batch_size]
-                batch_answers = answers[i:i+batch_size]
-                batch_answers = [answer.name for answer in batch_answers]
-                batch_negated_answers = [VQAResponse(1-answer.value).name for answer in batch_answers]
+                for i in tqdm(range(0, len(procedure_descriptions), NLI_BATCH_SIZE), desc=f"running NLI ({str(self.nli_model.device)})"):
+                    # Prepare the batch
+                    batch_procedure_descriptions = procedure_descriptions[i:i+NLI_BATCH_SIZE]
+                    batch_questions = questions[i:i+NLI_BATCH_SIZE]
+                    batch_answers = answers[i:i+NLI_BATCH_SIZE]
+                    batch_negated_answers = [VQAResponse(1-answer.value) for answer in batch_answers]
 
-                # Generate prompt data for premise and negated premise
-                premise = [f"{question}: {answer}" for question, answer in zip(batch_questions, batch_answers)]
-                premise_opposite = [f"{question}: {answer}" for question, answer in zip(batch_questions, batch_negated_answers)]
-                
-                hypothesis = [f'The procedure "{procedure}" has been successfully completed.' for procedure in batch_procedure_descriptions]
+                    batch_answers = [answer.name for answer in batch_answers]
+                    batch_negated_answers = [answer.name for answer in batch_negated_answers]
 
-                # Run premise through NLI model
-                x = tokenizer.encode(premise, hypothesis, return_tensors='pt', truncation_strategy='do_not_truncate')
-                logits = nli_model(x.to(self.nli_model.device))[0]
-                logits = logits.cpu()
-                logits = logits[:,[0,2]] # Take logits for contradiction and entailment only
-                probs = logits.softmax(dim=1)
+                    # Generate prompt data for premise and negated premise
+                    premise = [f"{question}: {answer}" for question, answer in zip(batch_questions, batch_answers)]
+                    premise_negated = [f"{question}: {answer}" for question, answer in zip(batch_questions, batch_negated_answers)]
+                    
+                    hypothesis = [f'The procedure "{procedure}" has been successfully completed.' for procedure in batch_procedure_descriptions]
 
-                # Run negated premise through NLI model
-                x = tokenizer.encode(premise, hypothesis, return_tensors='pt', truncation_strategy='do_not_truncate')
-                logits_negated = nli_model(x.to(self.nli_model.device))[0]
-                logits_negated = logits_negated.cpu()
-                logits_negated = logits[:,[0,2]] # Take logits for contradiction and entailment only
-                probs_negated = logits_negated.softmax(dim=1)
-                
-                # If probability of contradiction doesn't change enough between answer and negated answer, 
-                # then assume the question is irrelevant and assign 0 probability of contradiction 
-                # (can filter these out from prediction later)
-                relevance = probs[:, 0] - probs_negated[:, 0]
-                relevance[relevance < NLI_RELEVANCE_DELTA] = 0.0
-                relevance[relevance >= NLI_RELEVANCE_DELTA] = 1.0
+                    # Run premise through NLI model
+                    x = self.nli_tokenizer.encode(premise[0], hypothesis[0], return_tensors="pt", padding="longest", truncation="only_first")
+                    x = self.nli_tokenizer.batch_encode_plus(list(zip(premise, hypothesis)),
+                                                            return_tensors='pt', 
+                                                            padding="longest",
+                                                            truncation='only_first')
+                    logits = self.nli_model(**x.to(self.nli_model.device))[0]
+                    logits = logits.cpu()
+                    logits = logits[:,[0,2]] # Take logits for contradiction and entailment only
+                    probs = logits.softmax(dim=1)
 
-                # Grab contradiction probabilities weighted by relevance and add to all_mistake_probs
-                all_mistake_probs = torch.cat([all_mistake_probs, probs[:, 0].unsqueeze(1)], dim=0)
-                all_relevance = torch.cat([all_relevance, relevance[:, 0].unsqueeze(1)], dim=0)
+                    # Run negated premise through NLI model
+                    x = self.nli_tokenizer.batch_encode_plus(list(zip(premise_negated, hypothesis)), 
+                                                            return_tensors='pt',
+                                                            padding="longest",
+                                                            truncation='only_first')
+                    logits_negated = self.nli_model(**x.to(self.nli_model.device))[0]
+                    logits_negated = logits_negated.cpu()
+                    logits_negated = logits_negated[:,[0,2]] # Take logits for contradiction and entailment only
+                    probs_negated = logits_negated.softmax(dim=1)
+                    
+                    # If probability of contradiction doesn't change enough between answer and negated answer, 
+                    # then assume the question is irrelevant and assign 0 probability of contradiction 
+                    # (can filter these out from prediction later)
+                    relevance = probs[:, 0] - probs_negated[:, 0]
+                    relevance[relevance < NLI_RELEVANCE_DELTA] = 0.0
+                    relevance[relevance >= NLI_RELEVANCE_DELTA] = 1.0
 
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+                    # Grab contradiction probabilities weighted by relevance and add to all_mistake_probs
+                    all_mistake_probs = torch.cat([all_mistake_probs, probs[:, 0].unsqueeze(1)], dim=0)
+                    all_relevance = torch.cat([all_relevance, relevance.unsqueeze(1)], dim=0)
 
-        return list(all_mistake_probs.squeeze(1).numpy()), list(all_relevance.squeeze(1).numpy())
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+            self.mistake_probs = list(all_mistake_probs.squeeze(1).numpy())
+            self.relevance_probs = list(all_relevance.squeeze(1).numpy())
+        return self.mistake_probs, self.relevance_probs
 
     def check_mistakes(self, detection_threshold: float=0.5) -> list[MistakeDetectionOutputs]:
         """
@@ -270,12 +292,12 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 for question_output in frame_outputs:
                     # Incorporate NLI model feedback
                     if nli_relevance[parallel_idx] == 0.0:
-                        # NLI model found this question irrelevant
-                        continue
+                        # NLI model found this question irrelevant, so 0 mistake probability
+                        frame_mistake_probs.append(0.0)
                     else:
                         # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
-                        mistake_answer = VQAResponse(1-int(output.expected_answer.value))
-                        mistake_prob = output.answer_probs[mistake_answer]
+                        mistake_answer = VQAResponse(1-int(question_output.expected_answer.value))
+                        mistake_prob = question_output.answer_probs[mistake_answer]
                         frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
 
                     parallel_idx += 1
@@ -290,7 +312,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
                 
                 mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-                mean_mistake_prob = np.mean(mistake_prob) # Get mean mistakeprobability over all frames
+                mean_mistake_prob = np.mean(mistake_prob) # Get mean mistake probability over all frames
                                 
                 mistake_pred_final = True if mean_mistake_prob > detection_threshold else False
             else:
