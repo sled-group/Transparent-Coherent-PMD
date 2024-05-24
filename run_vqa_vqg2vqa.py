@@ -109,6 +109,9 @@ for eval_partition in args.eval_partitions:
     # Run visual filter if we have one
     if args.visual_filter_mode is not None:
         if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
+            original_frames = frames
+            frames = visual_filter(nlp, frames, questions)
+        else:
             frames, questions = visual_filter(nlp, frames, questions)
 
     prompts = []
@@ -136,7 +139,7 @@ for eval_partition in args.eval_partitions:
                      prompts,
                      original_frames,
                      batch_size=args.batch_size,
-                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}.pt"))
+                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}_crg_original.pt"))
 
     outputs_by_id = defaultdict(list)
     for output_index, (frame, prompt, answer, eid) in enumerate(zip(frames, prompts, answers, example_ids)):

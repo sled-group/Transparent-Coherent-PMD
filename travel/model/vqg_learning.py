@@ -116,11 +116,12 @@ class FrameVQAMistakeDetectionScorer:
              
         # Process frames using visual attention filter
 
-        if self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
-            original_frames = frames
-
         if self.visual_filter is not None:
-            frames, questions = self.visual_filter(self.nlp, frames, questions)
+            if self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
+                original_frames = frames
+                frames = self.visual_filter(self.nlp, frames, questions)
+            else:
+                frames, questions = self.visual_filter(self.nlp, frames, questions)
 
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
