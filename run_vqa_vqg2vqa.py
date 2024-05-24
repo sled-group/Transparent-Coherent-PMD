@@ -116,8 +116,7 @@ for eval_partition in args.eval_partitions:
         prompts.append(prompt_template.format(question=question.strip()))
 
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-        original_frames, original_questions = frames, questions
-        original_prompts = [prompt_template.format(question=question) for question in original_questions]
+        original_frames = frames
         frames, questions = visual_filter(nlp, frames, questions)
         prompts = []
         for question in questions:
@@ -134,7 +133,7 @@ for eval_partition in args.eval_partitions:
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             original_logits = run_vqa(vlm,
                      vlm_processor,
-                     original_prompts,
+                     prompts,
                      original_frames,
                      batch_size=args.batch_size,
                      cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}.pt"))
