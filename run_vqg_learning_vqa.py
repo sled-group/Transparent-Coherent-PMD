@@ -4,9 +4,10 @@ init_travel()
 
 import argparse
 import concurrent.futures
+import datetime
 import json
 import os
-from PIL import Image
+from pprint import pprint
 import shutil
 import torch
 from tqdm import tqdm
@@ -23,19 +24,22 @@ parser.add_argument("--vqg_directory", type=str, required=True, help="Directory 
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--generate_partitions", nargs='+', type=str, default=["train", "val"], help="List of partitions to generate data for.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
-parser.add_argument("--batch_size", type=int, default=10, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
-parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
+parser.add_argument("--batch_size", type=int, default=48, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
+parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples. Can also be used to add another partition of data to existing reuslts directory.")
 args = parser.parse_args()
 
-assert not (args.visual_filter_mode is not None and torch.cuda.device_count() < 2), "Need at least 2 GPUs to run VQA scoring with spatial filter!"
+if "_debug" in args.vqg_directory:
+    IMAGES_CHUNK_SIZE = 10
 
+# Run VQA across all passed partitions
 for partition in args.generate_partitions:
+
     # Load outputs
     print("Loading data...")
     frameVQA_examples = load_frameVQA_examples(args.vqg_directory, partition, load_frames=False)
     if "_debug" in args.vqg_directory:
-        frameVQA_examples = frameVQA_examples[:100]
-        IMAGES_CHUNK_SIZE = 10
+        frameVQA_examples = frameVQA_examples[:50]
+    print(f"{len(frameVQA_examples)} frame VQA examples loaded from {partition} partition")
 
     # Save training examples for VQG in the same folder
     if args.resume_dir is None:
@@ -50,7 +54,7 @@ for partition in args.generate_partitions:
         os.makedirs(os.path.join(this_results_dir, "VQA_scoring_cache"))
 
     # If we have a lot of data, divide it into chunks to conserve memory and parallelize across GPUs if possible
-    if len(frameVQA_examples) >= IMAGES_CHUNK_SIZE:
+    if len(frameVQA_examples) > IMAGES_CHUNK_SIZE:
         frameVQA_examples_split = split_list_into_partitions(frameVQA_examples, len(frameVQA_examples) // IMAGES_CHUNK_SIZE)
     else:
         frameVQA_examples_split = [frameVQA_examples]
@@ -71,34 +75,58 @@ for partition in args.generate_partitions:
                                                               return_vqa_outputs=True,
                                                               batch_size=args.batch_size,
                                                               cache_path=cache_path.replace(".pt", f"{chunk_idx}.pt"))
+
         # Cache frames in VQAOutputs to conserve memory
+        frames_to_close = []
         for outputs in this_vqa_outputs:
             for output in outputs:
-                if type(output.frame) == Image.Image:
+                if type(output.frame) != str:
+                    frames_to_close.append(output.frame)
                     output.cache_frame(this_results_dir)
+            
+        # Close frames - have to do this afterward since some are shared between VQAOutputs
+        for frame in frames_to_close:
+            frame.close()
+
+        # And close images in input examples
+        for example in frameVQA_examples_chunk:
+            example.frame.close()
 
         return this_vqg_training_examples, this_vqa_outputs
 
-    if torch.cuda.device_count() >= 4 if args.visual_filter_mode is not None else 2:
+    def run_vqa_scoring_on_chunks(scorer: FrameVQAMistakeDetectionScorer,
+                                  frameVQA_examples_chunks: list[list[FrameVQAMistakeDetectionExample]]) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
+        """Local method to run VQA scoring on a list of chunks of data."""
+        vqg_training_examples = []
+        vqa_outputs = []       
+        for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_chunks, desc="chunks")):
+            this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer,
+                                                                                    frameVQA_examples_chunk,
+                                                                                    chunk_idx)
+            vqg_training_examples += this_vqg_training_examples
+            vqa_outputs += this_vqa_outputs
+        return vqg_training_examples, vqa_outputs
+
+    if torch.cuda.device_count() >= 2:
         # If we have enough GPUs, parallelize
         print("Setting up mistake detection scorers...")
         scorers = []
         # If we have a spatial filter, VLM and spatial filter will be put on separate GPUs in sets of 2
         # If we don't, just put a copy of the VLM on each GPU
-        for i in range(0, torch.cuda.device_count(), 2 if args.visual_filter_mode is not None else 1):
+        for i in range(0, torch.cuda.device_count()):
             scorer = FrameVQAMistakeDetectionScorer(args.vlm_name,
-                                        visual_filter_type=VisualFilterTypes(args.visual_filter_mode) if args.visual_filter_mode is not None else None,
-                                        vlm_device=i,
-                                        visual_filter_device=i + 1 if args.visual_filter_mode is not None else None)
+                                                    visual_filter_type=VisualFilterTypes(args.visual_filter_mode) if args.visual_filter_mode is not None else None,
+                                                    vlm_device=i,
+                                                    visual_filter_device=i if args.visual_filter_mode is not None else None)
             scorers.append(scorer)
 
         print(f"Parallelizing VQA scoring across {torch.cuda.device_count()} GPUs...")
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            partitions = list(executor.map(run_vqa_scoring_on_chunk, 
-                                           [scorers[chunk_idx % len(scorers)] for chunk_idx in range(len(frameVQA_examples_split))],
-                                           frameVQA_examples_split,
-                                           list(range(len(frameVQA_examples_split)))))
-        
+            frameVQA_examples_splits_by_scorer = split_list_into_partitions(frameVQA_examples_split, len(scorers))
+            partitions = list(executor.map(run_vqa_scoring_on_chunks, 
+                                           scorers,
+                                           frameVQA_examples_splits_by_scorer))
+
         # Compile processed data from chunks
         vqg_training_examples = []
         vqa_outputs = []
@@ -131,9 +159,6 @@ for partition in args.generate_partitions:
                                                                                     chunk_idx=chunk_idx)
             vqg_training_examples += this_vqg_training_examples
             vqa_outputs += this_vqa_outputs
-
-
-        
 
     save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, partition)
     save_vqg_training_examples(vqg_training_examples, this_results_dir, partition)
