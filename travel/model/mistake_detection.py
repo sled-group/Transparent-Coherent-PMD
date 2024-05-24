@@ -6,6 +6,7 @@ from pprint import pprint
 from scipy.stats import norm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from tqdm import tqdm
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from typing import Union, Any, Optional
 import yaml
 
@@ -13,7 +14,14 @@ from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils import generate_float_series
 from travel.model.vqa import VQAOutputs, VQAResponse
 
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+NLI_MODEL_PATH = config["mistake_detection_strategies"]["nli_model_path"]
+NLI_BATCH_SIZE = int(config["mistake_detection_strategies"]["nli_batch_size"])
+NLI_RELEVANCE_DELTA = float(config["mistake_detection_strategies"]["nli_relevance_delta"]) # Minimum difference of entailment probabilities between VQA answer and negated answer to judge question and answer as relevant for mistake detection
+
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
+
 
 def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str, float]:
     this_metrics = {}
@@ -166,9 +174,146 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
             
         return agg_preds
 
+class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
+    """Mistake detection evaluator which uses a pre-trained natural language inference (NLI) model to judge whether answers to questions indicate mistakes."""
+    def __post_init__(self):
+        self.nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH)
+        self.nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
+        super().__post_init__()
+
+    def run_nli(self, procedure_descriptions: list[str], questions: list[str], answers: list[VQAResponse]) -> tuple[list[float], list[float]]:
+        # TODO: normalize entailment predictions using surface form competition methodology?
+        with torch.no_grad():
+            all_mistake_probs = torch.zeros((0, 1)).float()
+            all_relevance = torch.zeros((0, 1)).float()
+
+            # Start at logits.shape[0] so we don't rerun any logits that were already cached (resuming logic)
+            for i in tqdm(range(0, len(procedure_descriptions), NLI_BATCH_SIZE), desc=f"running NLI ({str(self.nli_model.device)})"):
+                # Prepare the batch
+                batch_procedure_descriptions = procedure_descriptions[i:i+batch_size]
+                batch_questions = questions[i:i+batch_size]
+                batch_answers = answers[i:i+batch_size]
+                batch_answers = [answer.name for answer in batch_answers]
+                batch_negated_answers = [VQAResponse(1-answer.value).name for answer in batch_answers]
+
+                # Generate prompt data for premise and negated premise
+                premise = [f"{question}: {answer}" for question, answer in zip(batch_questions, batch_answers)]
+                premise_opposite = [f"{question}: {answer}" for question, answer in zip(batch_questions, batch_negated_answers)]
+                
+                hypothesis = [f'The procedure "{procedure}" has been successfully completed.' for procedure in batch_procedure_descriptions]
+
+                # Run premise through NLI model
+                x = tokenizer.encode(premise, hypothesis, return_tensors='pt', truncation_strategy='do_not_truncate')
+                logits = nli_model(x.to(self.nli_model.device))[0]
+                logits = logits.cpu()
+                logits = logits[:,[0,2]] # Take logits for contradiction and entailment only
+                probs = logits.softmax(dim=1)
+
+                # Run negated premise through NLI model
+                x = tokenizer.encode(premise, hypothesis, return_tensors='pt', truncation_strategy='do_not_truncate')
+                logits_negated = nli_model(x.to(self.nli_model.device))[0]
+                logits_negated = logits_negated.cpu()
+                logits_negated = logits[:,[0,2]] # Take logits for contradiction and entailment only
+                probs_negated = logits_negated.softmax(dim=1)
+                
+                # If probability of contradiction doesn't change enough between answer and negated answer, 
+                # then assume the question is irrelevant and assign 0 probability of contradiction 
+                # (can filter these out from prediction later)
+                relevance = probs[:, 0] - probs_negated[:, 0]
+                relevance[relevance < NLI_RELEVANCE_DELTA] = 0.0
+                relevance[relevance >= NLI_RELEVANCE_DELTA] = 1.0
+
+                # Grab contradiction probabilities weighted by relevance and add to all_mistake_probs
+                all_mistake_probs = torch.cat([all_mistake_probs, probs[:, 0].unsqueeze(1)], dim=0)
+                all_relevance = torch.cat([all_relevance, relevance[:, 0].unsqueeze(1)], dim=0)
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+        return list(all_mistake_probs.squeeze(1).numpy()), list(all_relevance.squeeze(1).numpy())
+
+    def check_mistakes(self, detection_threshold: float=0.5) -> list[MistakeDetectionOutputs]:
+        """
+        Given `examples` and `vqa_outputs` class members, determine whether there is a mistake. Combines an NLI model's judgements with mistake probabilities according to VLM answers to generated questions.
+        
+        :param detection_threshold: Confidence threshold for evaluator to predict there's a mistake, typically based on an LM's logits.
+        :return: True if there is believed to be a mistake, else False.
+        """
+
+        # If any VQA answers don't match expected answers, there's a mistake (we can decide to make this more lenient later)
+        all_procedure_descriptions = []
+        all_questions = []
+        all_answers = []
+        for example, outputs in zip(self.examples, self.vqa_outputs):
+            for frame_outputs in outputs:
+                # Check all questions for this frame to decide if there's a mistake
+                for output in frame_outputs:
+                    all_procedure_descriptions.append(example.procedure_description)
+                    assert output.question is not None, "NLIMistakeDetectionEvaluator requires questions to be provided in VQAOutputs!"
+                    all_questions.append(output.question)
+                    all_answers.append(output.predicted_answer)
+            
+        nli_mistake_probs, nli_relevance = self.run_nli(all_procedure_descriptions, all_questions, all_answers)
+        del all_procedure_descriptions
+        del all_questions
+        del all_answers
+
+        # Incorporate NLI mistake probs into mistake probs
+        parallel_idx = 0
+        mistake_probs = []
+        for example, outputs in zip(self.examples, self.vqa_outputs):
+            example_mistake_probs = []
+            for frame_outputs in outputs:
+                frame_mistake_probs = []
+
+                # Check all questions for this frame to decide if there's a mistake
+                for question_output in frame_outputs:
+                    # Incorporate NLI model feedback
+                    if nli_relevance[parallel_idx] == 0.0:
+                        # NLI model found this question irrelevant
+                        continue
+                    else:
+                        # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
+                        mistake_answer = VQAResponse(1-int(output.expected_answer.value))
+                        mistake_prob = output.answer_probs[mistake_answer]
+                        frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
+
+                    parallel_idx += 1
+                example_mistake_probs.append(frame_mistake_probs)
+            mistake_probs.append(example_mistake_probs)
+
+        # From here, follow HeuristicMistakeDetectionEvaluator: just average reweighted likelihood of mistake then use a threshold to decide if there's a mistake
+        agg_preds = []
+        for mistake_prob, example in tqdm(zip(mistake_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
+            if len(mistake_prob) > 0:
+                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
+                assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
+                
+                mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
+                mean_mistake_prob = np.mean(mistake_prob) # Get mean mistakeprobability over all frames
+                                
+                mistake_pred_final = True if mean_mistake_prob > detection_threshold else False
+            else:
+                # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;
+                # in this case, the target object is likely not present at all in the video, suggesting an incorrect object is used instead
+                mistake_prob = [[]]
+                mistake_pred_final = True
+
+            pred_object = MistakeDetectionOutputs(
+                example_id=example.example_id,
+                frame_times=example.frame_times,
+                mistake_probs=mistake_prob,
+                detection_threshold=detection_threshold,
+                final_mistake_prediction=mistake_pred_final
+            )
+
+            agg_preds.append(pred_object)            
+            
+        return agg_preds
         
 MISTAKE_DETECTION_STRATEGIES = {
-    "heuristic": HeuristicMistakeDetectionEvaluator
+    "heuristic": HeuristicMistakeDetectionEvaluator,
+    "nli": NLIMistakeDetectionEvaluator
 }
 
 def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_path: str):

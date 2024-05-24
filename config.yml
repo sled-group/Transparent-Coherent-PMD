@@ -25,3 +25,6 @@ grounding:
   owl_batch_size: 40
 mistake_detection_strategies:
   frames_proportion: 0.1
+  nli_model_path: "facebook/bart-large-mnli"
+  nli_batch_size: 128
+  nli_relevance_delta: 0.2

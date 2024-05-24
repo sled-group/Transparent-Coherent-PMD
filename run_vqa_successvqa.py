@@ -110,14 +110,14 @@ for eval_partition in args.eval_partitions:
         for output_index, frame, prompt, answer in outputs_by_id[example.example_id]:
             this_vqa_outputs.append(
                 [VQAOutputs(
-                    example.task_name,
-                    example.example_id,
-                    step_id,
-                    frame,
-                    prompt,
-                    expected_answer,
-                    response_token_ids,
-                    logits[output_index],        
+                    task_name=example.task_name,
+                    example_id=example.example_id,
+                    procedure_id=step_id,
+                    frame=frame,
+                    prompt=prompt,
+                    expected_answer=expected_answer,
+                    response_token_ids=response_token_ids,
+                    logits=logits[output_index],
                 )]
             )
             
