@@ -108,7 +108,7 @@ for eval_partition in args.eval_partitions:
 
     # Run visual filter if we have one
     if args.visual_filter_mode is not None:
-        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             original_frames = frames
             frames = visual_filter(nlp, frames, questions)
         else:
@@ -117,13 +117,6 @@ for eval_partition in args.eval_partitions:
     prompts = []
     for question in questions:
         prompts.append(prompt_template.format(question=question.strip()))
-
-    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-        original_frames = frames
-        frames, questions = visual_filter(nlp, frames, questions)
-        prompts = []
-        for question in questions:
-            prompts.append(prompt_template.format(question=question.strip()))
 
     # Run SuccessVQA inference
     logits = run_vqa(vlm,
