@@ -1,10 +1,9 @@
 from dataclasses import dataclass, field, asdict
-from dataclasses_json import dataclass_json
 from enum import Enum
 import json
 import os
 from PIL import Image
-import spacy
+from pprint import pprint
 import torch
 from tqdm import tqdm
 from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, PreTrainedModel
@@ -84,7 +83,8 @@ class VQAOutputs:
         for response in return_dict['answer_probs']:
             return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
         
-        if image_base_path is not None and type(self.frame) == Image.Image:
+        # Cache frame for this example if it's not already cached somewhere
+        if image_base_path is not None and type(self.frame) != str:
             image_base_path = os.path.join(image_base_path, "frames")
             if not os.path.exists(image_base_path):
                 os.makedirs(image_base_path)
@@ -94,7 +94,7 @@ class VQAOutputs:
         return return_dict
     
     def cache_frame(self, image_base_path: str):
-        assert type(self.frame) == Image.Image, "Can only cache PIL images!"
+        assert type(self.frame) != str, "Can only cache PIL images!"
 
         if not os.path.exists(os.path.join(image_base_path, "frames")):
             os.makedirs(os.path.join(image_base_path, "frames"))
@@ -152,6 +152,7 @@ def run_vqa(vlm: PreTrainedModel,
             this_logits = vlm(**inputs).logits
             this_logits = this_logits[:, -1].detach().cpu()
             logits = torch.cat([logits, this_logits], dim=0)
+            del this_logits
 
             # Cache logits so far
             if cache_path is not None and i - last_save >= CACHE_FREQUENCY:

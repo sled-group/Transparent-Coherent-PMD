@@ -164,6 +164,12 @@ class AdaptiveVisualFilter:
                 # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
                 padded_images += this_padded_images
                 results += self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
+                
+                del inputs
+                del outputs
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         # Filter results for cases where no objects were passed
         return results, padded_images
@@ -234,10 +240,13 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             results.append((look_at_noun, target_noun if target_noun != "" else None, question))
         return results
 
-    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE) -> tuple[list[Image.Image], list[str]]:
         # Parse spatial dependencies from questions
         spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions, rephrase_questions=self.rephrase_questions)
-        detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], frames)
+        detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], 
+                                                              frames,
+                                                              batch_size=batch_size)
+        # TODO: implement caching partial results?
 
         new_frames = []
         new_questions = []
