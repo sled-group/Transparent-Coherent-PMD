@@ -7,7 +7,7 @@ from typing import Optional, Union
 from travel.constants import DATA_CACHE_DIR
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
 from travel.model.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, run_vqa, get_vqa_response_token_ids
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
@@ -54,6 +54,8 @@ class FrameVQAMistakeDetectionScorer:
         elif visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
             # Load spatial filter onto separate GPU if available
             self.visual_filter = SpatialVisualFilter(rephrase_questions=False, device=visual_filter_device)
+        elif visual_filter_type == VisualFilterTypes.Contrastive_Region:
+            self.visual_filter = ContrastiveRegionFilter(device=visual_filter_device)
         else:
             self.visual_filter = None
         self.visual_filter_type = visual_filter_type
@@ -121,8 +123,11 @@ class FrameVQAMistakeDetectionScorer:
 
         # Process frames using visual attention filter
         if self.visual_filter is not None and logits.shape[0] < len(frames):
-            frames, questions = self.visual_filter(self.nlp, frames, questions)
-        
+            if self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
+                original_frames = frames
+                frames = self.visual_filter(self.nlp, frames, questions)
+            else:
+                frames, questions = self.visual_filter(self.nlp, frames, questions)
         del logits # Intermediate results of detection aren't saved, so this is just a temporary hack just to check if we really need to run detection again
 
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
@@ -137,6 +142,14 @@ class FrameVQAMistakeDetectionScorer:
                          frames=frames,
                          batch_size=batch_size,
                          cache_path=cache_path)
+
+        if self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
+            original_logits = run_vqa(vlm=self.vlm,
+                         processor=self.processor,
+                         prompts=prompts,
+                         frames=original_frames,
+                         batch_size=batch_size,
+                         cache_path=cache_path)
         
         # Gather up VQAOutputs (# examples, # questions per example)
         vqa_outputs = []
@@ -147,6 +160,16 @@ class FrameVQAMistakeDetectionScorer:
                 for _, answer in zip(question_set.questions, question_set.answers):
                     assert answers[parallel_idx] == answer, "Parallel input examples and VQA outputs are out of sync!"
                     this_vqa_outputs.append(
+                        VQAOutputs(
+                            example.task_name,
+                            example.example_id,
+                            example.procedure_id,
+                            frames[parallel_idx], # Use manipulated frame after visual filter (if any)
+                            prompts[parallel_idx],
+                            answers[parallel_idx],
+                            response_tokens,
+                            original_logits[parallel_idx] - logits[parallel_idx]
+                ) if self.visual_filter_type == VisualFilterTypes.Contrastive_Region else
                         VQAOutputs(
                             example.task_name,
                             example.example_id,
