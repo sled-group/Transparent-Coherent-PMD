@@ -9,11 +9,13 @@ import json
 import os
 from pprint import pprint
 import shutil
+import spacy
 import torch
 from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
 
 from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, DETECTION_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
 from travel.model.vqa import VQAOutputs, VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids, run_vqa
 from travel.data.mistake_detection import MistakeDetectionTasks
@@ -24,6 +26,7 @@ parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.v
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(SUCCESSVQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
+parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--batch_size", type=int, default=10, help="Batch size for VQA inference.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -46,6 +49,17 @@ vlm_processor.tokenizer.padding_side = "left"
 vlm.language_model.generation_config.temperature = None
 vlm.language_model.generation_config.top_p = None
 vlm.language_model.generation_config.do_sample = False
+
+if args.visual_filter_mode is not None:
+    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
+        raise NotImplementedError("Spatial filter not implemented.")
+    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
+        raise NotImplementedError("Spatial filter not implemented.")
+    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+        visual_filter = ContrastiveRegionFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+        nlp = spacy.load('en_core_web_sm')
+    else:
+        raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with VQG2VQA!")
 
 prompt_template = SUCCESSVQA_PROMPT_TEMPLATES[type(vlm)]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
@@ -91,6 +105,18 @@ for eval_partition in args.eval_partitions:
             prompts.append(prompt)  
             answers.append(expected_answer)
             example_ids.append(example.example_id)
+
+    # Run visual filter if we have one
+    if args.visual_filter_mode is not None:
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+            original_frames = frames
+            frames = visual_filter(nlp, frames, questions)
+        else:
+            frames, questions = visual_filter(nlp, frames, questions)
+
+    prompts = []
+    for question in questions:
+        prompts.append(prompt_template.format(question=question.strip()))
         
     # Run SuccessVQA inference
     logits = run_vqa(vlm,
@@ -99,6 +125,14 @@ for eval_partition in args.eval_partitions:
                     frames,
                     batch_size=args.batch_size,
                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}.pt"))
+    
+    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+            original_logits = run_vqa(vlm,
+                     vlm_processor,
+                     prompts,
+                     original_frames,
+                     batch_size=args.batch_size,
+                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}_crg_original.pt"))
 
     outputs_by_id = defaultdict(list)
     for output_index, (frame, prompt, answer, eid) in enumerate(zip(frames, prompts, answers, example_ids)):
@@ -115,9 +149,19 @@ for eval_partition in args.eval_partitions:
                     procedure_id=step_id,
                     frame=frame,
                     prompt=prompt,
-                    expected_answer=expected_answer,
+                    expected_answer=answer,
                     response_token_ids=response_token_ids,
-                    logits=logits[output_index],
+                    logits=original_logits[output_index] - logits[output_index],        
+            ) if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region else
+                VQAOutputs(
+                    task_name=example.task_name,
+                    example_id=example.example_id,
+                    procedure_id=step_id,
+                    frame=frame,
+                    prompt=prompt,
+                    expected_answer=answer,
+                    response_token_ids=response_token_ids,
+                    logits=logits[output_index],        
                 )]
             )
             

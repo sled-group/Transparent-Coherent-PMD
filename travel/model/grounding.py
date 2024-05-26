@@ -293,6 +293,47 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
         return new_frames, new_questions
 
+class ContrastiveRegionFilter(AdaptiveVisualFilter):
+    def __init__(self, **kwargs: dict[str, Any]):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def parse_questions_for_contrastive_region_filter(nlp: English, questions: list[str]) -> list[tuple[bool, str]]:
+        results = []
+        for question in questions:
+            doc = nlp(question)
+            nouns = []
+            for chunk in doc.noun_chunks:
+                nouns.append(chunk.text)
+            results.append(nouns)
+        return results
+
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
+        # Parse spatial dependencies from questions
+        spatial_parse_results = self.parse_questions_for_contrastive_region_filter(nlp, questions)
+        detection_results = []
+        for spatial_parse_result in spatial_parse_results:
+            detection_results_single, _ = self.run_detection([[noun] for _, noun in spatial_parse_result], frames)
+            detection_results.append(detection_results_single)
+        new_frames = []
+        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
+        for detection_results_single, frame in zip(detection_results, frames):
+            for detection_result in detection_results_single:
+                boxes = detection_result["boxes"]
+                bboxes = boxes.cpu().numpy() # (# boxes, 4)
+
+                if bboxes.shape[0] > 0:
+                    frame_blackout = frame.copy()
+                    pixels = frame_blackout.load()
+                    for bbox in bboxes:
+                        box = [int(b) for b in bbox]
+                        for i in range(bbox[0], bbox[2]):
+                            for j in range(bbox[1],bbox[3]):
+                                pixels[i,j] = (0,0,0)
+            new_frames.append(frame)
+        return new_frames
+
 class VisualFilterTypes(Enum):
     Spatial = "spatial"
     Spatial_NoRephrase = "spatial_norephrase"
+    Contrastive_Region = "contrastive_region"
