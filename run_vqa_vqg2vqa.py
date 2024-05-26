@@ -128,7 +128,7 @@ for eval_partition in args.eval_partitions:
     for question in questions:
         prompts.append(prompt_template.format(question=question.strip()))
 
-    # Run SuccessVQA inference
+    # Run VQG2VQA inference
     logits = run_vqa(vlm,
                      vlm_processor,
                      prompts,
