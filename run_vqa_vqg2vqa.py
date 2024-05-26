@@ -13,7 +13,7 @@ import shutil
 import spacy
 import torch
 from tqdm import tqdm
-from transformers import AutoProcessor, AutoModelForVision2Seq
+from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
 
 from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
@@ -28,7 +28,7 @@ parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.v
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired vqg_outputs.json is stored.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
-parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
+# parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--batch_size", type=int, default=10, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
@@ -42,13 +42,22 @@ vqg_outputs = load_vqg_outputs(args.vqg_directory)
 # TODO: implement filtering by target objects? - have to integrate with existing visual filter code and get that code up to date
 
 # Load VLM
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    llm_int8_threshold=6.0,
+    llm_int8_has_fp16_weight=False,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+)
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
-vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, cache_dir=DATA_CACHE_DIR, load_in_8bit=True) # NOTE: when loading in 8bit, batched inference may output nans
+vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, cache_dir=DATA_CACHE_DIR, quantization_config=bnb_config)
 vlm_processor.tokenizer.padding_side = "left"
 vlm.language_model.generation_config.temperature = None
 vlm.language_model.generation_config.top_p = None
 vlm.language_model.generation_config.do_sample = False
 
+# TODO: implement GPU parallelization following run_vqg_learning_vqa.py
 if args.visual_filter_mode is not None:
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
         visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
@@ -89,6 +98,7 @@ for eval_partition in args.eval_partitions:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
 
     # Generate VQG2VQA prompts
+    # TODO: load these from a cache if it exists
     frames = []
     questions = []
     answers = []
@@ -134,6 +144,12 @@ for eval_partition in args.eval_partitions:
                      batch_size=args.batch_size,
                      cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}_crg_original.pt"))
 
+    
+    # Free up memory in case we need to load another model during mistake detection
+    del vlm
+    del vlm_processor
+
+    # Gather up important information from VQA outputs
     outputs_by_id = defaultdict(list)
     for output_index, (frame, prompt, answer, eid) in enumerate(zip(frames, prompts, answers, example_ids)):
         outputs_by_id[eid].append((output_index, frame, prompt, answer))
@@ -162,15 +178,16 @@ for eval_partition in args.eval_partitions:
                         original_logits[output_index] - logits[output_index],        
                 ) if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region else
                     VQAOutputs(
-                        example.task_name,
-                        example.example_id,
-                        step_id,
-                        frame,
-                        prompt,
-                        answer,
-                        response_token_ids,
-                        logits[output_index],        
-                    )
+                        task_name=example.task_name,
+                        example_id=example.example_id,
+                        procedure_id=step_id,
+                        frame=frame,
+                        prompt=prompt,
+                        expected_answer=answer,
+                        response_token_ids=response_token_ids,
+                        logits=logits[output_index],        
+                        question=question, # Save original question for NLI mistake detection evaluator
+                    )               
                 )
 
                 parallel_idx += 1
@@ -180,8 +197,8 @@ for eval_partition in args.eval_partitions:
 
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_dataset, vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
-    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold=0.5):")
-    pprint(metrics[0.5])
+    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
+    pprint(metrics['best_metrics'])
 
     # Compile preds per mistake detection example
     preds = compile_mistake_detection_preds(eval_dataset, vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)

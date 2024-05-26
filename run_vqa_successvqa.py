@@ -144,24 +144,24 @@ for eval_partition in args.eval_partitions:
         for output_index, frame, prompt, answer in outputs_by_id[example.example_id]:
             this_vqa_outputs.append(
                 [VQAOutputs(
-                    example.task_name,
-                    example.example_id,
-                    step_id,
-                    frame,
-                    prompt,
-                    answer,
-                    response_token_ids,
-                    original_logits[output_index] - logits[output_index],        
+                    task_name=example.task_name,
+                    example_id=example.example_id,
+                    procedure_id=step_id,
+                    frame=frame,
+                    prompt=prompt,
+                    expected_answer=answer,
+                    response_token_ids=response_token_ids,
+                    logits=original_logits[output_index] - logits[output_index],        
             ) if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region else
                 VQAOutputs(
-                    example.task_name,
-                    example.example_id,
-                    step_id,
-                    frame,
-                    prompt,
-                    answer,
-                    response_token_ids,
-                    logits[output_index],        
+                    task_name=example.task_name,
+                    example_id=example.example_id,
+                    procedure_id=step_id,
+                    frame=frame,
+                    prompt=prompt,
+                    expected_answer=answer,
+                    response_token_ids=response_token_ids,
+                    logits=logits[output_index],        
                 )]
             )
             

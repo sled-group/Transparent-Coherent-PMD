@@ -30,7 +30,7 @@ SUCCESSVQA_PROMPT_TEMPLATES = {
 }
 
 VQG2VQA_PROMPT_TEMPLATES = {
-    Blip2ForConditionalGeneration: "Question: {question}? Answer:",
+    Blip2ForConditionalGeneration: "Question: {question} Answer:",
     InstructBlipForConditionalGeneration: "Question: {question}? Answer: ",
     Kosmos2ForConditionalGeneration: "<grounding> Question: {question} Answer: ",
     LlavaForConditionalGeneration: "USER: <image>\n{question} ASSISTANT: ",
@@ -59,6 +59,7 @@ class VQAOutputs:
     expected_answer: VQAResponse
     response_token_ids: dict[VQAResponse, int]
     logits: Optional[torch.FloatTensor] # (vocab size) 
+    question: Optional[str] = None
     answer_probs: dict[VQAResponse, float] = field(default_factory=list)
     predicted_answer: VQAResponse = VQAResponse["No"]
 
