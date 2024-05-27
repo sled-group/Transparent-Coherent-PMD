@@ -1,4 +1,5 @@
 import os
+from pympler.tracker import SummaryTracker
 import spacy
 import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
@@ -98,7 +99,8 @@ class FrameVQAMistakeDetectionScorer:
                  examples: list[FrameVQAMistakeDetectionExample],
                  return_vqa_outputs: bool=False,
                  batch_size: int=1,
-                 cache_path: Optional[str]=None) -> Union[torch.FloatTensor, list[VQAOutputs]]:
+                 cache_path: Optional[str]=None,
+                 memory_tracker: Optional[SummaryTracker]=None) -> Union[torch.FloatTensor, list[VQAOutputs]]:
         """
         Score visual questions when posed on individual video frames to a VLM.
         
@@ -123,11 +125,16 @@ class FrameVQAMistakeDetectionScorer:
 
         # Process frames using visual attention filter
         if self.visual_filter is not None and logits.shape[0] < len(frames):
-            if self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
+            if memory_tracker is not None:
+                print("\nMemory (before running spatial filter)")
+                memory_tracker.print_diff()
+
+            if self.visual_filter_type == VisualFilterTypes.Spatial or self.visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
+                frames, questions = self.visual_filter(self.nlp, frames, questions)
+            elif self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
                 original_frames = frames
                 frames = self.visual_filter(self.nlp, frames, questions)
-            else:
-                frames, questions = self.visual_filter(self.nlp, frames, questions)
+        
         del logits # Intermediate results of detection aren't saved, so this is just a temporary hack just to check if we really need to run detection again
 
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
@@ -135,6 +142,10 @@ class FrameVQAMistakeDetectionScorer:
         
         response_tokens = get_vqa_response_token_ids(self.processor.tokenizer)
             
+        if memory_tracker is not None:
+            print("\nMemory (before running VQA)")
+            memory_tracker.print_diff()        
+
         # Run VQA in batches
         logits = run_vqa(vlm=self.vlm,
                          processor=self.processor,
@@ -151,6 +162,10 @@ class FrameVQAMistakeDetectionScorer:
                          batch_size=batch_size,
                          cache_path=cache_path)
         
+        if memory_tracker is not None:
+            print("\nMemory (after running VQA)")
+            memory_tracker.print_diff()
+
         # Gather up VQAOutputs (# examples, # questions per example)
         vqa_outputs = []
         parallel_idx = 0

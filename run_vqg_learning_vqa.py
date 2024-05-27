@@ -6,12 +6,16 @@ import argparse
 import concurrent.futures
 import datetime
 import json
+from memory_profiler import profile
 import os
 from pprint import pprint
+from pympler.tracker import SummaryTracker
+import resource
 import shutil
 import torch
 from tqdm import tqdm
 
+from travel import set_memory_limit
 from travel.constants import IMAGES_CHUNK_SIZE
 from travel.data.utils import split_list_into_partitions
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
@@ -24,12 +28,18 @@ parser.add_argument("--vqg_directory", type=str, required=True, help="Directory 
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--generate_partitions", nargs='+', type=str, default=["train", "val"], help="List of partitions to generate data for.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
-parser.add_argument("--batch_size", type=int, default=48, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
+parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples. Can also be used to add another partition of data to existing reuslts directory.")
+parser.add_argument("--track_memory", action="store_true", help="Pass this argument to use `pympler` to print out summaries of memory usage periodically during execution.")
 args = parser.parse_args()
 
 if "_debug" in args.vqg_directory:
     IMAGES_CHUNK_SIZE = 10
+
+if args.track_memory:
+    tracker = SummaryTracker() # Use pympler to track memory leaks
+else:
+    tracker = None
 
 # Run VQA across all passed partitions
 for partition in args.generate_partitions:
@@ -38,7 +48,7 @@ for partition in args.generate_partitions:
     print("Loading data...")
     frameVQA_examples = load_frameVQA_examples(args.vqg_directory, partition, load_frames=False)
     if "_debug" in args.vqg_directory:
-        frameVQA_examples = frameVQA_examples[:50]
+        frameVQA_examples = frameVQA_examples[:200]
     print(f"{len(frameVQA_examples)} frame VQA examples loaded from {partition} partition")
 
     # Save training examples for VQG in the same folder
@@ -74,8 +84,9 @@ for partition in args.generate_partitions:
         this_vqg_training_examples, this_vqa_outputs = scorer(frameVQA_examples_chunk,
                                                               return_vqa_outputs=True,
                                                               batch_size=args.batch_size,
-                                                              cache_path=cache_path.replace(".pt", f"{chunk_idx}.pt"))
-
+                                                              cache_path=cache_path.replace(".pt", f"{chunk_idx}.pt"),
+                                                              memory_tracker=tracker)
+        
         # Cache frames in VQAOutputs to conserve memory
         frames_to_close = []
         for outputs in this_vqa_outputs:
@@ -94,17 +105,28 @@ for partition in args.generate_partitions:
 
         return this_vqg_training_examples, this_vqa_outputs
 
+    # Enable profiling by prepending `mprof run` to the command used to run this script, then use `mprof plot --output=mprof.pdf` to see PDF of memory usage plot
+    @profile
     def run_vqa_scoring_on_chunks(scorer: FrameVQAMistakeDetectionScorer,
                                   frameVQA_examples_chunks: list[list[FrameVQAMistakeDetectionExample]]) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
         """Local method to run VQA scoring on a list of chunks of data."""
         vqg_training_examples = []
         vqa_outputs = []       
         for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_chunks, desc="chunks")):
+            if chunk_idx > 3:
+                if args.track_memory:
+                    set_memory_limit(int(2.6214e+9)) # Set a limit of memory usage to catch memory spikes
+
             this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer,
                                                                                     frameVQA_examples_chunk,
                                                                                     chunk_idx)
             vqg_training_examples += this_vqg_training_examples
             vqa_outputs += this_vqa_outputs
+
+            if args.track_memory:
+                print("\nMemory (after chunk)")
+                tracker.print_diff()
+
         return vqg_training_examples, vqa_outputs
 
     if torch.cuda.device_count() >= 2:
@@ -151,14 +173,8 @@ for partition in args.generate_partitions:
                                                 visual_filter_device=visual_filter_device)
 
         print("Running VQA scoring sequentially...")
-        vqg_training_examples = []
-        vqa_outputs = []
-        for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_split, desc="chunks")):
-            this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer,
-                                                                                    frameVQA_examples_chunk=frameVQA_examples_chunk,
-                                                                                    chunk_idx=chunk_idx)
-            vqg_training_examples += this_vqg_training_examples
-            vqa_outputs += this_vqa_outputs
+        vqg_training_examples, vqa_outputs = run_vqa_scoring_on_chunks(scorer, 
+                                                                       frameVQA_examples_split)
 
     save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, partition)
     save_vqg_training_examples(vqg_training_examples, this_results_dir, partition)

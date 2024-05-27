@@ -179,7 +179,7 @@ for eval_partition in args.eval_partitions:
     metrics_filename = f"metrics_{args.mistake_detection_strategy}_{eval_partition}.json"
     json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
-    preds_filename = f"preds_{eval_partition}.json"
+    preds_filename = f"preds_{args.mistake_detection_strategy}_{eval_partition}.json"
     json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
 
     det_filename = f"det_{args.mistake_detection_strategy}_{eval_partition}.pdf"

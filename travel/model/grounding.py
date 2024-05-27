@@ -7,7 +7,7 @@ import spacy
 from spacy.lang.en import English
 import torch
 from tqdm import tqdm
-from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesConfig
+from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesConfig, BatchEncoding
 from typing import Optional, Any
 import yaml
 
@@ -148,14 +148,11 @@ class AdaptiveVisualFilter:
                 batch_prompts = owl_prompts[i:i+batch_size]
                 batch_frames = frames[i:i+batch_size]
 
-                inputs = self.detector_processor(text=batch_prompts, images=batch_frames, return_tensors="pt").to(self.detector.device)
+                # Run processor one by one and transfer to GPU to avoid memory spike
+                inputs = [self.detector_processor(text=batch_prompts[j], images=batch_frames[j], return_tensors="pt").to(self.detector.device) for j in range(len(batch_frames))]
+                inputs = BatchEncoding({k: torch.cat([inp[k] for inp in inputs], dim=0) for k in inputs[0]})
                 outputs = self.detector(**inputs)
                 
-                inputs = inputs.to("cpu")
-                for attr in dir(outputs):
-                    if type(attr) == torch.FloatTensor:
-                        setattr(outputs, attr, outputs.attr.to("cpu"))
-
                 this_padded_images = [get_preprocessed_image(inputs.pixel_values[j].to('cpu')) for j in range(len(batch_frames))]
 
                 # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
