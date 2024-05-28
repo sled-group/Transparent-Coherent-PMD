@@ -299,7 +299,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 # Check all questions for this frame to decide if there's a mistake
                 for question_output in frame_outputs:
                     # Incorporate NLI model feedback
-                    if nli_relevance[parallel_idx] < NLI_RELEVANCE_DELTA:
+                    if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
                         # NLI model found this question irrelevant, so 0 mistake probability
                         frame_mistake_probs.append(0.0)
                     else:
