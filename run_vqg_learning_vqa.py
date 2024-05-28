@@ -51,6 +51,13 @@ for partition in args.generate_partitions:
         frameVQA_examples = frameVQA_examples[:200]
     print(f"{len(frameVQA_examples)} frame VQA examples loaded from {partition} partition")
 
+    # If we have a lot of data, divide it into chunks to conserve memory and parallelize across GPUs if possible
+    if len(frameVQA_examples) > IMAGES_CHUNK_SIZE:
+        frameVQA_examples_split = split_list_into_partitions(frameVQA_examples, len(frameVQA_examples) // IMAGES_CHUNK_SIZE)
+    else:
+        frameVQA_examples_split = [frameVQA_examples]
+    print(f"Running VQA scoring in {len(frameVQA_examples_split)} chunk(s): " + ", ".join([str(len(s)) for s in frameVQA_examples_split]))
+
     # Save training examples for VQG in the same folder
     if args.resume_dir is None:
         timestamp = datetime.datetime.now()
@@ -59,21 +66,14 @@ for partition in args.generate_partitions:
             this_results_dir += f"_{args.visual_filter_mode}"
     else:
         this_results_dir = args.resume_dir
-    cache_path = os.path.join(this_results_dir, "VQA_scoring_cache", f"VQA_cache_{partition}.pt")
+    cache_paths = [os.path.join(this_results_dir, "VQA_scoring_cache", f"VQA_cache_{partition}{chunk_idx}.pt") for chunk_idx in range(len(frameVQA_examples_split))]
     if not os.path.exists(os.path.join(this_results_dir, "VQA_scoring_cache")):
         os.makedirs(os.path.join(this_results_dir, "VQA_scoring_cache"))
-
-    # If we have a lot of data, divide it into chunks to conserve memory and parallelize across GPUs if possible
-    if len(frameVQA_examples) > IMAGES_CHUNK_SIZE:
-        frameVQA_examples_split = split_list_into_partitions(frameVQA_examples, len(frameVQA_examples) // IMAGES_CHUNK_SIZE)
-    else:
-        frameVQA_examples_split = [frameVQA_examples]
-    print(f"Running VQA scoring in {len(frameVQA_examples_split)} chunk(s): " + ", ".join([str(len(s)) for s in frameVQA_examples_split]))
 
     # Get ready to run VQA scoring
     def run_vqa_scoring_on_chunk(scorer: FrameVQAMistakeDetectionScorer,
                                  frameVQA_examples_chunk: list[FrameVQAMistakeDetectionExample],
-                                 chunk_idx: int) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
+                                 cache_path: str) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
         """Local method to run VQA scoring on a chunk of data."""
 
         # Load frames for this chunk
@@ -84,7 +84,7 @@ for partition in args.generate_partitions:
         this_vqg_training_examples, this_vqa_outputs = scorer(frameVQA_examples_chunk,
                                                               return_vqa_outputs=True,
                                                               batch_size=args.batch_size,
-                                                              cache_path=cache_path.replace(".pt", f"{chunk_idx}.pt"),
+                                                              cache_path=cache_path,
                                                               memory_tracker=tracker)
         
         # Cache frames in VQAOutputs to conserve memory
@@ -108,24 +108,29 @@ for partition in args.generate_partitions:
     # Enable profiling by prepending `mprof run` to the command used to run this script, then use `mprof plot --output=mprof.pdf` to see PDF of memory usage plot
     @profile
     def run_vqa_scoring_on_chunks(scorer: FrameVQAMistakeDetectionScorer,
-                                  frameVQA_examples_chunks: list[list[FrameVQAMistakeDetectionExample]]) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
+                                  frameVQA_examples_chunks: list[list[FrameVQAMistakeDetectionExample]],
+                                  first_chunk_idx: int) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
         """Local method to run VQA scoring on a list of chunks of data."""
         vqg_training_examples = []
         vqa_outputs = []       
         for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_chunks, desc="chunks")):
-            if chunk_idx > 3:
-                if args.track_memory:
-                    set_memory_limit(int(2.6214e+9)) # Set a limit of memory usage to catch memory spikes
+            # if chunk_idx > 3:
+            #     if args.track_memory:
+            #         set_memory_limit(int(2.6214e+9)) # Set a limit of memory usage to catch memory spikes
 
-            this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer,
-                                                                                    frameVQA_examples_chunk,
-                                                                                    chunk_idx)
-            vqg_training_examples += this_vqg_training_examples
-            vqa_outputs += this_vqa_outputs
-
+            this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer=scorer,
+                                                                                    frameVQA_examples_chunk=frameVQA_examples_chunk,
+                                                                                    cache_path=cache_paths[first_chunk_idx + chunk_idx])
             if args.track_memory:
                 print("\nMemory (after chunk)")
                 tracker.print_diff()
+
+            vqg_training_examples += this_vqg_training_examples
+            vqa_outputs += this_vqa_outputs
+
+            # Save partial progress
+            save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, partition)
+            save_vqg_training_examples(vqg_training_examples, this_results_dir, partition)
 
         return vqg_training_examples, vqa_outputs
 
@@ -144,10 +149,14 @@ for partition in args.generate_partitions:
 
         print(f"Parallelizing VQA scoring across {torch.cuda.device_count()} GPUs...")
         with concurrent.futures.ThreadPoolExecutor() as executor:
+            first_chunk_indices = list(range(len(frameVQA_examples_split)))
+            first_chunk_indices = split_list_into_partitions(first_chunk_indices, len(scorers))
+            first_chunk_indices = [min(ci) for ci in first_chunk_indices]
             frameVQA_examples_splits_by_scorer = split_list_into_partitions(frameVQA_examples_split, len(scorers))
             partitions = list(executor.map(run_vqa_scoring_on_chunks, 
                                            scorers,
-                                           frameVQA_examples_splits_by_scorer))
+                                           frameVQA_examples_splits_by_scorer,
+                                           first_chunk_indices))
 
         # Compile processed data from chunks
         vqg_training_examples = []
@@ -161,10 +170,7 @@ for partition in args.generate_partitions:
         print("Setting up mistake detection scorer...")
         vlm_device = 0 if torch.cuda.is_available() else None
         if args.visual_filter_mode is not None:
-            if torch.cuda.device_count() > 1:
-                visual_filter_device = 1
-            else:
-                visual_filter_device = 0
+            visual_filter_device = 0
         else:
             visual_filter_device = None
         scorer = FrameVQAMistakeDetectionScorer(args.vlm_name,
@@ -174,8 +180,10 @@ for partition in args.generate_partitions:
 
         print("Running VQA scoring sequentially...")
         vqg_training_examples, vqa_outputs = run_vqa_scoring_on_chunks(scorer, 
-                                                                       frameVQA_examples_split)
+                                                                       frameVQA_examples_split,
+                                                                       0)
 
+    # Save one more time
     save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, partition)
     save_vqg_training_examples(vqg_training_examples, this_results_dir, partition)
 

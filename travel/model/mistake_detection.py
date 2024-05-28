@@ -1,5 +1,4 @@
 from dataclasses import dataclass, asdict
-from dataclasses_json import dataclass_json
 import matplotlib.pyplot as plt
 import numpy as np
 from pprint import pprint
@@ -23,7 +22,6 @@ NLI_RELEVANCE_DELTA = float(config["mistake_detection_strategies"]["nli_relevanc
 
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
 
-
 def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str, float]:
     this_metrics = {}
     this_metrics['accuracy'] = accuracy_score(labels, preds)
@@ -39,7 +37,6 @@ def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str
     this_metrics['false_negative_rate'] = FNR
 
     return this_metrics
-
 
 @dataclass
 class MistakeDetectionOutputs:
@@ -62,12 +59,11 @@ class MistakeDetectionOutputs:
         return_dict['mistake_probs'] = [[float(round(v, 3)) for v in l] for l in return_dict['mistake_probs']]
         return_dict['detection_threshold'] = float(round(return_dict['detection_threshold'], 3))
         if return_dict['nli_mistake_probs'] is not None:
-            [[float(round(v, 3)) for v in l] for l in return_dict['nli_mistake_probs']]
+            return_dict['nli_mistake_probs'] = [[float(round(v, 3)) for v in l] for l in return_dict['nli_mistake_probs']]
         if return_dict['nli_relevance_probs'] is not None:
-            [[float(round(v, 3)) for v in l] for l in return_dict['nli_relevance_probs']]
+            return_dict['nli_relevance_probs'] = [[float(round(v, 3)) for v in l] for l in return_dict['nli_relevance_probs']]
         return return_dict
 
-@dataclass_json
 @dataclass
 class MistakeDetectionEvaluator:
     """Superclass to implement different types of evaluators based on VQAOutputs."""
@@ -319,7 +315,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
 
                 example_mistake_probs.append(frame_mistake_probs)
                 example_nli_mistake_probs.append(frame_nli_mistake_probs)
-                example_nli_relevance_probs.append(example_nli_relevance_probs)
+                example_nli_relevance_probs.append(frame_nli_relevance_probs)
 
             mistake_probs.append(example_mistake_probs)
             compiled_nli_mistake_probs.append(example_nli_mistake_probs)

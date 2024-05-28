@@ -60,7 +60,7 @@ class VQAOutputs:
     response_token_ids: dict[VQAResponse, int]
     logits: Optional[torch.FloatTensor] # (vocab size) 
     question: Optional[str] = None
-    answer_probs: dict[VQAResponse, float] = field(default_factory=list)
+    answer_probs: dict[VQAResponse, float] = field(default_factory=dict)
     predicted_answer: VQAResponse = VQAResponse["No"]
 
     def __post_init__(self):
