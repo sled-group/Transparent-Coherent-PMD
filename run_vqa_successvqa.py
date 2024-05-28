@@ -126,13 +126,14 @@ for eval_partition in args.eval_partitions:
                     batch_size=args.batch_size,
                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}.pt"))
     
-    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-            original_logits = run_vqa(vlm,
-                     vlm_processor,
-                     prompts,
-                     original_frames,
-                     batch_size=args.batch_size,
-                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}_crg_original.pt"))
+    if args.visual_filter_mode is not None:
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+                original_logits = run_vqa(vlm,
+                        vlm_processor,
+                        prompts,
+                        original_frames,
+                        batch_size=args.batch_size,
+                        cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}_crg_original.pt"))
 
     outputs_by_id = defaultdict(list)
     for output_index, (frame, prompt, answer, eid) in enumerate(zip(frames, prompts, answers, example_ids)):

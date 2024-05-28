@@ -136,13 +136,14 @@ for eval_partition in args.eval_partitions:
                      batch_size=args.batch_size,
                      cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}.pt"))
     
-    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-            original_logits = run_vqa(vlm,
-                     vlm_processor,
-                     prompts,
-                     original_frames,
-                     batch_size=args.batch_size,
-                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}_crg_original.pt"))
+    if args.visual_filter_mode is not None:
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+                original_logits = run_vqa(vlm,
+                        vlm_processor,
+                        prompts,
+                        original_frames,
+                        batch_size=args.batch_size,
+                        cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}_crg_original.pt"))
 
     
     # Free up memory in case we need to load another model during mistake detection
@@ -176,7 +177,7 @@ for eval_partition in args.eval_partitions:
                         answer,
                         response_token_ids,
                         original_logits[output_index] - logits[output_index],        
-                ) if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region else
+                ) if (args.visual_filter_mode is not None and VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region) else
                     VQAOutputs(
                         task_name=example.task_name,
                         example_id=example.example_id,
