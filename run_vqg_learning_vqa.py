@@ -128,7 +128,8 @@ for partition in args.generate_partitions:
             vqg_training_examples += this_vqg_training_examples
             vqa_outputs += this_vqa_outputs
 
-            # Save partial progress
+            # Save partial progress in a supfolder
+            chunks_results_dir = os.path.join(this_results_dir, f"chunks{first_chunk_idx}-{first_chunk_idx+len(frameVQA_examples_chunks)-1}")
             save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], this_results_dir, partition)
             save_vqg_training_examples(vqg_training_examples, this_results_dir, partition)
 
