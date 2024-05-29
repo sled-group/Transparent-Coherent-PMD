@@ -101,6 +101,7 @@ for partition in args.generate_partitions:
         # Generate prompts - one per example
         prompts = []
         seen_video_clips = {}
+        # TODO: use new get_procedures method on MistakeDetectionDataset
         for example in tqdm(dataset, desc="generating prompts"):
             if (example.video_id, example.procedure_id) in seen_video_clips:
                 continue

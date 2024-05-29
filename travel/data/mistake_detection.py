@@ -35,17 +35,20 @@ class MistakeDetectionExample:
     def __post_init__(self):
         """Resizes frames to save space in caching."""
         new_sizes = [(int(FRAME_DIMENSION * (frame.width / frame.height)), FRAME_DIMENSION) if frame.width > frame.height else (FRAME_DIMENSION, int(FRAME_DIMENSION * (frame.height / frame.width))) for frame in self.frames]
-        self.frames = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, self.frames)]
+        if type(self.frames[0]) != str:
+            # Frames have been cached before and not yet uncached - they should already be resized
+            self.frames = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, self.frames)]
 
     @staticmethod
-    def from_dict(data: dict):
+    def from_dict(data: dict, load_frames: bool=True):
         """
         Loads an instance of MistakeDetectionExample from a dictionary. This adds special logic to account for loading the frame image.
 
         :param data: Dictionary of instance data.
         """
         assert "frames" in data, "Can't use from_dict on this class without including `frames` list of images."
-        data["frames"] = [Image.open(fname) for fname in data["frames"]]
+        if load_frames:
+            data["frames"] = [Image.open(fname) for fname in data["frames"]]
         example = MistakeDetectionExample(**data)
         return example
     
@@ -168,7 +171,6 @@ class MistakeDetectionDataset:
         else:
             return len(example_dirs)
 
-
     def __iter__(self):
         return self.get_batches(1)
     
@@ -201,7 +203,7 @@ class MistakeDetectionDataset:
         self.example_dirs.append(example_cache_dir)
         self.n_examples += 1
         
-    def load_example_from_file(self, example_dir: str) -> MistakeDetectionExample:
+    def load_example_from_file(self, example_dir: str, load_frames: bool=True) -> MistakeDetectionExample:
         """
         Loads an example from cache by the directory it's saved in.
 
@@ -209,7 +211,7 @@ class MistakeDetectionDataset:
         :return: MistakeDetectionExample object.
         """
         example = json.load(open(os.path.join(example_dir, "example.json"), "r"))
-        example = MistakeDetectionExample.from_dict(example)
+        example = MistakeDetectionExample.from_dict(example, load_frames=load_frames)
         return example
     
     def save_dataset_metadata(self):
@@ -233,4 +235,10 @@ class MistakeDetectionDataset:
             self.n_examples = data["n_examples"]
             self.data_generated = data["data_generated"]
 
-    
+    def get_all_procedures(self) -> list[tuple[int, str]]:
+        """
+        Quickly returns a list of all procedures in the dataset (along with their IDs). Used for VQG procedure.
+        """
+        for d in self.example_dirs:
+            example = self.load_example_from_file(d, load_frames=False).procedure_id
+            yield (example.procedure_id, example.procedure_description)

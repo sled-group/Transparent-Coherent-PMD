@@ -24,7 +24,7 @@ parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, 
 # parser.add_argument("--n_questions_to_generate", type=int, default=2, choices=range(1, len(VQG_DEMONSTRATIONS[0].questions) + 1), help="Number of questions to generate per procedure.")
 parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
-parser.add_argument("--batch_size", type=int, default=48, help="Batch size for VQG.")
+parser.add_argument("--batch_size", type=int, default=40, help="Batch size for VQG.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
@@ -64,17 +64,10 @@ for worker_index in range(n_workers):
 print("Generation config:")
 print(lm.model.generation_config)
 
-if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
-    # TODO: we may want to split the CaptainCook4D data by recipe and support that here
-    indexed_procedures = RECIPE_STEPS
-elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
-
-    pass
-
 # Prepare output directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"VQG" # Can change this name later if we have other approaches for VQG besides prompting LM with ICL
+    this_results_dir = f"VQG_" + str(args.task)
     if args.debug:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
@@ -84,28 +77,23 @@ else:
     this_results_dir = args.resume_dir
 
 # Generate prompts for VQG
-prompts = []
-for procedure_id, step in indexed_procedures.items():
-    prompt = generate_vqg_prompt_icl(step, n_demonstrations=args.n_demonstrations)
-    prompts.append(
-        VQGInputs(
-            procedure_id=procedure_id,
-            procedure_description=step,
-            prompt=prompt    
-        )
-    )
-    if args.debug and len(prompts) >= 10:
-        break
-
-# Generate or load prompts
 prompts_fname = f"prompts_{args.partition}.json"
 if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, prompts_fname)):
-    # Starting from scratch
+    
+    # Starting from scratch - load dataset and iterate through its procedures to generate prompts
+    if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
+        # TODO: we may want to split the CaptainCook4D data by recipe and support that here
+        indexed_procedures = RECIPE_STEPS.items
+    elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
+        dataset = Ego4DMistakeDetectionDataset(data_split=partition,
+                                            mismatch_augmentation=False,
+                                            debug_n_examples_per_class=100 if args.debug else None)
+        indexed_procedures = dataset.get_all_procedures
 
     # Generate prompts - one per example
     prompts = []
     seen_video_clips = {}
-    for procedure_id, step in indexed_procedures.items():
+    for procedure_id, step in indexed_procedures():
         prompt = generate_vqg_prompt_icl(step, n_demonstrations=args.n_demonstrations)
         prompts.append(
             VQGInputs(
@@ -125,18 +113,84 @@ else:
     prompts = load_vqg_inputs(os.path.join(this_results_dir, prompts_fname))
     print(f"{len(prompts)} prompts loaded for {args.partition} partition")
 
+# Load combined VQG outputs if we have any
+vqg_outputs_fname = f"VQG_outputs_{args.partition}.json"
+if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, vqg_outputs_fname)):
+    # Initialize empty dictionary of VQG outputs
+    vqg_outputs = {}
+else:
+    # Load already generated VQG outputs from previous run
+    vqg_outputs = load_vqg_outputs(os.path.join(this_results_dir, vqg_outputs_fname))
+    print(f"{len(vqg_outputs)} pre-generated VQG outputs loaded for {args.partition} partition")
 
-# TODO: finish implementing resuming here and parallelization following run_vqg_learning_generation.py - may be needed if we do ego4d evaluations
+# Only keep prompts that haven't already been run
+prompts = [p for p in prompts if p not in vqg_outputs]
+prompt_ids = [p.procedure_id for p in this_prompts]
 
 # Run prompts through LM to generate visual questions (and save VQG outputs)
-vqg_outputs = run_vqg(
-    lm,
-    prompts,
-    [int(inp.procedure_id) for inp in prompts],
-    batch_size=args.batch_size,
-    save_path=this_results_dir,
-    vqg_outputs=load_vqg_outputs(this_results_dir) # Will send in partly completed VQG outputs if we have them
-)
+if n_workers == 1:
+    print("Running VQG sequentially...")
+    vqg_outputs = run_vqg(
+        lm,
+        prompts,
+        prompt_ids,
+        batch_size=args.batch_size,
+        save_path=this_results_dir,
+        vqg_outputs=vqg_outputs # Will send in partly completed VQG outputs if we have them
+    )
+else:
+    # Split up remaining prompts and prompt IDs by GPU
+    prompts_split = split_list_into_partitions(prompts, args.n_workers)
+    prompt_ids_split = split_list_into_partitions(prompt_ids, args.n_workers)
+
+    # Then gather up any existing VQG outputs and exclude them from prompts and prompt IDs
+    all_worker_vqg_outputs = []
+    all_worker_prompt_ids = []
+    all_worker_prompts = []
+    worker_vqg_outputs_paths = [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(args.n_workers)]
+    for i in range(args.n_workers):
+        worker_vqg_outputs = load_vqg_outputs(worker_vqg_outputs_paths[i])
+        worker_prompt_ids = [pid for pid in prompt_ids_split[i] if pid not in worker_vqg_outputs]
+        worker_prompts = [prompt for pid, prompt in zip(prompt_ids_split[i], prompts_split[i]) if pid not in worker_vqg_outputs]
+
+        all_worker_vqg_outputs.append(worker_vqg_outputs)
+        all_worker_prompt_ids += worker_prompt_ids
+        all_worker_prompts += worker_prompts
+
+    # Combine VQG outputs we have so far and save
+    for vqgo in all_worker_vqg_outputs:
+        vqg_outputs |= vqgo
+    save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
+
+    # Redistribute prompts across workers in case one GPU ran slower than others in the previous run
+    assert len(all_worker_prompt_ids) == len(all_worker_prompts), "Size issue with collecting prompts and prompt IDs from earlier run workers!"
+    all_worker_prompts = split_list_into_partitions(all_worker_prompts, args.n_workers)
+    all_worker_prompt_ids = split_list_into_partitions(all_worker_prompt_ids, args.n_workers)
+
+    print(f"Loaded prompts split across {args.n_workers} GPUs: " + ", ".join([str(len(p)) for p in all_worker_prompts]))
+
+    if not all(len(p) == 0 for p in all_worker_prompts):
+        # Parallelize across GPUs
+        print(f"Parallelizing VQG across {args.n_workers} GPUs...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
+            partitions = list(executor.map(run_vqg, 
+                                        lms,
+                                        all_worker_prompts,
+                                        all_worker_prompt_ids,
+                                        [args.batch_size for _ in range(args.n_workers)],
+                                        worker_vqg_outputs_paths,
+                                        [{} for _ in range(args.n_workers)]
+                                        )
+            )
+    else:
+        partitions = worker_vqg_outputs
+
+    # Combine all VQG outputs from workers
+    for p in partitions:
+        vqg_outputs |= p
+
+    # Save combined VQG outputs for this temperature
+    save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
 
 # Save config and args
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))

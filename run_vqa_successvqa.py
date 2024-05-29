@@ -122,6 +122,7 @@ for eval_partition in args.eval_partitions:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
         
     if torch.cuda.device_count() >= 2: 
+        print(f"Running VQA in parallel across {torch.cuda.device_count()} GPUs...")
         with concurrent.futures.ThreadPoolExecutor() as executor:   
             partitions = list(executor.map(run_vqa_for_mistake_detection, 
                                            vlms,
@@ -141,6 +142,7 @@ for eval_partition in args.eval_partitions:
         for this_vqa_outputs in partitions:
             vqa_outputs += this_vqa_outputs        
     else:
+        print("Running VQA sequentially...")
         vqa_outputs = run_vqa_for_mistake_detection(eval_dataset=eval_datasets[0],
                                                     vlm=vlms[0],
                                                     vlm_processor=vlm_processors[0],
