@@ -4,10 +4,12 @@ init_travel()
 
 import argparse
 from collections import defaultdict
+import concurrent.futures
 import datetime
 import json
 import os
 import pickle
+from PIL import Image
 from pprint import pprint
 import shutil
 import spacy
@@ -18,8 +20,8 @@ from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConf
 from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, DETECTION_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
-from travel.model.vqa import VQAOutputs, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, run_vqa_for_mistake_detection
-from travel.model.vqg import load_vqg_outputs
+from travel.model.vqa import VQAOutputs, VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, run_vqa_for_mistake_detection
+from travel.model.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.captaincook4d import CaptainCook4DDataset
 
@@ -107,8 +109,6 @@ def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[
     answers = []
     frames = []
     prompt = prompt_template.format(step=example.procedure_description)
-    question = prompt.split("Question: ")[1].split("Answer: ")[0].strip()
-    expected_answer = VQAResponse["Yes"]
 
     for frame in example.frames:
         for question, answer in zip(vqg_outputs[example.procedure_id].questions, vqg_outputs[example.procedure_id].answers):
@@ -137,7 +137,7 @@ for eval_partition in args.eval_partitions:
                                            vlms,
                                            vlm_processors,
                                            [generate_prompts] * n_workers,
-                                           [1] * n_workers,
+                                           [N_GENERATED_QUESTIONS] * n_workers,
                                            [None if args.visual_filter_mode is None else VisualFilterTypes(args.visual_filter_mode)] * n_workers,
                                            visual_filters,
                                            nlps,
@@ -156,7 +156,7 @@ for eval_partition in args.eval_partitions:
                                                     vlm=vlms[0],
                                                     vlm_processor=vlm_processors[0],
                                                     generate_prompts=generate_prompts,
-                                                    n_prompts_per_frame=1,
+                                                    n_prompts_per_frame=N_GENERATED_QUESTIONS,
                                                     visual_filter_mode=None if args.visual_filter_mode is None else VisualFilterTypes(args.visual_filter_mode),
                                                     visual_filter=visual_filters[0],
                                                     nlp=nlps[0],
@@ -166,60 +166,6 @@ for eval_partition in args.eval_partitions:
                                                     vqa_batch_size=args.batch_size)
 
     print("Evaluating and saving results...")
-
-    # Free up memory in case we need to load another model during mistake detection
-    del vlms
-    del vlm_processors
-    if args.visual_filter_mode is not None:
-        del visual_filters
-
-    # Gather up important information from VQA outputs
-    outputs_by_id = defaultdict(list)
-    for output_index, (frame, prompt, answer, eid) in enumerate(zip(frames, prompts, answers, example_ids)):
-        outputs_by_id[eid].append((output_index, frame, prompt, answer))
-
-    vqa_outputs = []
-    for example in tqdm(eval_dataset, "gathering VQA outputs"):
-        # Cutoff again since the example will be reloaded from disk when we access it
-        example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
-        step_id = example.procedure_id
-        example_vqa_outputs = []
-
-        parallel_idx = 0
-        for _ in example.frames:
-            frame_vqa_outputs = []
-            for question, answer in zip(vqg_outputs[step_id].questions, vqg_outputs[step_id].answers):
-                output_index, frame, prompt, answer = outputs_by_id[example.example_id][parallel_idx]
-                frame_vqa_outputs.append(
-                    VQAOutputs(
-                        example.task_name,
-                        example.example_id,
-                        step_id,
-                        frame,
-                        prompt,
-                        answer,
-                        response_token_ids,
-                        original_logits[output_index] - logits[output_index],        
-                        question=question, # Save original question for NLI mistake detection evaluator
-                ) if (args.visual_filter_mode is not None and VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region) else
-                    VQAOutputs(
-                        task_name=example.task_name,
-                        example_id=example.example_id,
-                        procedure_id=step_id,
-                        frame=frame,
-                        prompt=prompt,
-                        expected_answer=answer,
-                        response_token_ids=response_token_ids,
-                        logits=logits[output_index],        
-                        question=question, # Save original question for NLI mistake detection evaluator
-                    )               
-                )
-
-                parallel_idx += 1
-
-            example_vqa_outputs.append(frame_vqa_outputs)
-        vqa_outputs.append(example_vqa_outputs)
-
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_dataset, vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
     print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")

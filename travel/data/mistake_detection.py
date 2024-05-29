@@ -3,7 +3,7 @@ from enum import Enum
 import json
 import os
 from PIL import Image
-from typing import Optional, Any, Union, Iterable
+from typing import Optional, Any, Union, Iterable, Generator
 
 from travel.data.utils import split_list_into_partitions
 from travel.data.utils.image import FRAME_DIMENSION
@@ -235,7 +235,7 @@ class MistakeDetectionDataset:
             self.n_examples = data["n_examples"]
             self.data_generated = data["data_generated"]
 
-    def get_all_procedures(self) -> list[tuple[int, str]]:
+    def get_all_procedures(self) -> Generator[tuple[int, str]]:
         """
         Quickly returns a list of all procedures in the dataset (along with their IDs). Used for VQG procedure.
         """

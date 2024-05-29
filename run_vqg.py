@@ -3,6 +3,7 @@ from travel import init_travel
 init_travel()
 
 import argparse
+import concurrent.futures
 import datetime
 import json
 import os
@@ -15,6 +16,8 @@ from travel.constants import RESULTS_DIR, HF_TOKEN
 from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs, run_vqg
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d.constants import RECIPE_STEPS
+from travel.data.ego4d import Ego4DMistakeDetectionDataset
+from travel.data.utils import split_list_into_partitions
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks]) # TODO: support running for Ego4D's evaluation sets
@@ -84,9 +87,9 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
         # TODO: we may want to split the CaptainCook4D data by recipe and support that here
         indexed_procedures = RECIPE_STEPS.items
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
-        dataset = Ego4DMistakeDetectionDataset(data_split=partition,
-                                            mismatch_augmentation=False,
-                                            debug_n_examples_per_class=100 if args.debug else None)
+        dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
+                                               mismatch_augmentation=False,
+                                               debug_n_examples_per_class=100 if args.debug else None)
         indexed_procedures = dataset.get_all_procedures
 
     # Generate prompts - one per example
@@ -124,7 +127,7 @@ else:
 
 # Only keep prompts that haven't already been run
 prompts = [p for p in prompts if p not in vqg_outputs]
-prompt_ids = [p.procedure_id for p in this_prompts]
+prompt_ids = [p.procedure_id for p in prompts]
 
 # Run prompts through LM to generate visual questions (and save VQG outputs)
 if n_workers == 1:
