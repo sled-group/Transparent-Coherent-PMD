@@ -21,7 +21,7 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, DETECTION_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
-from travel.model.vqa import VQAOutputs, VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids, run_vqa, run_vqa_for_mistake_detection
+from travel.model.vqa import VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids, run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
@@ -101,7 +101,6 @@ def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[
     question = prompt.split("Question: ")[1].split("Answer: ")[0].strip()
     expected_answer = VQAResponse["Yes"]
 
-    example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
     for frame in example.frames:
         questions.append(question)
         prompts.append(prompt)
@@ -157,6 +156,12 @@ for eval_partition in args.eval_partitions:
                                                     vqa_batch_size=args.batch_size)
     
     print("Evaluating and saving results...")
+
+    # Free up memory in case we need to load another model during mistake detection
+    del vlms
+    del vlm_processors
+    if args.visual_filter_mode is not None:
+        del visual_filters
 
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()

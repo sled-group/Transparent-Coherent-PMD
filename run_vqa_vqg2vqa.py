@@ -18,9 +18,9 @@ from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConf
 from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, DETECTION_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
-from travel.model.vqa import VQAOutputs, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, run_vqa
+from travel.model.vqa import VQAOutputs, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, run_vqa_for_mistake_detection
 from travel.model.vqg import load_vqg_outputs
-from travel.data.mistake_detection import MistakeDetectionTasks, get_cutoff_time_by_proportion
+from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.captaincook4d import CaptainCook4DDataset
 
 parser = argparse.ArgumentParser()
@@ -41,7 +41,8 @@ vqg_outputs = load_vqg_outputs(args.vqg_directory)
 
 # TODO: implement filtering by target objects? - have to integrate with existing visual filter code and get that code up to date
 
-# Load VLM
+# Load VLM(s), processors, visual filters, etc. - if multiple GPUs available, use them
+print("Setting up VLMs and visual filters...")
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     llm_int8_threshold=6.0,
@@ -50,26 +51,38 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
     bnb_4bit_quant_type="nf4",
 )
-vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
-vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, cache_dir=DATA_CACHE_DIR, quantization_config=bnb_config)
-vlm_processor.tokenizer.padding_side = "left"
-vlm.language_model.generation_config.temperature = None
-vlm.language_model.generation_config.top_p = None
-vlm.language_model.generation_config.do_sample = False
+n_workers = 1 if torch.cuda.device_count() <= 1 else torch.cuda.device_count()
+vlms = []
+vlm_processors = []
+visual_filters = []
+nlps = []
+for worker_index in range(n_workers):
+    if torch.cuda.is_available():
+        torch.cuda.set_device(f"cuda:{worker_index}")
+    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, 
+                                                cache_dir=DATA_CACHE_DIR,
+                                                quantization_config=bnb_config)
+    vlm.language_model.generation_config.temperature = None
+    vlm.language_model.generation_config.top_p = None
+    vlm.language_model.generation_config.do_sample = False
+    vlms.append(vlm)
+        
+    vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
+    vlm_processor.tokenizer.padding_side = "left"
+    vlm_processors.append(vlm_processor)
 
-# TODO: support GPU parallelization by setting up VLM and filter on each device
-if args.visual_filter_mode is not None:
-    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
-        visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
-        nlp = spacy.load('en_core_web_sm')
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
-        visual_filter = SpatialVisualFilter(rephrase_questions=False, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
-        nlp = spacy.load('en_core_web_sm')
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-        visual_filter = ContrastiveRegionFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
-        nlp = spacy.load('en_core_web_sm')
+    if args.visual_filter_mode is not None:
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+            visual_filter = ContrastiveRegionFilter(device=f"cuda:{worker_index}")
+            nlp = spacy.load('en_core_web_sm')
+        else:
+            raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with SuccessVQA!")
+        
+        visual_filters.append(visual_filter)
+        nlps.append(nlp)
     else:
-        raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with VQG2VQA!")
+        visual_filters.append(None)
+        nlps.append(None)
 
 prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(vlm)]
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
@@ -77,7 +90,7 @@ response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 # Configure results directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"VQG2VQA"
+    this_results_dir = f"{args.task}_VQG2VQA"
     if args.debug:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.vlm_name.split('/')[-1]}_{timestamp.strftime('%Y%m%d%H%M%S')}"
@@ -88,69 +101,77 @@ if args.resume_dir is None:
 else:
     this_results_dir = args.resume_dir
 
+def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]:
+    questions = []
+    prompts = []
+    answers = []
+    frames = []
+    prompt = prompt_template.format(step=example.procedure_description)
+    question = prompt.split("Question: ")[1].split("Answer: ")[0].strip()
+    expected_answer = VQAResponse["Yes"]
+
+    for frame in example.frames:
+        for question, answer in zip(vqg_outputs[example.procedure_id].questions, vqg_outputs[example.procedure_id].answers):
+            questions.append(question)
+            prompts.append(prompt_template.format(question=question.strip()))
+            answers.append(answer)
+            frames.append(frame)
+
+    return questions, prompts, answers, frames
+
 for eval_partition in args.eval_partitions:
+    print(f"Running VQA on {eval_partition}...")
 
     # Load mistake detection dataset
-    if args.task == "captaincook4d":
-        eval_dataset = CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None)
-    # TODO: integrate ego4d here
+    if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
+        eval_datasets = [CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None) for _ in range(n_workers)]
+    elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
+        eval_datasets = [Ego4DMistakeDetectionDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None) for _ in range(n_workers)]
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
 
-    # Generate VQG2VQA prompts
-    # TODO: load these from a cache if it exists
-    frames = []
-    questions = []
-    answers = []
-    example_ids = []
-    question_ids = []
-    for example in tqdm(eval_dataset, "generating prompts"):
-        step_id = example.procedure_id
-        step = example.procedure_description
-        
-        example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
-        for frame in example.frames:
-            for question, answer in zip(vqg_outputs[step_id].questions, vqg_outputs[step_id].answers):
-                frames.append(frame)
-                questions.append(question)
-                answers.append(answer)
-                example_ids.append(example.example_id)
+    if torch.cuda.device_count() >= 2: 
+        print(f"Running VQA in parallel across {torch.cuda.device_count()} GPUs...")
+        with concurrent.futures.ThreadPoolExecutor() as executor:   
+            partitions = list(executor.map(run_vqa_for_mistake_detection, 
+                                           vlms,
+                                           vlm_processors,
+                                           [generate_prompts] * n_workers,
+                                           [1] * n_workers,
+                                           [None if args.visual_filter_mode is None else VisualFilterTypes(args.visual_filter_mode)] * n_workers,
+                                           visual_filters,
+                                           nlps,
+                                           [this_results_dir] * n_workers,
+                                           [n_workers] * n_workers,
+                                           list(range(n_workers)),
+                                           [args.batch_size] * n_workers)
+                             )
+        # Compile processed data from partitions
+        vqa_outputs = []
+        for this_vqa_outputs in partitions:
+            vqa_outputs += this_vqa_outputs        
+    else:
+        print("Running VQA sequentially...")
+        vqa_outputs = run_vqa_for_mistake_detection(eval_dataset=eval_datasets[0],
+                                                    vlm=vlms[0],
+                                                    vlm_processor=vlm_processors[0],
+                                                    generate_prompts=generate_prompts,
+                                                    n_prompts_per_frame=1,
+                                                    visual_filter_mode=None if args.visual_filter_mode is None else VisualFilterTypes(args.visual_filter_mode),
+                                                    visual_filter=visual_filters[0],
+                                                    nlp=nlps[0],
+                                                    cache_dir=this_results_dir,
+                                                    n_workers=1,
+                                                    worker_index=0,
+                                                    vqa_batch_size=args.batch_size)
 
-    # Run visual filter if we have one
-    if args.visual_filter_mode is not None:
-        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-            original_frames = frames
-            frames = visual_filter(nlp, frames, questions)
-        elif VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase]:
-            frames, questions = visual_filter(nlp, frames, questions)
+    print("Evaluating and saving results...")
 
-    prompts = []
-    for question in questions:
-        prompts.append(prompt_template.format(question=question.strip()))
-
-    # Run VQG2VQA inference
-    logits = run_vqa(vlm,
-                     vlm_processor,
-                     prompts,
-                     frames,
-                     batch_size=args.batch_size,
-                     cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}.pt"))
-    
-    if args.visual_filter_mode is not None:
-        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-                original_logits = run_vqa(vlm,
-                        vlm_processor,
-                        prompts,
-                        original_frames,
-                        batch_size=args.batch_size,
-                        cache_path=os.path.join(this_results_dir, f"VQA_cache_{eval_partition}_crg_original.pt"))
-
-    
     # Free up memory in case we need to load another model during mistake detection
-    del vlm
-    del vlm_processor
+    del vlms
+    del vlm_processors
     if args.visual_filter_mode is not None:
-        del visual_filter
+        del visual_filters
 
     # Gather up important information from VQA outputs
     outputs_by_id = defaultdict(list)

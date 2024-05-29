@@ -66,7 +66,7 @@ print(lm.model.generation_config)
 # Prepare output directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"VQG_" + str(args.task)
+    this_results_dir = f"{args.task}_VQG"
     if args.debug:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
