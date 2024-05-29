@@ -12,12 +12,13 @@ from transformers import pipeline, BitsAndBytesConfig
 from tqdm import tqdm
 
 from travel.constants import RESULTS_DIR, HF_TOKEN
-from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, run_vqg, load_vqg_outputs
+from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs, run_vqg
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d.constants import RECIPE_STEPS
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks]) # TODO: support running for Ego4D's evaluation sets
+parser.add_argument("--partition", type=str, required=False, choices=["val", "test"], help="Partition to run VQG on. For some tasks with a consistent set of procedures shared across partitions, this may not be required.")
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 # parser.add_argument("--n_questions_to_generate", type=int, default=2, choices=range(1, len(VQG_DEMONSTRATIONS[0].questions) + 1), help="Number of questions to generate per procedure.")
@@ -28,10 +29,8 @@ parser.add_argument("--resume_dir", type=str, help="Path to results directory fo
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
-# TODO: we may want to split the CaptainCook4D data by recipe and support that here
-
-# Load LM
-print("Setting up LM...")
+# Load LM(s)
+print("Setting up LM(s)...")
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     llm_int8_threshold=6.0,
@@ -41,21 +40,36 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4",
 )
 model_kwargs = {"quantization_config": bnb_config}
-lm = pipeline("text-generation", 
-              model=args.lm_name, 
-              token=HF_TOKEN,
-              model_kwargs=model_kwargs)
-lm.tokenizer.padding_side = "left"
-lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
+n_workers = 1 if torch.cuda.device_count() <= 1 else torch.cuda.device_count()
+lms = []
+for worker_index in range(n_workers):
+    if torch.cuda.is_available():
+        torch.cuda.set_device(f"cuda:{worker_index}")
+    lm = pipeline("text-generation", 
+                model=args.lm_name, 
+                token=HF_TOKEN,
+                model_kwargs=model_kwargs)
+    lm.tokenizer.padding_side = "left"
+    lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
+    if args.temperature == 0.0:
+        lm.model.generation_config.temperature = None
+        lm.model.generation_config.do_sample = False
+        lm.model.generation_config.top_p = None
+    else:
+        lm.model.generation_config.temperature = args.temperature
+        lm.model.generation_config.do_sample = True
+        lm.model.generation_config.top_p = args.top_p
+    lms.append(lm)
 
 print("Generation config:")
 print(lm.model.generation_config)
 
-# Generate prompts for VQG
-prompts = []
 if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
+    # TODO: we may want to split the CaptainCook4D data by recipe and support that here
     indexed_procedures = RECIPE_STEPS
-# TODO: support Ego4D and multiple possible partitions in it
+elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
+
+    pass
 
 # Prepare output directory
 if args.resume_dir is None:
@@ -69,6 +83,8 @@ if args.resume_dir is None:
 else:
     this_results_dir = args.resume_dir
 
+# Generate prompts for VQG
+prompts = []
 for procedure_id, step in indexed_procedures.items():
     prompt = generate_vqg_prompt_icl(step, n_demonstrations=args.n_demonstrations)
     prompts.append(
@@ -80,6 +96,35 @@ for procedure_id, step in indexed_procedures.items():
     )
     if args.debug and len(prompts) >= 10:
         break
+
+# Generate or load prompts
+prompts_fname = f"prompts_{args.partition}.json"
+if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, prompts_fname)):
+    # Starting from scratch
+
+    # Generate prompts - one per example
+    prompts = []
+    seen_video_clips = {}
+    for procedure_id, step in indexed_procedures.items():
+        prompt = generate_vqg_prompt_icl(step, n_demonstrations=args.n_demonstrations)
+        prompts.append(
+            VQGInputs(
+                procedure_id=procedure_id,
+                procedure_description=step,
+                prompt=prompt    
+            )
+        )
+        if args.debug and len(prompts) >= 10:
+            break
+    print(f"{len(prompts)} prompts generated for {args.partitions} partition")
+
+    # Save prompts
+    save_vqg_inputs(prompts, os.path.join(this_results_dir, prompts_fname))
+else: 
+    # Load prompts
+    prompts = load_vqg_inputs(os.path.join(this_results_dir, prompts_fname))
+    print(f"{len(prompts)} prompts loaded for {args.partition} partition")
+
 
 # TODO: finish implementing resuming here and parallelization following run_vqg_learning_generation.py - may be needed if we do ego4d evaluations
 

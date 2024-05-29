@@ -208,9 +208,9 @@ for partition in args.generate_partitions:
                                                 all_worker_prompt_ids,
                                                 [args.batch_size for _ in range(args.n_workers)],
                                                 [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(args.n_workers)],
-                                                [{} for _ in range(args.n_workers)],
-                                                list(range(args.n_workers))
-                    ))
+                                                [{} for _ in range(args.n_workers)]
+                                                )
+                    )
             else:
                 partitions = worker_vqg_outputs
         

@@ -117,6 +117,7 @@ class FrameVQAMistakeDetectionScorer:
         assert len(questions) == len(answers) == len(frames), "Need same number of questions, answers, and frames to score questions on frame-based VQA!"
         mistake_labels = [example.mistake for example in examples for _ in example.candidate_question_sets] # One scoring per each question set
 
+        # Intermediate results of detection aren't saved, so this is just a temporary hack just to check if we really need to run detection again
         logits = torch.zeros((0, self.vlm.vocab_size)).float()
         if cache_path is not None:
             assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
@@ -124,6 +125,7 @@ class FrameVQAMistakeDetectionScorer:
                 logits = torch.load(cache_path)
 
         # Process frames using visual attention filter
+        original_frames = frames
         if self.visual_filter is not None and logits.shape[0] < len(frames):
             if memory_tracker is not None:
                 print("\nMemory (before running spatial filter)")
@@ -132,10 +134,10 @@ class FrameVQAMistakeDetectionScorer:
             if self.visual_filter_type == VisualFilterTypes.Spatial or self.visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
                 frames, questions = self.visual_filter(self.nlp, frames, questions)
             elif self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
-                original_frames = frames
                 frames = self.visual_filter(self.nlp, frames, questions)
         
-        del logits # Intermediate results of detection aren't saved, so this is just a temporary hack just to check if we really need to run detection again
+        # Then delete these pre-loaded logits
+        del logits 
 
         prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
@@ -161,6 +163,7 @@ class FrameVQAMistakeDetectionScorer:
                          frames=original_frames,
                          batch_size=batch_size,
                          cache_path=cache_path)
+        del original_frames
         
         if memory_tracker is not None:
             print("\nMemory (after running VQA)")

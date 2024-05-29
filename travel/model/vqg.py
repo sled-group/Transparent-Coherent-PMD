@@ -124,6 +124,8 @@ VQG_DEMONSTRATIONS = [
     )    
 ]
 
+N_GENERATED_QUESTIONS = len(VQG_DEMONSTRATIONS[0].questions)
+
 VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} yes/no questions we could ask about an image of a target object and their expected answers?\n'
 VQG_EXAMPLE_TEMPLATE = VQG_PROMPT_TEMPLATE + \
                        "Target object: {target_object}\n" + \
@@ -135,12 +137,10 @@ def generate_vqg_prompt(instruction_step: str) -> str:
     Returns a prompt for VQG, i.e., for zero-shot inference or to come after several in-context demonstrations.
 
     :param instruction_step: Recipe or instruction step to generate instructions for. Should usually be a sentence in imperative form.
-    :param n_questions: Number of questions expected for generation.
     :return: String including a prompt to generate `n_questions` questions to verify the success of `instruction_step`.
     """
-    n_questions = len(VQG_DEMONSTRATIONS[0].questions) # TODO: maybe have a few possible options for different sizes of question sets?
     return VQG_PROMPT_TEMPLATE.format(instruction_step=instruction_step,
-                                        n_questions=str(n_questions))
+                                        n_questions=str(N_GENERATED_QUESTIONS))
 
 def generate_vqg_example(vqg_output: VQGOutputs) -> str:
     """
@@ -198,7 +198,7 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
 # TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name?
 # TODO: does there need to be a single target object for VQG?
 # TODO: increase number of questions to 3? or use a variable number
-def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}, worker_index: Optional[int]=None) -> dict[str, VQGOutputs]:
+def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}) -> dict[str, VQGOutputs]:
     """
     Runs VQG with a given LM text generation pipeline and list of VQG inputs.
 
@@ -207,6 +207,7 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
     :param input_ids: Unique string identifiers for inputs. These may characterize a specific prompt or run of a prompt (e.g., at a different temperature).
     :param save_path: Optional path to save VQG outputs during and after running. Must either be a json filename or path to a directory.
     :param vqg_outputs: Partly filled dictionary of VQG outputs to start from; only pass this if starting from a partially completed run of VQG, and make sure complete/incomplete prompts are managed appropriately outside of this method.
+    :return: Completed dictionary of VQGOutputs.
     """
     assert len(inputs) == len(input_ids), "run_vqg expected the same number of inputs and input IDs!"
     prompt_idx = 0

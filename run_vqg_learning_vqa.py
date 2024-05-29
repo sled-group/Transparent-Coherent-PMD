@@ -8,14 +8,11 @@ import datetime
 import json
 from memory_profiler import profile
 import os
-from pprint import pprint
 from pympler.tracker import SummaryTracker
-import resource
 import shutil
 import torch
 from tqdm import tqdm
 
-from travel import set_memory_limit
 from travel.constants import IMAGES_CHUNK_SIZE
 from travel.data.utils import split_list_into_partitions
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
@@ -129,7 +126,7 @@ for partition in args.generate_partitions:
             vqa_outputs += this_vqa_outputs
 
             # Save partial progress in a subfolder
-            chunks_results_dir = os.path.join(this_results_dir, f"chunks{first_chunk_idx}-{first_chunk_idx+len(frameVQA_examples_chunks)-1}")
+            chunks_results_dir = os.path.join(this_results_dir, f"chunks_{partition}_{first_chunk_idx}-{first_chunk_idx+len(frameVQA_examples_chunks)-1}")
             save_vqa_outputs([output for sub_output in vqa_outputs for output in sub_output], chunks_results_dir, partition)
             save_vqg_training_examples(vqg_training_examples, chunks_results_dir, partition)
 

@@ -57,7 +57,7 @@ vlm.language_model.generation_config.temperature = None
 vlm.language_model.generation_config.top_p = None
 vlm.language_model.generation_config.do_sample = False
 
-# TODO: implement GPU parallelization following run_vqg_learning_vqa.py
+# TODO: support GPU parallelization by setting up VLM and filter on each device
 if args.visual_filter_mode is not None:
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
         visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
@@ -121,7 +121,7 @@ for eval_partition in args.eval_partitions:
         if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             original_frames = frames
             frames = visual_filter(nlp, frames, questions)
-        else:
+        elif VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase]:
             frames, questions = visual_filter(nlp, frames, questions)
 
     prompts = []
@@ -149,6 +149,8 @@ for eval_partition in args.eval_partitions:
     # Free up memory in case we need to load another model during mistake detection
     del vlm
     del vlm_processor
+    if args.visual_filter_mode is not None:
+        del visual_filter
 
     # Gather up important information from VQA outputs
     outputs_by_id = defaultdict(list)
@@ -177,6 +179,7 @@ for eval_partition in args.eval_partitions:
                         answer,
                         response_token_ids,
                         original_logits[output_index] - logits[output_index],        
+                        question=question, # Save original question for NLI mistake detection evaluator
                 ) if (args.visual_filter_mode is not None and VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region) else
                     VQAOutputs(
                         task_name=example.task_name,

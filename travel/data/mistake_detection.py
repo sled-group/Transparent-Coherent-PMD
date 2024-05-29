@@ -5,6 +5,7 @@ import os
 from PIL import Image
 from typing import Optional, Any, Union, Iterable
 
+from travel.data.utils import split_list_into_partitions
 from travel.data.utils.image import FRAME_DIMENSION
 
 def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
@@ -13,7 +14,8 @@ def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
 
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
-    Ego4D = "ego4d"
+    Ego4D = "ego4d" # Ego4D following SuccessVQA format
+    Ego4D_Augmented = "ego4d_augmented" # Ego4D augmented with more negative examples from mismatched verb/noun
     # EpicKitchens = "epickitchens" # Can consider adding EK later if need more training data for VQG
 
 @dataclass
@@ -131,15 +133,42 @@ class MistakeDetectionDataset:
     def __getitem__(self, index):
         return self.load_example_from_file[self.example_dirs[index]]
     
-    def get_batches(self, batch_size: int) -> Iterable[list[MistakeDetectionExample]]:
+    def get_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> Iterable[list[MistakeDetectionExample]]:
         assert batch_size >= 1, "Batch size must be positive!"
-        if batch_size > 1:
-            for i in range(0, len(self.example_dirs), batch_size):
-                yield [self.load_example_from_file(d) for d in self.example_dirs[i : i + batch_size]]
+        assert n_workers >= 1, "Number of workers must be positive!"
+
+        # If processing the dataset in parallel, give the appropriate partition of the dataset
+        if n_workers == 1:
+            example_dirs = self.example_dirs
         else:
-            for d in self.example_dirs:
+            example_dirs = split_list_into_partitions(self.example_dirs, n_workers)[worker_index]
+
+        if batch_size > 1:
+            for i in range(0, len(example_dirs), batch_size):
+                yield [self.load_example_from_file(d) for d in example_dirs[i : i + batch_size]]
+        else:
+            for d in example_dirs:
                 yield self.load_example_from_file(d)
     
+    def count_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> int:
+        """
+        Returns the number of batches in the dataset (or a partition of it in parallel situations), given a batch size, number of workers, and worker index.
+        """
+        assert batch_size >= 1, "Batch size must be positive!"
+        assert n_workers >= 1, "Number of workers must be positive!"
+
+        # If processing the dataset in parallel, give the appropriate partition of the dataset
+        if n_workers == 1:
+            example_dirs = self.example_dirs
+        else:
+            example_dirs = split_list_into_partitions(self.example_dirs, n_workers)[worker_index]
+
+        if batch_size > 1:
+            return list(range(0, len(example_dirs), batch_size))
+        else:
+            return len(example_dirs)
+
+
     def __iter__(self):
         return self.get_batches(1)
     
@@ -203,4 +232,5 @@ class MistakeDetectionDataset:
             self.example_dirs = data["example_dirs"]
             self.n_examples = data["n_examples"]
             self.data_generated = data["data_generated"]
+
     
