@@ -106,9 +106,9 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
                 prompt=prompt    
             )
         )
-        if args.debug and len(prompts) >= 10:
+        if args.debug and len(prompts) >= 100:
             break
-    print(f"{len(prompts)} prompts generated for {args.partitions} partition")
+    print(f"{len(prompts)} prompts generated for {args.partition} partition")
 
     # Save prompts
     save_vqg_inputs(prompts, os.path.join(this_results_dir, prompts_fname))
@@ -128,8 +128,11 @@ else:
     print(f"{len(vqg_outputs)} pre-generated VQG outputs loaded for {args.partition} partition")
 
 # Only keep prompts that haven't already been run
-prompts = [p for p in prompts if p not in vqg_outputs]
+prompts = [p for p in prompts if p.procedure_id not in vqg_outputs]
 prompt_ids = [p.procedure_id for p in prompts]
+
+if len(prompts) == 0:
+    raise ValueError(f"The passed --resume_dir {args.resume_dir} already has all VQG outputs for {args.partition} partition!")
 
 # Run prompts through LM to generate visual questions (and save VQG outputs)
 if n_workers == 1:
@@ -144,15 +147,15 @@ if n_workers == 1:
     )
 else:
     # Split up remaining prompts and prompt IDs by GPU
-    prompts_split = split_list_into_partitions(prompts, args.n_workers)
-    prompt_ids_split = split_list_into_partitions(prompt_ids, args.n_workers)
+    prompts_split = split_list_into_partitions(prompts, n_workers)
+    prompt_ids_split = split_list_into_partitions(prompt_ids, n_workers)
 
     # Then gather up any existing VQG outputs and exclude them from prompts and prompt IDs
     all_worker_vqg_outputs = []
     all_worker_prompt_ids = []
     all_worker_prompts = []
-    worker_vqg_outputs_paths = [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(args.n_workers)]
-    for i in range(args.n_workers):
+    worker_vqg_outputs_paths = [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(n_workers)]
+    for i in range(n_workers):
         worker_vqg_outputs = load_vqg_outputs(worker_vqg_outputs_paths[i])
         worker_prompt_ids = [pid for pid in prompt_ids_split[i] if pid not in worker_vqg_outputs]
         worker_prompts = [prompt for pid, prompt in zip(prompt_ids_split[i], prompts_split[i]) if pid not in worker_vqg_outputs]
@@ -168,22 +171,22 @@ else:
 
     # Redistribute prompts across workers in case one GPU ran slower than others in the previous run
     assert len(all_worker_prompt_ids) == len(all_worker_prompts), "Size issue with collecting prompts and prompt IDs from earlier run workers!"
-    all_worker_prompts = split_list_into_partitions(all_worker_prompts, args.n_workers)
-    all_worker_prompt_ids = split_list_into_partitions(all_worker_prompt_ids, args.n_workers)
+    all_worker_prompts = split_list_into_partitions(all_worker_prompts, n_workers)
+    all_worker_prompt_ids = split_list_into_partitions(all_worker_prompt_ids, n_workers)
 
-    print(f"Loaded prompts split across {args.n_workers} GPUs: " + ", ".join([str(len(p)) for p in all_worker_prompts]))
+    print(f"Loaded prompts split across {n_workers} GPUs: " + ", ".join([str(len(p)) for p in all_worker_prompts]))
 
     if not all(len(p) == 0 for p in all_worker_prompts):
         # Parallelize across GPUs
-        print(f"Parallelizing VQG across {args.n_workers} GPUs...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
+        print(f"Parallelizing VQG across {n_workers} GPUs...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:
             partitions = list(executor.map(run_vqg, 
                                         lms,
                                         all_worker_prompts,
                                         all_worker_prompt_ids,
-                                        [args.batch_size for _ in range(args.n_workers)],
+                                        [args.batch_size for _ in range(n_workers)],
                                         worker_vqg_outputs_paths,
-                                        [{} for _ in range(args.n_workers)]
+                                        [{} for _ in range(n_workers)]
                                         )
             )
     else:
@@ -195,6 +198,8 @@ else:
 
     # Save combined VQG outputs for this temperature
     save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
+
+print(f"{len(vqg_outputs)} VQG outputs generated!")
 
 # Save config and args
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))

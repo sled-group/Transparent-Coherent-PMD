@@ -34,8 +34,8 @@ class MistakeDetectionExample:
     
     def __post_init__(self):
         """Resizes frames to save space in caching."""
-        new_sizes = [(int(FRAME_DIMENSION * (frame.width / frame.height)), FRAME_DIMENSION) if frame.width > frame.height else (FRAME_DIMENSION, int(FRAME_DIMENSION * (frame.height / frame.width))) for frame in self.frames]
         if type(self.frames[0]) != str:
+            new_sizes = [(int(FRAME_DIMENSION * (frame.width / frame.height)), FRAME_DIMENSION) if frame.width > frame.height else (FRAME_DIMENSION, int(FRAME_DIMENSION * (frame.height / frame.width))) for frame in self.frames]
             # Frames have been cached before and not yet uncached - they should already be resized
             self.frames = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, self.frames)]
 
@@ -240,5 +240,5 @@ class MistakeDetectionDataset:
         Quickly returns a list of all procedures in the dataset (along with their IDs). Used for VQG procedure.
         """
         for d in self.example_dirs:
-            example = self.load_example_from_file(d, load_frames=False).procedure_id
+            example = self.load_example_from_file(d, load_frames=False)
             yield (example.procedure_id, example.procedure_description)
