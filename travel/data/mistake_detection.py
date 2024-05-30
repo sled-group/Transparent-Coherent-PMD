@@ -3,8 +3,9 @@ from enum import Enum
 import json
 import os
 from PIL import Image
-from typing import Optional, Any, Union, Iterable
+from typing import Optional, Any, Union, Iterable, Generator
 
+from travel.data.utils import split_list_into_partitions
 from travel.data.utils.image import FRAME_DIMENSION
 
 def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
@@ -13,7 +14,8 @@ def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
 
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
-    Ego4D = "ego4d"
+    Ego4D = "ego4d" # Ego4D following SuccessVQA format
+    Ego4D_Augmented = "ego4d_augmented" # Ego4D augmented with more negative examples from mismatched verb/noun
     # EpicKitchens = "epickitchens" # Can consider adding EK later if need more training data for VQG
 
 @dataclass
@@ -32,18 +34,21 @@ class MistakeDetectionExample:
     
     def __post_init__(self):
         """Resizes frames to save space in caching."""
-        new_sizes = [(int(FRAME_DIMENSION * (frame.width / frame.height)), FRAME_DIMENSION) if frame.width > frame.height else (FRAME_DIMENSION, int(FRAME_DIMENSION * (frame.height / frame.width))) for frame in self.frames]
-        self.frames = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, self.frames)]
+        if type(self.frames[0]) != str:
+            new_sizes = [(int(FRAME_DIMENSION * (frame.width / frame.height)), FRAME_DIMENSION) if frame.width > frame.height else (FRAME_DIMENSION, int(FRAME_DIMENSION * (frame.height / frame.width))) for frame in self.frames]
+            # Frames have been cached before and not yet uncached - they should already be resized
+            self.frames = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, self.frames)]
 
     @staticmethod
-    def from_dict(data: dict):
+    def from_dict(data: dict, load_frames: bool=True):
         """
         Loads an instance of MistakeDetectionExample from a dictionary. This adds special logic to account for loading the frame image.
 
         :param data: Dictionary of instance data.
         """
         assert "frames" in data, "Can't use from_dict on this class without including `frames` list of images."
-        data["frames"] = [Image.open(fname) for fname in data["frames"]]
+        if load_frames:
+            data["frames"] = [Image.open(fname) for fname in data["frames"]]
         example = MistakeDetectionExample(**data)
         return example
     
@@ -131,15 +136,41 @@ class MistakeDetectionDataset:
     def __getitem__(self, index):
         return self.load_example_from_file[self.example_dirs[index]]
     
-    def get_batches(self, batch_size: int) -> Iterable[list[MistakeDetectionExample]]:
+    def get_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> Iterable[list[MistakeDetectionExample]]:
         assert batch_size >= 1, "Batch size must be positive!"
-        if batch_size > 1:
-            for i in range(0, len(self.example_dirs), batch_size):
-                yield [self.load_example_from_file(d) for d in self.example_dirs[i : i + batch_size]]
+        assert n_workers >= 1, "Number of workers must be positive!"
+
+        # If processing the dataset in parallel, give the appropriate partition of the dataset
+        if n_workers == 1:
+            example_dirs = self.example_dirs
         else:
-            for d in self.example_dirs:
+            example_dirs = split_list_into_partitions(self.example_dirs, n_workers)[worker_index]
+
+        if batch_size > 1:
+            for i in range(0, len(example_dirs), batch_size):
+                yield [self.load_example_from_file(d) for d in example_dirs[i : i + batch_size]]
+        else:
+            for d in example_dirs:
                 yield self.load_example_from_file(d)
     
+    def count_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> int:
+        """
+        Returns the number of batches in the dataset (or a partition of it in parallel situations), given a batch size, number of workers, and worker index.
+        """
+        assert batch_size >= 1, "Batch size must be positive!"
+        assert n_workers >= 1, "Number of workers must be positive!"
+
+        # If processing the dataset in parallel, give the appropriate partition of the dataset
+        if n_workers == 1:
+            example_dirs = self.example_dirs
+        else:
+            example_dirs = split_list_into_partitions(self.example_dirs, n_workers)[worker_index]
+
+        if batch_size > 1:
+            return list(range(0, len(example_dirs), batch_size))
+        else:
+            return len(example_dirs)
+
     def __iter__(self):
         return self.get_batches(1)
     
@@ -172,7 +203,7 @@ class MistakeDetectionDataset:
         self.example_dirs.append(example_cache_dir)
         self.n_examples += 1
         
-    def load_example_from_file(self, example_dir: str) -> MistakeDetectionExample:
+    def load_example_from_file(self, example_dir: str, load_frames: bool=True) -> MistakeDetectionExample:
         """
         Loads an example from cache by the directory it's saved in.
 
@@ -180,7 +211,7 @@ class MistakeDetectionDataset:
         :return: MistakeDetectionExample object.
         """
         example = json.load(open(os.path.join(example_dir, "example.json"), "r"))
-        example = MistakeDetectionExample.from_dict(example)
+        example = MistakeDetectionExample.from_dict(example, load_frames=load_frames)
         return example
     
     def save_dataset_metadata(self):
@@ -203,4 +234,14 @@ class MistakeDetectionDataset:
             self.example_dirs = data["example_dirs"]
             self.n_examples = data["n_examples"]
             self.data_generated = data["data_generated"]
-    
+
+    def get_all_procedures(self) -> Generator[None, list[tuple[int, str]], None]:
+        """
+        Quickly returns a list of all procedures in the dataset (along with their IDs). Used for VQG procedure.
+        """
+        already_seen = []
+        for d in self.example_dirs:
+            example = self.load_example_from_file(d, load_frames=False)
+            if example.procedure_id not in already_seen:
+                yield (example.procedure_id, example.procedure_description)
+                already_seen.append(example.procedure_id) 

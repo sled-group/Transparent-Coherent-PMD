@@ -16,3 +16,5 @@ narration_mapping_fho2srl_df.csv
 ego4d_mismatch_srl_files
 config.yml
 wandb
+mprof*.pdf
+mprofile_*.dat

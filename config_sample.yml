@@ -8,7 +8,7 @@ cache:
 data:
   video_frame_sampling_frequency: 2
   video_frame_dimension: 400
-  images_chunk_size: 400
+  images_chunk_size: 200
   captaincook4d:
     annotations_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/annotations"
     video_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/data/captain_cook_4d/hololens/sync/pv"
@@ -22,7 +22,7 @@ data:
 grounding:
   owlv2_path: "google/owlv2-base-patch16"
   owl_threshold: 0.2
-  owl_batch_size: 40
+  owl_batch_size: 60
 mistake_detection_strategies:
   frames_proportion: 0.1
   nli_model_path: "facebook/bart-large-mnli"

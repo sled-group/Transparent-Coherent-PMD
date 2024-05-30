@@ -2,18 +2,17 @@ import dataclasses
 from enum import Enum
 import numpy as np
 from PIL import Image
-from pprint import pprint
 import spacy
 from spacy.lang.en import English
 import torch
 from tqdm import tqdm
-from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesConfig
+from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesConfig, BatchEncoding
 from typing import Optional, Any
 import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils.image import get_preprocessed_image
-from travel.model.vqg import VQGOutputs
+from travel.data.vqg import VQGOutputs
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
@@ -126,18 +125,20 @@ class AdaptiveVisualFilter:
         )
         self.detector = Owlv2ForObjectDetection.from_pretrained(OWLV2_PATH, quantization_config=bnb_config)
 
-    def run_detection(self, objects: list[list[str]], frames: list[Image.Image], batch_size: int=OWL_BATCH_SIZE) -> tuple[Any, Any]:
+    def run_detection(self, objects: list[list[str]], frames: list[Image.Image], batch_size: int=OWL_BATCH_SIZE) -> tuple[Any, Any, Any]:
         """
         Runs OWLv2 object detection.
 
         :param objects: List of lists of objects (one list of objects per frame).
         :param frames: List of images to check for objects (one image per list of objects).
-        :return: Results and preprocessed padded images that can be .
+        :return: Object detection results and preprocessed padded images, as well as ints representing which labels are for padding.
         """
         assert len(objects) == len(frames), "Expected same number of object lists and frames!"
         # Note the awkward hack where rare objects can be None due to failure of spatial parser
         # TODO: this doesn't handle the case where the input_obj is plural
-        owl_prompts = [[f"a photo of {'an' if input_obj[0] in ['a','e','i','o','u'] else 'a'} {input_obj}" if input_obj is not None else "" for input_obj in input_objs] for input_objs, _ in zip(objects, frames)]
+        max_n_objs = max([len(this_objects) for this_objects in objects])
+        owl_prompts = [[f"a photo of {'an' if input_objs[i][0] in ['a','e','i','o','u'] else 'a'} {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
+        pad_labels = [[1 if (i < len(input_objs) and input_objs[i] is not None) else 0 for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         # skip_indices = [all(input_obj is None for input_obj in input_objs) for input_objs, _ in zip(objects, frames)]
 
         padded_images = []
@@ -148,14 +149,11 @@ class AdaptiveVisualFilter:
                 batch_prompts = owl_prompts[i:i+batch_size]
                 batch_frames = frames[i:i+batch_size]
 
-                inputs = self.detector_processor(text=batch_prompts, images=batch_frames, return_tensors="pt").to(self.detector.device)
+                # Run processor one by one and transfer to GPU to avoid memory spike
+                inputs = [self.detector_processor(text=batch_prompts[j], images=batch_frames[j], return_tensors="pt").to(self.detector.device) for j in range(len(batch_frames))]
+                inputs = BatchEncoding({k: torch.cat([inp[k] for inp in inputs], dim=0) for k in inputs[0]})
                 outputs = self.detector(**inputs)
                 
-                inputs = inputs.to("cpu")
-                for attr in dir(outputs):
-                    if type(attr) == torch.FloatTensor:
-                        setattr(outputs, attr, outputs.attr.to("cpu"))
-
                 this_padded_images = [get_preprocessed_image(inputs.pixel_values[j].to('cpu')) for j in range(len(batch_frames))]
 
                 # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
@@ -171,6 +169,27 @@ class AdaptiveVisualFilter:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
+        assert len(pad_labels) == len(results)
+
+        # Remove padding instances from results
+        for i in range(len(results)):
+            keep_labels = pad_labels[i]
+            keep_labels = [li for li, l in enumerate(keep_labels) if l == 1]
+
+            detection_result = results[i]
+            if len(keep_labels) > 0:
+                # Keep any non-padding instances
+                keep_indices = torch.stack([detection_result['labels'] == l for l in keep_labels]).sum(0).bool()
+                detection_result['boxes'] = detection_result['boxes'][keep_indices]
+                detection_result['scores'] = detection_result['scores'][keep_indices]
+                detection_result['labels'] = detection_result['labels'][keep_indices]
+                results[i] = detection_result
+            else:
+                # Or throw everything out and replace with empty tensors
+                detection_result['boxes'] = torch.zeros([0, 4])
+                detection_result['scores'] = torch.zeros([0])
+                detection_result['labels'] = torch.zeros([0])
+                
         # Filter results for cases where no objects were passed
         return results, padded_images
     
@@ -298,39 +317,46 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
         super().__init__(**kwargs)
 
     @staticmethod
-    def parse_questions_for_contrastive_region_filter(nlp: English, questions: list[str]) -> list[tuple[bool, str]]:
+    def parse_questions_for_contrastive_region_filter(nlp: English, questions: list[str]) -> list[list[str]]:
         results = []
         for question in questions:
             doc = nlp(question)
             nouns = []
             for chunk in doc.noun_chunks:
-                nouns.append(chunk.text)
+                nouns.append(chunk.text.replace("the ", ""))
             results.append(nouns)
         return results
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
-        # Parse spatial dependencies from questions
-        spatial_parse_results = self.parse_questions_for_contrastive_region_filter(nlp, questions)
-        detection_results = []
-        for spatial_parse_result in spatial_parse_results:
-            detection_results_single, _ = self.run_detection([[noun] for _, noun in spatial_parse_result], frames)
-            detection_results.append(detection_results_single)
+        # Parse objects from questions
+        object_parse_results = self.parse_questions_for_contrastive_region_filter(nlp, questions)
+        detection_results, padded_images = self.run_detection(object_parse_results, frames)
         new_frames = []
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
-        for detection_results_single, frame in zip(detection_results, frames):
-            for detection_result in detection_results_single:
-                boxes = detection_result["boxes"]
-                bboxes = boxes.cpu().numpy() # (# boxes, 4)
+        for detection_results_single, frame, frame_padded in zip(detection_results, frames, padded_images):
+            mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
 
-                if bboxes.shape[0] > 0:
-                    frame_blackout = frame.copy()
-                    pixels = frame_blackout.load()
-                    for bbox in bboxes:
-                        box = [int(b) for b in bbox]
-                        for i in range(bbox[0], bbox[2]):
-                            for j in range(bbox[1],bbox[3]):
-                                pixels[i,j] = (0,0,0)
-            new_frames.append(frame)
+            boxes = detection_results_single["boxes"]
+            bboxes = boxes.cpu().numpy() # (# boxes, 4)
+
+            if bboxes.shape[0] > 0:
+                # Mask out the areas for this noun
+                for bbox in bboxes:
+                    # Set the area within the bounding box to 0
+                    # Note the order: (ymin:ymax, xmin:xmax)
+                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0
+                                    
+                # Apply mask and undo padding of masked/cropped image to pass to VLM later
+                mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
+                new_frame = np.array(frame_padded) * mask
+                new_frame = Image.fromarray(new_frame.astype(np.uint8))
+                new_height = new_frame.width / frame.width * frame.height
+                new_frame = new_frame.crop((0, 0, new_frame.width - 1, new_height))
+            else:
+                new_frame = frame
+                    
+            new_frames.append(new_frame)
+
         return new_frames
 
 class VisualFilterTypes(Enum):

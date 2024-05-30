@@ -1,5 +1,4 @@
 from dataclasses import dataclass, asdict
-from dataclasses_json import dataclass_json
 import matplotlib.pyplot as plt
 import numpy as np
 from pprint import pprint
@@ -13,7 +12,7 @@ import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils import generate_float_series
-from travel.model.vqa import VQAOutputs, VQAResponse
+from travel.data.vqa import VQAOutputs, VQAResponse
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
@@ -22,7 +21,6 @@ NLI_BATCH_SIZE = int(config["mistake_detection_strategies"]["nli_batch_size"])
 NLI_RELEVANCE_DELTA = float(config["mistake_detection_strategies"]["nli_relevance_delta"]) # Minimum difference of entailment probabilities between VQA answer and negated answer to judge question and answer as relevant for mistake detection
 
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
-
 
 def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str, float]:
     this_metrics = {}
@@ -40,7 +38,6 @@ def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str
 
     return this_metrics
 
-
 @dataclass
 class MistakeDetectionOutputs:
     """Class to hold mistake detection outputs for individual frames. If using full video clips for VQA, just use a placeholder time."""
@@ -49,6 +46,8 @@ class MistakeDetectionOutputs:
     mistake_probs: list[list[float]] # (# frames, # questions per frame)
     detection_threshold: float
     final_mistake_prediction: bool
+    nli_mistake_probs: Optional[list[list[float]]] = None # (# frames, # questions per frame)
+    nli_relevance_probs: Optional[list[list[float]]] = None # (# frames, # questions per frame)
 
     def __post_init__(self):
         assert len(self.frame_times) == len(self.mistake_probs), "`MistakeDetectionOutputs` expects `frame_times` and `mistake_probs` to be the same length, i.e., the number of frames used to detect the mistake."
@@ -59,9 +58,12 @@ class MistakeDetectionOutputs:
         return_dict['frame_times'] = [float(round(ft, 3)) for ft in return_dict['frame_times']]
         return_dict['mistake_probs'] = [[float(round(v, 3)) for v in l] for l in return_dict['mistake_probs']]
         return_dict['detection_threshold'] = float(round(return_dict['detection_threshold'], 3))
+        if return_dict['nli_mistake_probs'] is not None:
+            return_dict['nli_mistake_probs'] = [[float(round(v, 3)) for v in l] for l in return_dict['nli_mistake_probs']]
+        if return_dict['nli_relevance_probs'] is not None:
+            return_dict['nli_relevance_probs'] = [[float(round(v, 3)) for v in l] for l in return_dict['nli_relevance_probs']]
         return return_dict
 
-@dataclass_json
 @dataclass
 class MistakeDetectionEvaluator:
     """Superclass to implement different types of evaluators based on VQAOutputs."""
@@ -192,7 +194,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
         self.relevance_probs = None
         super().__post_init__()
 
-    def run_nli(self, procedure_descriptions: list[str], questions: list[str], answers: list[VQAResponse]) -> tuple[list[float], list[float]]:
+    def run_nli(self, procedure_descriptions: list[str], questions: list[str], answers: list[VQAResponse]) -> tuple[list[str], list[float], list[float]]:
         # TODO: normalize entailment predictions using surface form competition methodology?
         if self.mistake_probs is None or self.relevance_probs is None:
             with torch.no_grad():
@@ -210,8 +212,8 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                     batch_negated_answers = [answer.name for answer in batch_negated_answers]
 
                     # Generate prompt data for premise and negated premise
-                    premise = [f"{question}: {answer}" for question, answer in zip(batch_questions, batch_answers)]
-                    premise_negated = [f"{question}: {answer}" for question, answer in zip(batch_questions, batch_negated_answers)]
+                    premise = [f"{question} {answer}" for question, answer in zip(batch_questions, batch_answers)]
+                    premise_negated = [f"{question} {answer}" for question, answer in zip(batch_questions, batch_negated_answers)]
                     
                     hypothesis = [f'The procedure "{procedure}" has been successfully completed.' for procedure in batch_procedure_descriptions]
 
@@ -240,8 +242,8 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                     # then assume the question is irrelevant and assign 0 probability of contradiction 
                     # (can filter these out from prediction later)
                     relevance = probs[:, 0] - probs_negated[:, 0]
-                    relevance[relevance < NLI_RELEVANCE_DELTA] = 0.0
-                    relevance[relevance >= NLI_RELEVANCE_DELTA] = 1.0
+                    # relevance[relevance < NLI_RELEVANCE_DELTA] = 0.0
+                    # relevance[relevance >= NLI_RELEVANCE_DELTA] = 1.0
 
                     # Grab contradiction probabilities weighted by relevance and add to all_mistake_probs
                     all_mistake_probs = torch.cat([all_mistake_probs, probs[:, 0].unsqueeze(1)], dim=0)
@@ -283,15 +285,21 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
         # Incorporate NLI mistake probs into mistake probs
         parallel_idx = 0
         mistake_probs = []
+        compiled_nli_mistake_probs = []
+        compiled_nli_relevance_probs = []
         for example, outputs in zip(self.examples, self.vqa_outputs):
             example_mistake_probs = []
+            example_nli_mistake_probs = []
+            example_nli_relevance_probs = []
             for frame_outputs in outputs:
                 frame_mistake_probs = []
+                frame_nli_mistake_probs = []
+                frame_nli_relevance_probs = []
 
                 # Check all questions for this frame to decide if there's a mistake
                 for question_output in frame_outputs:
                     # Incorporate NLI model feedback
-                    if nli_relevance[parallel_idx] == 0.0:
+                    if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
                         # NLI model found this question irrelevant, so 0 mistake probability
                         frame_mistake_probs.append(0.0)
                     else:
@@ -300,13 +308,22 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                         mistake_prob = question_output.answer_probs[mistake_answer]
                         frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
 
+                    frame_nli_mistake_probs.append(nli_mistake_probs[parallel_idx])
+                    frame_nli_relevance_probs.append(nli_relevance[parallel_idx])
+
                     parallel_idx += 1
+
                 example_mistake_probs.append(frame_mistake_probs)
+                example_nli_mistake_probs.append(frame_nli_mistake_probs)
+                example_nli_relevance_probs.append(frame_nli_relevance_probs)
+
             mistake_probs.append(example_mistake_probs)
+            compiled_nli_mistake_probs.append(example_nli_mistake_probs)
+            compiled_nli_relevance_probs.append(example_nli_relevance_probs)
 
         # From here, follow HeuristicMistakeDetectionEvaluator: just average reweighted likelihood of mistake then use a threshold to decide if there's a mistake
         agg_preds = []
-        for mistake_prob, example in tqdm(zip(mistake_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
+        for mistake_prob, nli_mistake_prob, nli_relevance_prob, example in tqdm(zip(mistake_probs, compiled_nli_mistake_probs, compiled_nli_relevance_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
             if len(mistake_prob) > 0:
                 example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
                 assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
@@ -326,7 +343,9 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 frame_times=example.frame_times,
                 mistake_probs=mistake_prob,
                 detection_threshold=detection_threshold,
-                final_mistake_prediction=mistake_pred_final
+                final_mistake_prediction=mistake_pred_final,
+                nli_mistake_probs=nli_mistake_prob,
+                nli_relevance_probs=nli_relevance_prob,
             )
 
             agg_preds.append(pred_object)            

@@ -21,19 +21,24 @@ import wandb
 from travel.data.vqg_learning import load_vqg_training_examples
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--data_directory", type=str, required=True, help="Directory where desired vqg_training_examples.json is stored.")
+parser.add_argument("--training_data_directory", type=str, required=True, help="Directory where training vqg_training_examples.json is stored.")
+parser.add_argument("--val_data_directory", type=str, required=False, help="Directory where validation vqg_training_examples.json is stored. If not passed, will be set to the same as the training data directory.")
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
 parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
 parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
+parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
 parser.add_argument("--local-rank", type=int, default=None, help="Local rank for DistributedDataParallel in PyTorch.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
+if args.val_data_directory is None:
+    args.val_data_directory = args.training_data_directory
+
 print("Preparing training and validation data...")
 data = {
-    "train": load_vqg_training_examples(args.data_directory, "train"),
-    "val": load_vqg_training_examples(args.data_directory, "val")
+    "train": load_vqg_training_examples(args.training_data_directory, "train"),
+    "val": load_vqg_training_examples(args.val_data_directory, "val")
 }
 # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
 
@@ -121,13 +126,13 @@ timestamp = datetime.datetime.now()
 output_dir_name = f"DPO_{timestamp.strftime('%Y%m%d%H%M%S')}"
 if args.debug:
     output_dir_name += "_debug"
-this_results_dir = os.path.join(args.data_directory, output_dir_name)
-wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.data_directory.split('/')[-2:])}"
+this_results_dir = os.path.join(args.training_data_directory, output_dir_name)
+wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_directory.split('/')[-2:])}"
 training_args = TrainingArguments(output_dir=this_results_dir,
                                   per_device_train_batch_size=args.train_batch_size,
                                   per_device_eval_batch_size=args.eval_batch_size,
                                   learning_rate=args.learning_rate,
-                                  num_train_epochs=10,
+                                  num_train_epochs=args.n_epochs,
                                   fp16=True,
                                   gradient_accumulation_steps=1 if args.debug else 10,
                                   save_strategy="epoch",
