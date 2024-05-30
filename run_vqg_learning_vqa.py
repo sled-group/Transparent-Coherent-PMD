@@ -15,9 +15,9 @@ from tqdm import tqdm
 
 from travel.constants import IMAGES_CHUNK_SIZE, CACHE_FREQUENCY
 from travel.data.utils import split_list_into_partitions
+from travel.data.vqa import save_vqa_outputs, VQAOutputs
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.model.grounding import VisualFilterTypes
-from travel.model.vqa import save_vqa_outputs, VQAOutputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
 parser = argparse.ArgumentParser()

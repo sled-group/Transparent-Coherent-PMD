@@ -1,119 +1,20 @@
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
-from enum import Enum
 import json
 import os
 import pickle
 from PIL import Image
-from pprint import pprint
 from spacy.lang.en import English
 import torch
 from tqdm import tqdm
-from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, PreTrainedModel
+from transformers import PreTrainedModel
 from transformers.processing_utils import ProcessorMixin
-from typing import Optional, Union, Callable
+from typing import Optional, Callable
 
 from travel.constants import CACHE_FREQUENCY, IMAGES_CHUNK_SIZE
-from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionDataset, MistakeDetectionExample
-from travel.data.utils import split_list_into_partitions
+from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
+from travel.data.vqa import VQAResponse, VQAOutputs, get_vqa_response_token_ids
 from travel.model.grounding import VisualFilterTypes, AdaptiveVisualFilter
 from travel.model.mistake_detection import DETECTION_FRAMES_PROPORTION
-
-COMPLETION_PROMPT_TEMPLATES = {
-    Blip2ForConditionalGeneration: "A photo of",
-    InstructBlipForConditionalGeneration: "A photo of",
-    Kosmos2ForConditionalGeneration: "<grounding> A photo of",
-    LlavaForConditionalGeneration: 'USER: <image>\nWhat is happening in this photo? ASSISTANT: This is a photo of',
-    LlavaNextForConditionalGeneration: '[INST] <image>\nWhat is shown in this image? [/INST] This is a photo of',
-}
-
-SUCCESSVQA_PROMPT_TEMPLATES = {
-    Blip2ForConditionalGeneration: 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
-    InstructBlipForConditionalGeneration: 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
-    Kosmos2ForConditionalGeneration: '<grounding> Q: The current goal is "{step}". Has the person successfully finished doing this? A: ',
-    LlavaForConditionalGeneration: 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT: ',
-    LlavaNextForConditionalGeneration: '[INST] <image>\nThe current goal is "{step}". Has the person successfully finished doing this? [/INST]',
-}
-
-VQG2VQA_PROMPT_TEMPLATES = {
-    Blip2ForConditionalGeneration: "Question: {question} Answer:",
-    InstructBlipForConditionalGeneration: "Question: {question}? Answer: ",
-    Kosmos2ForConditionalGeneration: "<grounding> Question: {question} Answer: ",
-    LlavaForConditionalGeneration: "USER: <image>\n{question} ASSISTANT: ",
-    LlavaNextForConditionalGeneration: "[INST] <image>\n{question} [/INST]",
-}
-
-class VQAResponse(int, Enum):
-    No = 0
-    Yes = 1
-
-def get_vqa_response_token_ids(tokenizer):
-    responses = {response: tokenizer(response.name, add_special_tokens=False)['input_ids'][0] for response in VQAResponse}
-    for token_id in responses.values():
-        assert type(token_id) == int, "Getting response tokens for members of VQAResponse failed."
-    return responses
-
-@dataclass
-class VQAOutputs:
-    """Dataclass to hold all VLM outputs from visual question answering (VQA)."""
-    task_name: MistakeDetectionTasks
-    example_id: str
-    procedure_id: int
-    frame: Union[Image.Image, str]
-    prompt: str
-    expected_answer: VQAResponse
-    response_token_ids: dict[VQAResponse, int]
-    logits: Optional[torch.FloatTensor] # (vocab size) 
-    question: Optional[str] = None
-    answer_probs: dict[VQAResponse, float] = field(default_factory=dict)
-    predicted_answer: VQAResponse = VQAResponse["No"]
-
-    def __post_init__(self):
-        """Processes logits output from VLM into answer probabilities and final answer."""
-        for response_type in VQAResponse:
-            assert response_type in self.response_token_ids, f"VLM token ID for {response_type} not provided in VQAOutputs.answer_token_ids."
-
-        this_probs = torch.stack([self.logits[self.response_token_ids[response_type]] for response_type in VQAResponse], dim=0)
-        this_probs = torch.softmax(this_probs, dim=0)
-        
-        self.predicted_answer = VQAResponse(torch.argmax(this_probs, dim=0).numpy())
-        
-        this_probs = this_probs.numpy()
-        self.answer_probs = {response_type: this_probs[response_type.value] for response_type in VQAResponse}
-
-    def to_dict(self, image_base_path: Optional[str]=None):
-        """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""
-        return_dict = {
-            k: v for k, v in asdict(self).items() if k not in ["frame", "response_token_ids", "logits"]
-        }
-        for response in return_dict['answer_probs']:
-            return_dict['answer_probs'][response] = float(round(return_dict['answer_probs'][response], 3))
-        
-        # Cache frame for this example if it's not already cached somewhere
-        if image_base_path is not None and type(self.frame) != str:
-            image_base_path = os.path.join(image_base_path, "frames")
-            if not os.path.exists(image_base_path):
-                os.makedirs(image_base_path)
-            self.cache_frame(image_base_path)
-            return_dict["frame"] = self.frame
-
-        return return_dict
-    
-    def cache_frame(self, image_base_path: str):
-        assert type(self.frame) != str, "Can only cache PIL images!"
-
-        if not os.path.exists(os.path.join(image_base_path, "frames")):
-            os.makedirs(os.path.join(image_base_path, "frames"))
-
-        frame_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}.jpg")
-
-        self.frame.save(frame_path)
-
-        self.frame = frame_path
-
-    def uncache_frame(self):
-        assert type(self.frame) == str and self.frame.endswith(".jpg"), "Can only uncache string .jpg filenames!"
-        self.frame = Image.open(self.frame)
 
 def run_vqa(vlm: PreTrainedModel, 
             processor: ProcessorMixin,

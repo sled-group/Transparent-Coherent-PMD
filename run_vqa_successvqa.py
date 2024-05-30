@@ -19,12 +19,13 @@ from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
+from travel.data.vqa import VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, DETECTION_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
-from travel.model.vqa import VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids, run_vqa_for_mistake_detection
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds
+from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
+parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(SUCCESSVQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
@@ -83,7 +84,7 @@ response_token_ids = get_vqa_response_token_ids(vlm_processors[0].tokenizer)
 # Configure results directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"SuccessVQA"
+    this_results_dir = f"SuccessVQA_{args.task}"
     if args.debug:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.vlm_name.split('/')[-1]}_{timestamp.strftime('%Y%m%d%H%M%S')}"

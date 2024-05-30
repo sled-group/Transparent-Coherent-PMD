@@ -18,15 +18,17 @@ from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
 
 from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, DETECTION_FRAMES_PROPORTION, generate_det_curve, compile_mistake_detection_preds
-from travel.model.vqa import VQAOutputs, VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, run_vqa_for_mistake_detection
-from travel.model.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.captaincook4d import CaptainCook4DDataset
+from travel.data.ego4d import Ego4DMistakeDetectionDataset
+from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES
+from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds
+from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
+parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired vqg_outputs.json is stored.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
@@ -74,12 +76,18 @@ for worker_index in range(n_workers):
     vlm_processors.append(vlm_processor)
 
     if args.visual_filter_mode is not None:
-        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-            visual_filter = ContrastiveRegionFilter(device=f"cuda:{worker_index}")
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
+            visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+            nlp = spacy.load('en_core_web_sm')
+        elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
+            visual_filter = SpatialVisualFilter(rephrase_questions=False, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+            nlp = spacy.load('en_core_web_sm')
+        elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+            visual_filter = ContrastiveRegionFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
             nlp = spacy.load('en_core_web_sm')
         else:
-            raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with SuccessVQA!")
-        
+            raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with VQG2VQA!")
+            
         visual_filters.append(visual_filter)
         nlps.append(nlp)
     else:
@@ -92,7 +100,7 @@ response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 # Configure results directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"{args.task}_VQG2VQA"
+    this_results_dir = f"VQG2VQA_{args.task}"
     if args.debug:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.vlm_name.split('/')[-1]}_{timestamp.strftime('%Y%m%d%H%M%S')}"
@@ -166,13 +174,13 @@ for eval_partition in args.eval_partitions:
                                                     vqa_batch_size=args.batch_size)
 
     print("Evaluating and saving results...")
-    evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_dataset, vqa_outputs)
+    evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
     print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
     pprint(metrics['best_metrics'])
 
     # Compile preds per mistake detection example
-    preds = compile_mistake_detection_preds(eval_dataset, vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
+    preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
 
     # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
     metrics_filename = f"metrics_{args.mistake_detection_strategy}_{eval_partition}.json"

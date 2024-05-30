@@ -10,26 +10,28 @@ import os
 import shutil
 import torch
 from transformers import pipeline, BitsAndBytesConfig
-from tqdm import tqdm
 
 from travel.constants import RESULTS_DIR, HF_TOKEN
-from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs, run_vqg
+from travel.data.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d.constants import RECIPE_STEPS
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.utils import split_list_into_partitions
+from travel.model.vqg import run_vqg
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks]) # TODO: support running for Ego4D's evaluation sets
+parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks]) # TODO: support running for Ego4D's evaluation sets
 parser.add_argument("--partition", type=str, required=False, choices=["val", "test"], help="Partition to run VQG on. For some tasks with a consistent set of procedures shared across partitions, this may not be required.")
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
 parser.add_argument("--batch_size", type=int, default=40, help="Batch size for VQG.")
-parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
+parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating visual questions.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
+
+assert not (args.partition is None and args.task == "ego4d"), f"Need to provide --partition for task {args.task}!"
 
 # Load LM(s)
 print("Setting up LM(s)...")
@@ -69,7 +71,7 @@ print(lm.model.generation_config)
 # Prepare output directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"{args.task}_VQG"
+    this_results_dir = f"VQG_{args.task}"
     if args.debug:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"

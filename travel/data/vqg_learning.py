@@ -5,8 +5,8 @@ from PIL import Image
 from typing import Optional, Union
 
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.model.vqa import VQAResponse
-from travel.model.vqg import VQGOutputs
+from travel.data.vqa import VQAResponse
+from travel.data.vqg import VQGOutputs
 
 @dataclass
 class FrameVQAMistakeDetectionExample:

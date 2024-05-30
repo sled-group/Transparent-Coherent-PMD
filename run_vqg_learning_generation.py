@@ -16,11 +16,12 @@ from tqdm import tqdm
 from transformers import pipeline, BitsAndBytesConfig
 
 from travel.constants import RESULTS_DIR, HF_TOKEN
-from travel.model.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs, run_vqg
+from travel.data.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.utils import split_list_into_partitions
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, save_frameVQA_examples
+from travel.model.vqg import run_vqg
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")

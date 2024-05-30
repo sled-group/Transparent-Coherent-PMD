@@ -12,7 +12,7 @@ import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils import generate_float_series
-from travel.model.vqa import VQAOutputs, VQAResponse
+from travel.data.vqa import VQAOutputs, VQAResponse
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)

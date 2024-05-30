@@ -2,7 +2,6 @@ import dataclasses
 from enum import Enum
 import numpy as np
 from PIL import Image
-from pprint import pprint
 import spacy
 from spacy.lang.en import English
 import torch
@@ -13,7 +12,7 @@ import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils.image import get_preprocessed_image
-from travel.model.vqg import VQGOutputs
+from travel.data.vqg import VQGOutputs
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)

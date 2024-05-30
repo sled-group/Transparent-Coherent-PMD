@@ -235,7 +235,7 @@ class MistakeDetectionDataset:
             self.n_examples = data["n_examples"]
             self.data_generated = data["data_generated"]
 
-    def get_all_procedures(self) -> Generator[tuple[int, str]]:
+    def get_all_procedures(self) -> Generator[None, list[tuple[int, str]], None]:
         """
         Quickly returns a list of all procedures in the dataset (along with their IDs). Used for VQG procedure.
         """
