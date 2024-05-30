@@ -40,8 +40,7 @@ parser.add_argument("--resume_dir", type=str, help="Path to results directory fo
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
 
-# Load VQG outputs from run_vqg.py
-vqg_outputs = load_vqg_outputs(args.vqg_directory)
+assert args.task in args.vqg_directory, f"VQG outputs should be generated from the {args.task} dataset!"
 
 # TODO: implement filtering by target objects? - have to integrate with existing visual filter code and get that code up to date
 
@@ -77,13 +76,13 @@ for worker_index in range(n_workers):
 
     if args.visual_filter_mode is not None:
         if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
-            visual_filter = SpatialVisualFilter(rephrase_questions=True, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+            visual_filter = SpatialVisualFilter(rephrase_questions=True, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_sm')
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
-            visual_filter = SpatialVisualFilter(rephrase_questions=False, device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+            visual_filter = SpatialVisualFilter(rephrase_questions=False, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_sm')
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-            visual_filter = ContrastiveRegionFilter(device="cuda:1" if torch.cuda.device_count() >= 2 else None)
+            visual_filter = ContrastiveRegionFilter(device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_sm')
         else:
             raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with VQG2VQA!")
@@ -111,23 +110,25 @@ if args.resume_dir is None:
 else:
     this_results_dir = args.resume_dir
 
-def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]:
-    questions = []
-    prompts = []
-    answers = []
-    frames = []
-    prompt = prompt_template.format(step=example.procedure_description)
-
-    for frame in example.frames:
-        for question, answer in zip(vqg_outputs[example.procedure_id].questions, vqg_outputs[example.procedure_id].answers):
-            questions.append(question)
-            prompts.append(prompt_template.format(question=question.strip()))
-            answers.append(answer)
-            frames.append(frame)
-
-    return questions, prompts, answers, frames
-
 for eval_partition in args.eval_partitions:
+    # Load VQG outputs from run_vqg.py
+    vqg_outputs = load_vqg_outputs(os.path.join(args.vqg_directory, f"vqg_outputs_{eval_partition}.json"))
+
+    def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]:
+        questions = []
+        prompts = []
+        answers = []
+        frames = []
+
+        for frame in example.frames:
+            for question, answer in zip(vqg_outputs[example.procedure_id].questions, vqg_outputs[example.procedure_id].answers):
+                questions.append(question)
+                prompts.append(prompt_template.format(question=question.strip()))
+                answers.append(answer)
+                frames.append(frame)
+
+        return questions, prompts, answers, frames
+
     print(f"Running VQA on {eval_partition}...")
 
     # Load mistake detection dataset
@@ -142,6 +143,7 @@ for eval_partition in args.eval_partitions:
         print(f"Running VQA in parallel across {torch.cuda.device_count()} GPUs...")
         with concurrent.futures.ThreadPoolExecutor() as executor:   
             partitions = list(executor.map(run_vqa_for_mistake_detection, 
+                                           eval_datasets,
                                            vlms,
                                            vlm_processors,
                                            [generate_prompts] * n_workers,

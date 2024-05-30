@@ -134,7 +134,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                 prompts += this_prompts
                 answers += this_answers
                 frames += this_frames
-                example_ids += [example.example_id] * len(questions)
+                example_ids += [example.example_id] * len(this_questions)
             pickle.dump((questions, prompts, answers, frames, example_ids), open(prompt_cache_fname, "wb"))
         else:
             questions, prompts, answers, frames, example_ids = pickle.load(open(prompt_cache_fname, "rb"))
@@ -185,7 +185,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             outputs_by_id[eid].append((output_index, frame, question, prompt, answer))
 
         # Gather up VQA outputs in the correct structure for a MistakeDetectionEvaluator
-        for example in tqdm(eval_dataset, "gathering VQA outputs"):
+        for example in tqdm(dataset_chunk, "gathering VQA outputs"):
             # Cutoff again since the example will be reloaded from disk when we access it
             example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
             step_id = example.procedure_id
@@ -209,7 +209,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                             question=question, # Save original question for NLI mistake detection evaluator
                         )      
                     )
-                    frame_vqa_outputs[-1].cache_frame(cache_dir)
+                    frame_vqa_outputs[-1].cache_frame(worker_cache_dir)
                     parallel_idx += 1
 
                 example_vqa_outputs.append(frame_vqa_outputs)

@@ -81,7 +81,7 @@ else:
     this_results_dir = args.resume_dir
 
 # Generate prompts for VQG
-prompts_fname = f"prompts_{args.partition}.json"
+prompts_fname = f"prompts_{args.partition}.json" if args.partition is not None else "prompts.json"
 if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, prompts_fname)):
     
     # Starting from scratch - load dataset and iterate through its procedures to generate prompts
@@ -91,7 +91,7 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
         dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                                mismatch_augmentation=False,
-                                               debug_n_examples_per_class=100 if args.debug else None)
+                                               debug_n_examples_per_class=20 if args.debug else None)
         indexed_procedures = dataset.get_all_procedures
 
     # Generate prompts - one per example
@@ -106,8 +106,8 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
                 prompt=prompt    
             )
         )
-        if args.debug and len(prompts) >= 100:
-            break
+        # if args.debug and len(prompts) >= 100:
+        #     break
     print(f"{len(prompts)} prompts generated for {args.partition} partition")
 
     # Save prompts
@@ -118,7 +118,7 @@ else:
     print(f"{len(prompts)} prompts loaded for {args.partition} partition")
 
 # Load combined VQG outputs if we have any
-vqg_outputs_fname = f"VQG_outputs_{args.partition}.json"
+vqg_outputs_fname = f"vqg_outputs_{args.partition}.json" if args.partition is not None else "vqg_outputs.json"
 if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, vqg_outputs_fname)):
     # Initialize empty dictionary of VQG outputs
     vqg_outputs = {}
@@ -181,13 +181,13 @@ else:
         print(f"Parallelizing VQG across {n_workers} GPUs...")
         with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:
             partitions = list(executor.map(run_vqg, 
-                                        lms,
-                                        all_worker_prompts,
-                                        all_worker_prompt_ids,
-                                        [args.batch_size for _ in range(n_workers)],
-                                        worker_vqg_outputs_paths,
-                                        [{} for _ in range(n_workers)]
-                                        )
+                                           lms,
+                                           all_worker_prompts,
+                                           all_worker_prompt_ids,
+                                           [args.batch_size for _ in range(n_workers)],
+                                           worker_vqg_outputs_paths,
+                                           [{} for _ in range(n_workers)]
+                                          )
             )
     else:
         partitions = worker_vqg_outputs

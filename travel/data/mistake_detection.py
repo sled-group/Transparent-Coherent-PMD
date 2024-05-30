@@ -239,6 +239,9 @@ class MistakeDetectionDataset:
         """
         Quickly returns a list of all procedures in the dataset (along with their IDs). Used for VQG procedure.
         """
+        already_seen = []
         for d in self.example_dirs:
             example = self.load_example_from_file(d, load_frames=False)
-            yield (example.procedure_id, example.procedure_description)
+            if example.procedure_id not in already_seen:
+                yield (example.procedure_id, example.procedure_description)
+                already_seen.append(example.procedure_id) 

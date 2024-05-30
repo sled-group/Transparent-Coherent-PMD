@@ -99,7 +99,7 @@ def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[
     answers = []
     frames = []
     prompt = prompt_template.format(step=example.procedure_description)
-    question = prompt.split("Question: ")[1].split("Answer: ")[0].strip()
+    question = prompt
     expected_answer = VQAResponse["Yes"]
 
     for frame in example.frames:
@@ -117,7 +117,7 @@ for eval_partition in args.eval_partitions:
     if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
         eval_datasets = [CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None) for _ in range(n_workers)]
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
-        eval_datasets = [Ego4DMistakeDetectionDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None) for _ in range(n_workers)]
+        eval_datasets = [Ego4DMistakeDetectionDataset(data_split=eval_partition, debug_n_examples_per_class=100 if args.debug else None) for _ in range(n_workers)]
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
         
@@ -125,6 +125,7 @@ for eval_partition in args.eval_partitions:
         print(f"Running VQA in parallel across {torch.cuda.device_count()} GPUs...")
         with concurrent.futures.ThreadPoolExecutor() as executor:   
             partitions = list(executor.map(run_vqa_for_mistake_detection, 
+                                           eval_datasets,
                                            vlms,
                                            vlm_processors,
                                            [generate_prompts] * n_workers,
