@@ -834,6 +834,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
+                # NOTE: this doesn't do anything yet because nothing is ever returned in `mismatch_examples`
                 mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
                 pprint(clip.keys())
                 print("==========")

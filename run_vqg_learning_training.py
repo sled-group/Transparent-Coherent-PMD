@@ -27,6 +27,7 @@ parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", h
 parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
 parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
 parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
+parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
 parser.add_argument("--local-rank", type=int, default=None, help="Local rank for DistributedDataParallel in PyTorch.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
@@ -131,7 +132,7 @@ training_args = TrainingArguments(output_dir=this_results_dir,
                                   per_device_train_batch_size=args.train_batch_size,
                                   per_device_eval_batch_size=args.eval_batch_size,
                                   learning_rate=args.learning_rate,
-                                  num_train_epochs=10,
+                                  num_train_epochs=args.n_epochs,
                                   fp16=True,
                                   gradient_accumulation_steps=1 if args.debug else 10,
                                   save_strategy="epoch",
