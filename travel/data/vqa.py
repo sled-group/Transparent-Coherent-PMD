@@ -5,6 +5,7 @@ from PIL import Image
 import torch
 from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
 from typing import Optional, Union
+import uuid
 
 from travel.data.mistake_detection import MistakeDetectionTasks
 
@@ -80,9 +81,6 @@ class VQAOutputs:
         
         # Cache frame for this example if it's not already cached somewhere
         if image_base_path is not None and type(self.frame) != str:
-            image_base_path = os.path.join(image_base_path, "frames")
-            if not os.path.exists(image_base_path):
-                os.makedirs(image_base_path)
             self.cache_frame(image_base_path)
             return_dict["frame"] = self.frame
 
@@ -94,8 +92,9 @@ class VQAOutputs:
         if not os.path.exists(os.path.join(image_base_path, "frames")):
             os.makedirs(os.path.join(image_base_path, "frames"))
 
-        frame_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}.jpg")
-
+        # Since each VQAOutputs does not have a unique example ID, generate a unique UUID for it
+        uuid = str(uuid.uuid4())
+        frame_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}_{uuid}.jpg")
         self.frame.save(frame_path)
 
         self.frame = frame_path
