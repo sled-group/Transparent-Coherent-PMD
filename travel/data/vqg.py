@@ -162,7 +162,8 @@ def save_vqg_inputs(inputs: list[VQGInputs], path: str):
     assert path.endswith(".json"), "save_vqg_inputs expects a json filename!"
     json.dump(
         [inp.to_dict() for inp in inputs],
-        open(path, "w")
+        open(path, "w"),
+        indent=4
     )
 
 def load_vqg_inputs(path: str) -> list[VQGInputs]:
