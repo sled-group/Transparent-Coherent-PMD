@@ -93,8 +93,8 @@ class VQAOutputs:
             os.makedirs(os.path.join(image_base_path, "frames"))
 
         # Since each VQAOutputs does not have a unique example ID, generate a unique UUID for it
-        uuid = str(uuid.uuid4())
-        frame_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}_{uuid}.jpg")
+        frame_uuid = str(uuid.uuid4())
+        frame_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}_{frame_uuid}.jpg")
         self.frame.save(frame_path)
 
         self.frame = frame_path

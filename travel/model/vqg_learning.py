@@ -6,7 +6,7 @@ from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConf
 from typing import Optional, Union
 
 from travel.constants import DATA_CACHE_DIR
-from travel.data.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, run_vqa, get_vqa_response_token_ids
+from travel.data.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
