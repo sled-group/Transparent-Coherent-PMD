@@ -12,11 +12,9 @@ from peft import get_peft_model, LoraConfig, TaskType
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from trl import DPOTrainer
-import wandb
 
 from travel.data.vqg_learning import load_vqg_training_examples
 

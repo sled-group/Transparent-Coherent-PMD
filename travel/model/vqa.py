@@ -116,9 +116,11 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
     response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
     vqa_outputs = []
-    for chunk_idx, dataset_chunk in enumerate(eval_dataset.get_batches(IMAGES_CHUNK_SIZE,
+    for chunk_idx, dataset_chunk in enumerate(tqdm(eval_dataset.get_batches(IMAGES_CHUNK_SIZE,
                                                                        n_workers=n_workers, 
-                                                                       worker_index=worker_index)):
+                                                                       worker_index=worker_index), 
+                                                   desc=f"chunks ({vlm.device})", 
+                                                   total=len(eval_dataset) // IMAGES_CHUNK_SIZE)):
         prompt_cache_fname = os.path.join(worker_cache_dir, f"prompts_chunk{chunk_idx}.pkl")
         if not os.path.exists(prompt_cache_fname):
             questions = []
@@ -185,7 +187,8 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             outputs_by_id[eid].append((output_index, frame, question, prompt, answer))
 
         # Gather up VQA outputs in the correct structure for a MistakeDetectionEvaluator
-        for example in tqdm(dataset_chunk, "gathering VQA outputs"):
+        for example in tqdm(dataset_chunk, desc=f"gathering VQA outputs ({vlm.device})"):
+            
             # Cutoff again since the example will be reloaded from disk when we access it
             example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
             step_id = example.procedure_id
