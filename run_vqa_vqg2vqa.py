@@ -133,10 +133,11 @@ for eval_partition in args.eval_partitions:
             question = prompt
             expected_answer = VQAResponse["Yes"]
             for frame in example.frames:
-                questions.append(question)
-                prompts.append(prompt)
-                answers.append(expected_answer)
-                frames.append(frame)
+                for _ in range(N_GENERATED_QUESTIONS):
+                    questions.append(question)
+                    prompts.append(prompt)
+                    answers.append(expected_answer)
+                    frames.append(frame)
 
         return questions, prompts, answers, frames
 
