@@ -743,7 +743,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             cache_fname += f"_partition{worker_index+1}of{n_workers}"
         return os.path.join(DATA_CACHE_DIR, cache_fname)
     
-    # TODO: support parallelization by iterating through different parts of ego4D for each worker?
     def generate_examples(self,
                           data_split: str,
                           mismatch_augmentation: bool=False,
