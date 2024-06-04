@@ -854,14 +854,26 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
                 # NOTE: this doesn't do anything yet because nothing is ever returned in `mismatch_examples`
-                mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
-                pprint(clip.keys())
-                print("==========")
-                pprint(f"{clip['narration_text']=}\n{mismatch_examples=}")
-                # see which video_uids are matched
-                # for fhouid in [_[1]["video_uid"] for _ in ego4d._labeled_videos]:
-                #     inflag = fhouid in self.mismatch_sampler.narration_mapping_fho2srl_df["video_uid"].unique().tolist()
-                #     print(f"{fhouid}, {inflag=}")
+                try: 
+                    mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
+                    pprint(clip.keys())
+                    print("==========")
+                    pprint(f"{clip['narration_text']=}\n{mismatch_examples=}")
+                    # see which video_uids are matched
+                    # for fhouid in [_[1]["video_uid"] for _ in ego4d._labeled_videos]:
+                    #     inflag = fhouid in self.mismatch_sampler.narration_mapping_fho2srl_df["video_uid"].unique().tolist()
+                    #     print(f"{fhouid}, {inflag=}")
+                except Exception as e:
+                    # if the error is AttributeError: 'Ego4DMistakeDetectionDataset' object has no attribute 'mismatch_sampler', reinitialize the self.mismatch_sampler
+                    # It is weird to have this error. It means self.mismatch_sampler disappears in the middle of the loop.
+                    if "mismatch_sampler" not in dir(self):
+                        self.mismatch_sampler = MisalignSRL(
+                            EGO4D_ANNOTATION_PATH,
+                            EGO4D_MISMATCH_FHO2SRL_PATH,
+                            EGO4D_MISMATCH_NARRATIONS_PATH,
+                            EGO4D_MISMATCH_NARRATIONS_ROWS_PATH,
+                            EGO4D_MISMATCH_GROUPS_PATH
+                        )
             if debug_n_examples_per_class is not None and self.n_examples + len(example_cache_buffer) >= 2 * debug_n_examples_per_class:
                 break
 
