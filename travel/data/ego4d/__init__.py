@@ -449,6 +449,7 @@ class MisalignSRL:
         narration_mapping_fho2srl_df = pd.read_csv(narration_mapping_fho2srl_df_path, index_col=0)
         narration_mapping_fho2srl_df["srl_index"] = narration_mapping_fho2srl_df["srl_index"].apply(ast.literal_eval)
         print(f"Loading narration_mapping_fho2srl_df took {time.time() - start_time} seconds.")
+        fho_main_overlap_narration_list = narration_mapping_fho2srl_df["video_uid"].unique().tolist()
         
         print("Loading fho_narration_df_rows ...")
         start_time = time.time()
@@ -471,6 +472,7 @@ class MisalignSRL:
         self.narration_df = narration_df
         self.fho_narration_df_rows = fho_narration_df_rows
         self.group_df = group_df
+        self.fho_main_overlap_narration_list = fho_main_overlap_narration_list
 
         self.type_name_col_name_map = {"MisalignSRL_V": "mismatch_verb", "MisalignSRL_ARG1": "mismatch_noun", "MisalignSRL_V_ARG1": "mismatch_verb_noun"} # human readable name -> column name in group_df
 
@@ -491,18 +493,19 @@ class MisalignSRL:
         
         # find the map_row (the row in `narration_mapping_fho2srl_df (pd.DataFrame)`) by matching `video_uid` and `narration_timestamp_sec`
         match_video_uid = self.narration_mapping_fho2srl_df["video_uid"] == video_uid
-        pprint(video_uid)
-        pprint(match_video_uid.value_counts())
-        pprint(self.narration_mapping_fho2srl_df["video_uid"])
+        # pprint(video_uid)
+        # pprint(match_video_uid.value_counts())
+        # pprint(self.narration_mapping_fho2srl_df["video_uid"])
         match_narration_timestamp_sec = self.narration_mapping_fho2srl_df["narration_timestamp_sec"] == narration_timestamp_sec
-        pprint(narration_timestamp_sec)
-        pprint(match_narration_timestamp_sec.value_counts())
-        pprint(self.narration_mapping_fho2srl_df["narration_timestamp_sec"])
+        # pprint(narration_timestamp_sec)
+        # pprint(match_narration_timestamp_sec.value_counts())
+        # pprint(self.narration_mapping_fho2srl_df["narration_timestamp_sec"])
         map_row = self.narration_mapping_fho2srl_df[match_video_uid & match_narration_timestamp_sec]
         
         # return if no map_row found. Meaning, this clip does not have misalignsrl sample in current group_df.
         if len(map_row) == 0:
             # TODO: we always return here because we can't match the video_uid or narration_timestamp_sec
+            print(f"WARNING MISTAKE EXAMPLE NOT FOUND")
             return mistake_example_meta_dict
         
         # get the `fho_index` (index in `fho_narration_df_rows`) and `srl_index` (index in `narration_df`) from the map_row (a row in `narration_mapping_fho2srl_df (pd.DataFrame)`)
@@ -584,6 +587,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
         already_processed_videos: Optional[list[str]] = [],
         n_workers: Optional[int] = None,
         worker_index: Optional[int] = None,
+        valid_video_uid_list=None
     ) -> None:
         """
         :param annotation_path: path to the main annotation file, e.g., `fho_main.json`.
@@ -592,6 +596,7 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
         :param video_path: path to video dir
         :param transform: optional transform function
         :param random_clip: whether to sample clips randomly
+        :param valid_video_uid_list: list of video_uids out of which the videos will NOT be used. If None, all videos will be used.
         """
         with open(annotation_path) as f:
             annotations = json.load(f)
@@ -631,8 +636,8 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
         def _extract_video_id(data: tuple[str, dict[str, Any]]) -> str:
             return data[1]['video_uid']
 
-        super().__init__(
-            [
+        
+        full_video_list = [
                 (
                     os.path.join(video_dir_path, video_uid + ".mp4"),
                     {
@@ -661,7 +666,20 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                     },
                 )
                 for video_uid in split_data["videos"]
-            ],
+            ]
+        
+        init_video_list = None
+        if valid_video_uid_list != None:
+            # given a variable `valid_video_uid_list`, filter out the videos not in the list. The initial motivation was that when generating the misalignsrl samples, the index files of misalignmentsrl(EgoClip) and fho_main(this project) are only partially overlapped            
+            init_video_list = []
+            for video_tuple in full_video_list:
+                if video_tuple[1]["video_uid"] in valid_video_uid_list:
+                    init_video_list.append(video_tuple)
+        else:
+            init_video_list = full_video_list
+            
+        super().__init__(
+            init_video_list,
             NarratedActionClipSampler(random_clip),
             video_sampler=partial(ResumableParallelSequentialSampler, 
                                   completed_elements=already_processed_videos,
@@ -762,6 +780,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             already_processed_videos=already_processed_videos,
             n_workers=n_workers,
             worker_index=worker_index,
+            valid_video_uid_list=self.mismatch_sampler.fho_main_overlap_narration_list
         )
 
         nlp = spacy.load('en_core_web_sm')
@@ -838,8 +857,11 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
                 pprint(clip.keys())
                 print("==========")
-                pprint(mismatch_examples)
-
+                pprint(f"{clip['narration_text']=}\n{mismatch_examples=}")
+                # see which video_uids are matched
+                # for fhouid in [_[1]["video_uid"] for _ in ego4d._labeled_videos]:
+                #     inflag = fhouid in self.mismatch_sampler.narration_mapping_fho2srl_df["video_uid"].unique().tolist()
+                #     print(f"{fhouid}, {inflag=}")
             if debug_n_examples_per_class is not None and self.n_examples + len(example_cache_buffer) >= 2 * debug_n_examples_per_class:
                 break
 
