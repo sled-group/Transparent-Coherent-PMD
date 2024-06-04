@@ -82,7 +82,7 @@ class VQAOutputs:
         # Cache frame for this example if it's not already cached somewhere
         if image_base_path is not None and type(self.frame) != str:
             self.cache_frame(image_base_path)
-            return_dict["frame"] = self.frame
+        return_dict["frame"] = self.frame
 
         return return_dict
     
