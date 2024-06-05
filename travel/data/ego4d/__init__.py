@@ -5,10 +5,13 @@ from fractions import Fraction
 from functools import partial
 import json
 import numpy as np
+from numpy import dot
+from numpy.linalg import norm
 import os
 import pandas as pd
+from PIL import Image
 from pprint import pprint
-from pytorchvideo.data import ClipSampler, LabeledVideoDataset
+from pytorchvideo.data import ClipSampler
 from pytorchvideo.data.clip_sampling import ClipInfo
 import random
 import re
@@ -17,39 +20,42 @@ import string
 import time
 import torch
 from torch.nn.functional import cosine_similarity
-from torchvision.transforms.functional import to_pil_image
 from transformers import BatchEncoding, DataCollatorForSeq2Seq, PreTrainedTokenizer
 from typing import Any, TypeVar, Optional
 from tqdm import tqdm
 
-from travel.constants import DATA_CACHE_DIR, RANDOM_SEED, CACHE_FREQUENCY
+from travel.constants import DATA_CACHE_DIR, RANDOM_SEED
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
                                         EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
 from travel.data.utils import read_large_csv, get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler
 from travel.data.utils.text import simple_present_to_imperative
+from travel.data.utils.video import get_video, extract_frames
 
 # Some verbs would not be expected in the task-oriented mistake detection setting (don't really cause a meaningful state change toward a task goal), so we can filter them out
-EGO4D_IGNORE_VERBS = ['scroll', # Scrolling on phone, tablet, etc.
-                     'touch', # Touching an object
-                     'walk', # Walking around, sometimes to a destination
-                     'give', # Usually handing an object to someone else
-                     'read', # Reading a book
-                     'drive_(ride,_drive)', # (Mostly) driving vehicles, sometimes driving nails or other parts into something else
-                     'pet', # Petting animals
-                     'climb', # Climbing stairs, walls, rocks, etc.
-                     'play', # Playing games and instruments
-                     'point', # Aiming hands and objects at something else
-                     'consume_(taste,_sip,_eat,_drink)', # Eating and drinking
-                     'search', # Looking for objects (typically followed by picking something up)
-                     'enter', # Entering rooms or buildings
-                     'watch', # Watching videos and movies
-                     'park', # Parking a vehicle
-                     'talk_(talk,_interact,_converse)', # Talking with others
-                     'sit', # (Most often) a person sitting on something
-                     'feed', # Feeding animals
-                     'cross', # People crossing over things
-                     'kick'] # Kicking objects with foot - usually not related to any task
+EGO4D_IGNORE_VERBS = [
+    'scroll', # Scrolling on phone, tablet, etc.
+    'touch', # Touching an object
+    'walk', # Walking around, sometimes to a destination
+    'give', # Usually handing an object to someone else
+    'read', # Reading a book
+    'drive_(ride,_drive)', # (Mostly) driving vehicles, sometimes driving nails or other parts into something else
+    'pet', # Petting animals
+    'climb', # Climbing stairs, walls, rocks, etc.
+    'play', # Playing games and instruments
+    'point', # Aiming hands and objects at something else
+    'consume_(taste,_sip,_eat,_drink)', # Eating and drinking
+    'search', # Looking for objects (typically followed by picking something up)
+    'enter', # Entering rooms or buildings
+    'watch', # Watching videos and movies
+    'park', # Parking a vehicle
+    'talk_(talk,_interact,_converse)', # Talking with others
+    'sit', # (Most often) a person sitting on something
+    'feed', # Feeding animals
+    'cross', # People crossing over things
+    'kick', # Kicking objects with foot - usually not related to any task
+    "check" # Check on something, e.g., look at something - doesn't imply a state change
+] 
 
 C_REGEX = re.compile(r"^\#C\s+C", re.IGNORECASE)
 EOS_REGEX = re.compile(r"\<\|eos\|\>$", re.IGNORECASE)
@@ -354,7 +360,6 @@ class NarratedActionClipSampler(ClipSampler):
             is_last_clip,
         )
 
-    # TODO: this only can be used for resuming within a single clip - need to rethink how resuming is done
     def skip_to_index(self, idx: int):
         self._current_clip_index = idx
 
@@ -475,13 +480,15 @@ class MisalignSRL:
         self.type_name_col_name_map = {"MisalignSRL_V": "mismatch_verb", "MisalignSRL_ARG1": "mismatch_noun", "MisalignSRL_V_ARG1": "mismatch_verb_noun"} # human readable name -> column name in group_df
 
     # TODO: make sure examples are only retrieved from the same split...
-    def get_misaligned_samples(self, clip):
+    def get_misaligned_samples(self, clip, random_seed: Optional[int] = None):
         '''
         clip: (obj?). Corresponds to one action clip in fho_main.json. The distinguishing information of this clip is `video_uid` and `narration_timestamp_sec`.
         
         return:
             mistake_example_meta_dict: {misalignsrl_type -> one action clip in fho_main.json (fho_main_json["videos"][video_index]["annotated_intervals"][big_clip_index]["narrated_actions"][narration_clip_index])}
         '''
+        numpy_random = np.random.RandomState(random_seed)
+
         # for each misalignsrl_type, sample one srl_index in the group, and return the index of that narration clip in `fho_main.json`
         # mistake_example_meta_dict: misalignsrl_type -> fho_narration_df_rows. To be returned.
         mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
@@ -508,7 +515,7 @@ class MisalignSRL:
         # get the `fho_index` (index in `fho_narration_df_rows`) and `srl_index` (index in `narration_df`) from the map_row (a row in `narration_mapping_fho2srl_df (pd.DataFrame)`)
         fho_index = map_row["fho_index"].values[0]
         
-        srl_index = random.choice(map_row["srl_index"].values[0]) # randomly pick one. one narration could be in multiple groups. E.g., "pick up a bag of clothes" could be in "pick up bag" and "pick up cloth"
+        srl_index = numpy_random.choice(map_row["srl_index"].values[0]) # randomly pick one. one narration could be in multiple groups. E.g., "pick up a bag of clothes" could be in "pick up bag" and "pick up cloth"
         
         # find the group in `group_df` to which the `srl_narration_row` belongs
         srl_narration_row = self.narration_df.iloc[srl_index]
@@ -525,7 +532,7 @@ class MisalignSRL:
                 index_list = ast.literal_eval(index_list)
                 
             # shuffle the index_list so that different given `clip` is less likely to get the same sample for a misalignsrl_type. For example, for given `clip`s "cut carrot" and "pour sauce", the first sample for "MisalignSRL_VN" could be the same -- "pick up cap"
-            index_list = np.random.permutation(index_list)
+            index_list = numpy_random.permutation(index_list)
             # find fho_index (for fho_narration_df_rows)        
             for srl_index in index_list:
                 # narration_mapping_fho2srl_df["srl_index"] is a column where each row is a list of int. srl_index is a int. 
@@ -573,7 +580,7 @@ def get_structured_noun(action: dict) -> str | None:
     return None
 
 # TODO: add an option to not load full videos - just use index files and specific frames instead? This would be much faster.
-class Ego4dFHOMainDataset(LabeledVideoDataset):
+class Ego4dFHOMainDataset:
     def __init__(
         self,
         annotation_path: str,
@@ -614,33 +621,14 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
         if n_workers is not None and worker_index is not None:
             # If parallelizing, only count the narrated actions for this worker
             self.num_narrated_actions = len(split_list_into_partitions(list(range(self.num_narrated_actions)), n_workers)[worker_index])
-
-        def _transform(item: dict) -> Any:
-            """The first transform function that formats `narrated_actions` and
-            `video`."""
-            # format narrated_actions
-            narrated_actions = item.pop("narrated_actions")
-            item.update(narrated_actions[item["clip_index"]])
-
-            # turn video tensor to torch.uint8
-            item["video"] = item["video"].to(torch.uint8)
-            if transform is not None:
-                item = transform(item)
-            return item
         
-        def _extract_video_id(data: tuple[str, dict[str, Any]]) -> str:
-            return data[1]['video_uid']
-
-        super().__init__(
-            [
+        self.video_info = [
                 (
+                    video_index, 
                     os.path.join(video_dir_path, video_uid + ".mp4"),
                     {
                         "narrated_actions": [
                             {
-                                "pre_45": action["critical_frames"]["pre_45"] if action["critical_frames"] is not None else None,
-                                "pre_30": action["critical_frames"]["pre_30"] if action["critical_frames"] is not None else None,
-                                "pre_15": action["critical_frames"]["pre_15"] if action["critical_frames"] is not None else None,
                                 "pre_frame": action["critical_frames"]["pre_frame"] if action["critical_frames"] is not None else None,
                                 "pnr_frame": action["critical_frames"]["pnr_frame"] if action["critical_frames"] is not None else None,
                                 "post_frame": action["critical_frames"]["post_frame"] if action["critical_frames"] is not None else None,
@@ -660,18 +648,41 @@ class Ego4dFHOMainDataset(LabeledVideoDataset):
                         "video_metadata": video_dict[video_uid]["video_metadata"],
                     },
                 )
-                for video_uid in split_data["videos"]
-            ],
-            NarratedActionClipSampler(random_clip),
-            video_sampler=partial(ResumableParallelSequentialSampler, 
-                                  completed_elements=already_processed_videos,
-                                  element_id_fn=_extract_video_id,
-                                  n_workers=n_workers,
-                                  worker_index=worker_index),
-            transform=_transform,
-            decode_audio=False,
-        )
+                for video_index, video_uid in enumerate(split_data["videos"])
+            ]
+        
+        def _extract_video_id(data: tuple[str, dict[str, Any]]) -> str:
+            return data[2]['video_uid']
+        self.video_sampler = partial(ResumableParallelSequentialSampler, 
+                                     completed_elements=already_processed_videos,
+                                     element_id_fn=_extract_video_id,
+                                     n_workers=n_workers,
+                                     worker_index=worker_index,
+                                     return_indices=False)
 
+    def __iter__(self) -> Iterable[dict[str, Any]]:
+        for video_index, video_path, video_metadata in self.video_sampler(self.video_info):
+            video_cap = get_video(video_path)
+
+            for clip_index, clip_info in enumerate(video_metadata['narrated_actions']):
+                pre_time = clip_info['pre_frame'] / clip_info['fps'] if clip_info['pre_frame'] is not None else None
+                pnr_time = clip_info['pnr_frame'] / clip_info['fps'] if clip_info['pnr_frame'] is not None else None
+                post_time = clip_info['post_frame'] / clip_info['fps'] if clip_info['post_frame'] is not None else None
+                
+                pre_frame, pnr_frame, post_frame = extract_frames(video_cap, [pre_time, pnr_time, post_time])
+
+                yield clip_info | {"video_index": video_index,
+                                   "video_uid": video_metadata["video_uid"],
+                                   "clip_index": clip_index,
+                                   "pre_time": pre_time,
+                                   "pre_frame": pre_frame, 
+                                   "pnr_time": pnr_time, 
+                                   "pnr_frame": pnr_frame,
+                                   "post_time": post_time,
+                                   "post_frame": post_frame}
+
+            video_cap.release()
+    
     def __len__(self) -> int:
         return self.num_narrated_actions    
     
@@ -679,7 +690,7 @@ def filter_action_for_mistake_detection(action: dict[str, Any], previous_action:
     """Return True if the given action should be used, False otherwise."""
     return (
         action["pre_frame"] is not None
-        and action["pnr_frame"] is not None
+        # and action["pnr_frame"] is not None
         and action["post_frame"] is not None
         and action["structured_verb"] not in EGO4D_IGNORE_VERBS # Omit clips with non-task actions
         and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
@@ -690,7 +701,6 @@ def filter_action_for_mistake_detection(action: dict[str, Any], previous_action:
                 or action['previous_occurrences'] > 1
             ) # Filter out clips where the same action is being performed over and over
     )
-
 
 class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     """Class to store Ego4D data in mistake detection form. Each example only has one frame for efficiency, although we may have to change this later."""
@@ -711,7 +721,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         # Handle Ego4D-specific initialization logic
         if mismatch_augmentation:
             # TODO: this takes several minutes - if we already have the data cached, we don't even need this - add logic for this
-            # TODO: also, need to make sure random seeds for mismatch_sampler are appropriately configured if we're generating in parallel
             self.mismatch_sampler = MisalignSRL(
                 EGO4D_ANNOTATION_PATH,
                 EGO4D_MISMATCH_FHO2SRL_PATH,
@@ -770,7 +779,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         example_cache_buffer = []
         for clip in tqdm(ego4d, desc="generating ego4d data"):
             # Cache if we're starting a new video
-            if ego4d._clip_sampler._current_clip_index == 0 and len(example_cache_buffer) > 0:  
+            if clip['clip_index'] == 0 and len(example_cache_buffer) > 0:  
                 # Cache examples in buffer
                 for new_example in example_cache_buffer:
                     self.save_example_to_file(new_example)
@@ -791,11 +800,11 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             instruction_text = simple_present_to_imperative(nlp, instruction_text)
 
             # clip['video'] shape: (C, # frames, H, W)
-            precondition_frame_t, effect_frame_t = clip['video'][:,0], clip['video'][:,-1] # (C, H, W)
-            precondition_frame, effect_frame = to_pil_image(precondition_frame_t), to_pil_image(effect_frame_t)
+            precondition_frame_arr, effect_frame_arr = clip['pre_frame'], clip['post_frame']
+            precondition_frame, effect_frame = Image.fromarray(precondition_frame_arr), Image.fromarray(effect_frame_arr)
             
             # Omit examples where precondition and effect frame are overly similar
-            precondition_effect_similarity = cosine_similarity(precondition_frame_t.flatten().float(), effect_frame_t.flatten().float(), dim=0).detach().numpy()
+            precondition_effect_similarity = dot(precondition_frame_arr.astype(float).flatten(), effect_frame_arr.astype(float).flatten()) / (norm(precondition_frame_arr.astype(float).flatten()) * norm(effect_frame_arr.astype(float).flatten()))
             if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
                 continue
             
@@ -803,14 +812,13 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # NOTE: example IDs intentionally have "/"s in them to ensure there's one directory per video and per clip (enables easy resuming of incomplete runs, and easy inspection of data)
 
             # Generate positive example from effect frame
-            # TODO: maybe want to get entire clip later - OR just write new code to extract single frames from video files
             positive_example = MistakeDetectionExample(
                 task_name="ego4d",
                 video_id=clip['video_uid'],
                 procedure_id=procedure_id,
                 example_id=f"{clip_id}/pos",
                 frames=[effect_frame],
-                frame_times=[clip['post_frame'] / clip['fps']],
+                frame_times=[clip['post_time']],
                 procedure_description=instruction_text,
                 mistake=False,
             )
@@ -824,7 +832,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 procedure_id=procedure_id,
                 example_id=f"{clip_id}/hardneg",
                 frames=[precondition_frame],
-                frame_times=[clip['pre_frame'] / clip['fps']],
+                frame_times=[clip['pre_time']],
                 procedure_description=instruction_text,
                 mistake=True,
                 mistake_type="Action Incomplete",
@@ -834,7 +842,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
                 # NOTE: this doesn't do anything yet because nothing is ever returned in `mismatch_examples`
-                mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip)
+                mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id) # Ensure random seed is consistently set in parallel settings by using global random seed and procedure ID (which is unique for each video clip)
                 pprint(clip.keys())
                 print("==========")
                 pprint(mismatch_examples)

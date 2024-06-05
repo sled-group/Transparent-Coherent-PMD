@@ -190,25 +190,31 @@ class ResumableParallelSequentialSampler(torch.utils.data.Sampler):
     completed_elements: list[Any]
     n_workers: int
     worker_index: int
+    return_indices: bool
 
     def __init__(self, 
                  data_source: list[Any], 
                  completed_elements: list[Any]=[],
                  element_id_fn: Optional[Callable[[Any], Any]]=None,
                  n_workers: Optional[int]=None, 
-                 worker_index: Optional[int]=None,) -> None:
+                 worker_index: Optional[int]=None,
+                 return_indices: bool=True) -> None:
         
         self.data_source = data_source
         self.element_id_fn = element_id_fn
         self.completed_elements = completed_elements
         self.n_workers = n_workers
         self.worker_index = worker_index
+        self.return_indices = return_indices
 
         # Pre-run this since it's slow
         self.already_completed_index = [self.is_already_completed(self.data_source[i]) for i in range(len(self.data_source))]
 
     def __iter__(self) -> Iterator[int]:
-        it = [i for i in range(len(self.data_source)) if not self.already_completed_index[i]]
+        if self.return_indices:
+            it = [i for i in range(len(self.data_source)) if not self.already_completed_index[i]]
+        else:
+            it = [self.data_source[i] for i in range(len(self.data_source)) if not self.already_completed_index[i]]
         if self.n_workers is not None:
             assert self.worker_index is not None, "ResumableParallelSequentialSampler expected worker_index to be passed with n_workers!"
             it = split_list_into_partitions(it, self.n_workers)[self.worker_index]
