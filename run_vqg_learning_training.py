@@ -33,6 +33,8 @@ args = parser.parse_args()
 if args.val_data_directory is None:
     args.val_data_directory = args.training_data_directory
 
+print("!!! Local rank: ", args.local_rank)
+
 print("Preparing training and validation data...")
 data = {
     "train": load_vqg_training_examples(args.training_data_directory, "train"),

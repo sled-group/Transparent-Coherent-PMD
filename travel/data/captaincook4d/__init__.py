@@ -57,12 +57,13 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
             STEP_ANNOTATIONS[video_id]["steps_errors"] = error_annotation["step_annotations"]
 
         # Load OWLv2 to check for target objects in recipe steps
+        print("Setting up target object counter...")
         nlp = spacy.load('en_core_web_sm')
         object_counter = TargetObjectCounterFilter()
 
         success_examples = []
         error_examples = []
-        for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos", total=len(all_video_ids)):
+        for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos", total=len(all_video_ids)):            
             try:
                 sample_video = get_video(sample_video_path)
             except:
@@ -100,6 +101,9 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         new_times = []
                         for second in frame_info_by_second:
                             max_count = max([count for _, _, count in frame_info_by_second[second]])
+                            if max_count == 0:
+                                # Skip this second of the video if there are no target objects in view
+                                continue
                             frame_info_with_max_count = [info for info in frame_info_by_second[second] if info[2] == max_count]
                             if len(frame_info_with_max_count) > 1:
                                 # If multiple frames have maximum number of target objects, take the least blurry one (max variance of laplacian)
@@ -117,8 +121,15 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         frames = []
 
                     if "errors" in step and len(step["errors"]) > 0:               
-                        mistake_type = step['errors'][0]["tag"]
-                        mistake_description = step['errors'][0]['description']
+
+                        # Filter out error types that aren't perceivable from individual images
+                        mistake_types_descriptions = [m for m in step['errors'] if m['tag'] not in ["Order Error", "Timing Error", "Temperature Error"]]
+                        if len(mistake_types_descriptions) > 0:
+                            mistake_type, mistake_description = mistake_types_descriptions[0]['tag'], mistake_types_descriptions[0]['description']
+                        else:
+                            # If we didn't find any good mistake types here, omit this example
+                            continue
+
                         # altered_procedure_description = step['modified_description'] # NOTE: can use this later if needed
 
                         if len(step['errors']) > 1:
