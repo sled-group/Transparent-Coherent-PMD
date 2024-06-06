@@ -14,7 +14,6 @@ data:
     video_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/data/captain_cook_4d/hololens/sync/pv"
   ego4d:
     annotation_path: "/nfs/turbo/coe-chaijy-unreplicated/datasets/ego4d/v2/annotations/fho_main.json"
-    sampled_frames_path: "/nfs/turbo/coe-chaijy/generated-data/ego4d/v2/"
     split_path: "/nfs/turbo/coe-chaijy/generated-data/ego4d/v2/splits"
     video_path: "/nfs/turbo/coe-chaijy-unreplicated/datasets/ego4d/v2/full_scale"
     mismatch_dir: "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/ego4d_mismatch_srl_files"
