@@ -1,16 +1,20 @@
+from collections import defaultdict
+import math
 import os, json
-import pickle
 from PIL import Image
+import spacy
 from tqdm import tqdm
-from typing import Any, Optional
+from typing import Optional
 
 from travel.constants import DATA_CACHE_DIR
 from travel.data.captaincook4d.constants import VIDEO_DIR, ANNOTATIONS_DIR, DATA_SPLITS
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
 from travel.data.utils import generate_float_series
+from travel.data.utils.image import variance_of_laplacian
 from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY
+from travel.model.grounding import TargetObjectCounterFilter
 
-# TODO: modify this class so all examples aren't held in memory
+
 class CaptainCook4DDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
@@ -31,15 +35,9 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         cache_fname = f"captaincook4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}" 
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
+        if not load_videos:
+            cache_fname += "_novideos"
         cache_fname = os.path.join(DATA_CACHE_DIR, cache_fname)
-        return cache_fname
-
-    def get_cache_fname(self,
-                      data_split: str,
-                      load_videos: bool=True,
-                      debug_n_examples_per_class: Optional[int]=None) -> str:
-        cache_dir = self.cache_dir
-        cache_fname = os.path.join(cache_dir, "captaincook4d.json")
         return cache_fname
 
     def generate_examples(self,
@@ -57,6 +55,10 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         for error_annotation in ERROR_ANNOTATIONS:
             video_id = error_annotation['recording_id']
             STEP_ANNOTATIONS[video_id]["steps_errors"] = error_annotation["step_annotations"]
+
+        # Load OWLv2 to check for target objects in recipe steps
+        nlp = spacy.load('en_core_web_sm')
+        object_counter = TargetObjectCounterFilter()
 
         success_examples = []
         error_examples = []
@@ -78,17 +80,41 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                     if step_duration < 0.1:
                         continue
 
+                    procedure_description = "-".join(step['description'].split("-")[1:])
+
                     if load_videos:
                         adjusted_start = step['start_time'] + min(step_duration * 0.05, 0.5) # Adjust the start time to be later by a maximum of 0.5 seconds
                         adjusted_end = step['end_time'] - min(step_duration * 0.3, 3) # Adjust the end time to be earlier by a maximum of 3 seconds
-                        times = generate_float_series(adjusted_start, adjusted_end, FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
+                        times = generate_float_series(adjusted_start, adjusted_end, (adjusted_end - adjusted_start) / FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
                         frames = extract_frames(sample_video, times)
                         frames = [Image.fromarray(frame) for frame in frames]
+
+                        # While we sampled FRAME_SAMPLING_FREQUENCY frames / second, we will only sample one frame per second and pick a frame that is not blurry and has the maximum number of target objects
+                        counts = object_counter(nlp, frames, [procedure_description] * len(frames))
+                        frame_info_by_second = defaultdict(list)
+                        assert len(times) == len(frames) == len(counts), "Frames, times, and object counts must be the same."
+                        for frame, time, count in zip(frames, times, counts):
+                            frame_info_by_second[int(math.floor(time))].append((frame, time, count))
+                        
+                        new_frames = []
+                        new_times = []
+                        for second in frame_info_by_second:
+                            max_count = max([count for _, _, count in frame_info_by_second[second]])
+                            frame_info_with_max_count = [info for info in frame_info_by_second[second] if info[2] == max_count]
+                            if len(frame_info_with_max_count) > 1:
+                                # If multiple frames have maximum number of target objects, take the least blurry one (max variance of laplacian)
+                                frame_info_with_max_count = max(frame_info_with_max_count, key = lambda x: variance_of_laplacian(x[0]))
+                            else:
+                                frame_info_with_max_count = frame_info_with_max_count[0]
+                            
+                            new_frames.append(frame_info_with_max_count[0])
+                            new_times.append(frame_info_with_max_count[1])
+
+                        frames = new_frames
+                        times = new_times
                     else:
                         times = []
                         frames = []
-
-                    verb, procedure_description = step['description'].split("-")[0], "-".join(step['description'].split("-")[1:])
 
                     if "errors" in step and len(step["errors"]) > 0:               
                         mistake_type = step['errors'][0]["tag"]
@@ -114,7 +140,6 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
                         if debug_n_examples_per_class is not None:
                             error_examples.append(example)
-                        # pprint(error_examples[-1])
                     else:
                         example = MistakeDetectionExample(
                             task_name=MistakeDetectionTasks.CaptainCook4D,

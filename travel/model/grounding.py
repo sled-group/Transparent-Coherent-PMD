@@ -323,11 +323,11 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
             doc = nlp(question)
             nouns = []
             for chunk in doc.noun_chunks:
-                nouns.append(chunk.text.replace("the ", ""))
+                nouns.append(chunk.text.replace("the ", "").replace("an ", "").replace("a ", ""))
             results.append(nouns)
         return results
 
-    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> list[Image.Image]:
         # Parse objects from questions
         object_parse_results = self.parse_questions_for_contrastive_region_filter(nlp, questions)
         detection_results, padded_images = self.run_detection(object_parse_results, frames)
@@ -358,6 +358,40 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
             new_frames.append(new_frame)
 
         return new_frames
+
+class TargetObjectCounterFilter(AdaptiveVisualFilter):
+    """
+    This visual filter is used to count target objects from procedures in frames.
+    """
+    def __init__(self, **kwargs: dict[str, Any]):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def parse_procedures_for_target_objects(nlp: English, procedures: list[str]) -> list[list[str]]:
+        results = []
+        for procedure in procedures:
+            doc = nlp(procedure)
+            nouns = []
+            for chunk in doc.noun_chunks:
+                nouns.append(chunk.text.replace("the ", "").replace("an ", "").replace("a ", ""))
+            results.append(nouns)
+        return results
+    
+    def __call__(self, nlp: English, frames: list[Image.Image], procedures: list[str]) -> list[int]:
+        # Parse objects from questions
+        object_parse_results = self.parse_procedures_for_target_objects(nlp, procedures)
+        detection_results, _ = self.run_detection(object_parse_results, frames)
+        
+        target_object_counts = []
+
+        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
+        for detection_results_single in detection_results:
+            boxes = detection_results_single["boxes"]
+            bboxes = boxes.cpu().numpy() # (# boxes, 4)
+                    
+            target_object_counts.append(bboxes.shape[0])
+
+        return target_object_counts
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial"

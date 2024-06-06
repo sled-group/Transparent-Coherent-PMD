@@ -272,3 +272,7 @@ def save_images(images: list[Image.Image], save_paths: list[str]):
     """
     for image, path in zip(images, save_paths):
         image.save(path)
+
+def variance_of_laplacian(image: Image.Image):
+	"""Return variance of Laplacian as estimate of blur (lower is more blurry)."""
+	return cv2.Laplacian(cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR), cv2.CV_64F).var()
