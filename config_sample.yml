@@ -7,7 +7,7 @@ cache:
   results_dir: "saved_results"
 data:
   video_frame_sampling_frequency: 2
-  video_frame_dimension: 400
+  video_frame_dimension: 600
   images_chunk_size: 200
   captaincook4d:
     annotations_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/annotations"

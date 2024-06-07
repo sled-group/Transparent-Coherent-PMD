@@ -136,9 +136,8 @@ class AdaptiveVisualFilter:
         """
         assert len(objects) == len(frames), "Expected same number of object lists and frames!"
         # Note the awkward hack where rare objects can be None due to failure of spatial parser
-        # TODO: this doesn't handle the case where the input_obj is plural
         max_n_objs = max([len(this_objects) for this_objects in objects])
-        owl_prompts = [[f"a photo of {'an' if input_objs[i][0] in ['a','e','i','o','u'] else 'a'} {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
+        owl_prompts = [[f"a photo of the {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         pad_labels = [[1 if (i < len(input_objs) and input_objs[i] is not None) else 0 for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         # skip_indices = [all(input_obj is None for input_obj in input_objs) for input_objs, _ in zip(objects, frames)]
 
