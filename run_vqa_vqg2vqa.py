@@ -32,7 +32,7 @@ parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", 
 # parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
-parser.add_argument("--batch_size", type=int, default=10, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
+parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
@@ -60,8 +60,8 @@ for worker_index in range(n_workers):
     if torch.cuda.is_available():
         torch.cuda.set_device(f"cuda:{worker_index}")
     vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, 
-                                                cache_dir=DATA_CACHE_DIR,
-                                                quantization_config=bnb_config)
+                                                 cache_dir=DATA_CACHE_DIR,
+                                                 quantization_config=bnb_config)
     vlm.language_model.generation_config.temperature = None
     vlm.language_model.generation_config.top_p = None
     vlm.language_model.generation_config.do_sample = False
@@ -97,7 +97,7 @@ response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 # Configure results directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"VQG2VQA_{args.task}"
+    this_results_dir = os.path.join(args.task, f"VQG2VQA_{args.task}")
     if args.debug:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.vlm_name.split('/')[-1]}_{timestamp.strftime('%Y%m%d%H%M%S')}"
@@ -133,10 +133,11 @@ for eval_partition in args.eval_partitions:
             question = prompt
             expected_answer = VQAResponse["Yes"]
             for frame in example.frames:
-                questions.append(question)
-                prompts.append(prompt)
-                answers.append(expected_answer)
-                frames.append(frame)
+                for _ in range(N_GENERATED_QUESTIONS):
+                    questions.append(question)
+                    prompts.append(prompt)
+                    answers.append(expected_answer)
+                    frames.append(frame)
 
         return questions, prompts, answers, frames
 

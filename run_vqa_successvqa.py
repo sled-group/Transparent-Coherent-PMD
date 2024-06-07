@@ -84,7 +84,7 @@ response_token_ids = get_vqa_response_token_ids(vlm_processors[0].tokenizer)
 # Configure results directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"SuccessVQA_{args.task}"
+    this_results_dir = os.path.join(args.task, f"SuccessVQA_{args.task}")
     if args.debug:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.vlm_name.split('/')[-1]}_{timestamp.strftime('%Y%m%d%H%M%S')}"
