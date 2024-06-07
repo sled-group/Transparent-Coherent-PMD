@@ -22,6 +22,7 @@ grounding:
   owlv2_path: "google/owlv2-base-patch16"
   owl_threshold: 0.2
   owl_batch_size: 60
+  mask_strength: 1.0
 mistake_detection_strategies:
   frames_proportion: 0.1
   nli_model_path: "facebook/bart-large-mnli"
