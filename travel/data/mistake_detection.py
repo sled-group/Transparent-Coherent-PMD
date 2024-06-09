@@ -214,16 +214,16 @@ class MistakeDetectionDataset:
         example = MistakeDetectionExample.from_dict(example, load_frames=load_frames)
         return example
     
-    def save_dataset_metadata(self):
+    def save_dataset_metadata(self, MisalignSRLEncoder):
         """
         Saves dataset metadata for later.
         """
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
-        self.__dict__ = {k: v for k, v in self.__dict__.items() if k not in ["mismatch_sampler"]} # TODO: some keys are not serializable
+        # self.__dict__ = {k: v for k, v in self.__dict__.items() if k not in ["mismatch_sampler"]} # TODO: some keys are not serializable
         json.dump(self.__dict__,
                   open(os.path.join(self.cache_dir, "dataset.json"), "w"),
-                  indent=4)
+                  indent=4, cls=MisalignSRLEncoder)
         
     def load_dataset_metadata(self):
         """

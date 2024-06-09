@@ -24,4 +24,5 @@ EGO4D_MISMATCH_FHO2SRL_PATH = os.path.join(EGO4D_MISMATCH_DIR, "narration_mappin
 EGO4D_MISMATCH_NARRATIONS_PATH = os.path.join(EGO4D_MISMATCH_DIR, "egoclip_narrations_exploed_groupby_no,txt.csv")
 EGO4D_MISMATCH_NARRATIONS_ROWS_PATH = os.path.join(EGO4D_MISMATCH_DIR, "fho_narration_df_rows.json")
 EGO4D_MISMATCH_GROUPS_PATH = os.path.join(EGO4D_MISMATCH_DIR, "egoclip_groups_groupby_no,txt.csv")
+MISALIGNSRL_PATH = config["data"]["ego4d"]["misalignsrl_path"]
 EGO4D_MISMATCH_COUNT = config["data"]["ego4d"]["mismatch_count"]
