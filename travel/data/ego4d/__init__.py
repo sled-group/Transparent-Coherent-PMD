@@ -440,54 +440,8 @@ class MisalignSRL:
         
         group_df_path: the path to csv/parquet file with columns ["txt_verb"(str), "txt_noun"(str), "narration_index"(list), "narration_indices"(list), "mismatch_noun"(list), "mismatch_verb"(list), "mismatch_verb_noun"(list)]. 
         '''
-        
-        # print("Loading fho_main_json ...")
-        # start_time = time.time()
-        # # file_path = "/home/yayuanli/fun/mistake_detection/fine_grained_action_mistake_detection/dataset/fho_main.json"
-        # with open(fho_main_path, "r") as file:
-        #     fho_main_json = json.load(file)
-        # print(f"Loading fho_main.json took {time.time() - start_time} seconds.")
-        
-        # print("Loading narration_df ...")
-        # start_time = time.time()
-        # # narration_df = "/z/home/yayuanli/dat/Ego4D_Mistake/v1/egoclip_narrations_exploed_groupby_no,txt.csv"
-        # narration_df = pd.read_csv(narration_df_path, index_col=0)        
-        # print(f"Loading narration_df took {time.time() - start_time} seconds.")
-        
-        # print("Loading narration_mapping_fho2srl_df ...")  
-        # start_time = time.time()
-        # # 'narration_mapping_fho2srl_df.csv'
-        # narration_mapping_fho2srl_df = pd.read_csv(narration_mapping_fho2srl_df_path, index_col=0)
-        # narration_mapping_fho2srl_df["srl_index"] = narration_mapping_fho2srl_df["srl_index"].apply(ast.literal_eval)
-        # print(f"Loading narration_mapping_fho2srl_df took {time.time() - start_time} seconds.")
-        # fho_main_overlap_narration_list = narration_mapping_fho2srl_df["video_uid"].unique().tolist()
-        
-        # print("Loading fho_narration_df_rows ...")
-        # start_time = time.time()
-        # # fho_narration_df_rows.json
-        # with open(fho_narration_df_rows_path, 'r') as f:
-        #     fho_narration_df_rows = json.load(f)
-        # print(f"Loading fho_narration_df_rows took {time.time() - start_time} seconds.")
-        
-        # print("Loading group_df ...")
-        # start_time = time.time()
-        # # f'/z/home/yayuanli/dat/Ego4D_Mistake/v1/egoclip_groups_groupby_no,txt.csv'
-        # group_df = read_large_csv(group_df_path, 
-        #                         #   columns_str2list=["narration_index", "narration_indices", "mismatch_noun", "mismatch_verb", "mismatch_verb_noun"], 
-        #                         nrows=None, # None
-        #                         )
-        # print(f"Loading group_df took {time.time() - start_time} seconds.")
-
-        # self.fho_main_json = fho_main_json
-        # self.narration_mapping_fho2srl_df = narration_mapping_fho2srl_df
-        # self.narration_df = narration_df
-        # self.fho_narration_df_rows = fho_narration_df_rows
-        # self.group_df = group_df
-        # self.fho_main_overlap_narration_list = fho_main_overlap_narration_list
-
         self.type_name_col_name_map = {"MisalignSRL_V": "mismatch_verb", "MisalignSRL_ARG1": "mismatch_noun", "MisalignSRL_V_ARG1": "mismatch_verb_noun"} # human readable name -> column name in group_df
         
-        # "/home/yayuanli/fun/mistake_detection/fine_grained_action_mistake_detection/dataset/ego4d_fho_main/misalignsrl.parquet"
         self.misalignsrl = pd.read_parquet(misalignsrl_path)
         
     def to_dict(self):
@@ -522,10 +476,6 @@ class MisalignSRL:
                 continue
             mistake_example_meta_dict[misalignsrl_type] = self.misalignsrl.iloc[row[misalignsrl_type]].squeeze().to_dict()
             print(f"{misalignsrl_type}: {mistake_example_meta_dict[misalignsrl_type]['narration_text']} (video_uid: {mistake_example_meta_dict[misalignsrl_type]['video_uid']}, narration_timestamp_sec: {mistake_example_meta_dict[misalignsrl_type]['narration_timestamp_sec']}, start_frame: {mistake_example_meta_dict[misalignsrl_type]['start_frame']}, end_frame: {mistake_example_meta_dict[misalignsrl_type]['end_frame']})")
-        # print: 
-
-        # for misalignsrl_type in self.type_name_col_name_map:
-        #     print(f"{misalignsrl_type}: {mistake_example_meta_dict[misalignsrl_type]['narration_text']} (video_uid: {mistake_example_meta_dict[misalignsrl_type]['video_uid']}, narration_timestamp_sec: {mistake_example_meta_dict[misalignsrl_type]['narration_timestamp_sec']}, start_frame: {mistake_example_meta_dict[misalignsrl_type]['start_frame']}, end_frame: {mistake_example_meta_dict[misalignsrl_type]['end_frame']})")
             
         print(f"====================================")
         
@@ -646,7 +596,6 @@ class Ego4dFHOMainDataset:
         already_processed_videos: Optional[list[str]] = [],
         n_workers: Optional[int] = None,
         worker_index: Optional[int] = None,
-        valid_video_uid_list=None
     ) -> None:
         """
         :param annotation_path: path to the main annotation file, e.g., `fho_main.json`.
@@ -655,7 +604,6 @@ class Ego4dFHOMainDataset:
         :param video_path: path to video dir
         :param transform: optional transform function
         :param random_clip: whether to sample clips randomly
-        :param valid_video_uid_list: list of video_uids out of which the videos will NOT be used. If None, all videos will be used.
         """
         with open(annotation_path) as f:
             annotations = json.load(f)
@@ -828,7 +776,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             already_processed_videos=already_processed_videos,
             n_workers=n_workers,
             worker_index=worker_index,
-            # valid_video_uid_list=self.mismatch_sampler.fho_main_overlap_narration_list
         )
 
         nlp = spacy.load('en_core_web_sm')
@@ -903,9 +850,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 # NOTE: this doesn't do anything yet because nothing is ever returned in `mismatch_examples`
                 try: 
                     mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
-                    # pprint(clip.keys())
-                    # print("==========")
-                    # pprint(f"{clip['narration_text']=}\n{mismatch_examples=}")
                     # see which video_uids are matched
                     # for fhouid in [_[1]["video_uid"] for _ in ego4d._labeled_videos]:
                     #     inflag = fhouid in self.mismatch_sampler.narration_mapping_fho2srl_df["video_uid"].unique().tolist()

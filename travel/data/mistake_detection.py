@@ -220,10 +220,10 @@ class MistakeDetectionDataset:
         """
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
-        # self.__dict__ = {k: v for k, v in self.__dict__.items() if k not in ["mismatch_sampler"]} # TODO: some keys are not serializable
         json.dump(self.__dict__,
                   open(os.path.join(self.cache_dir, "dataset.json"), "w"),
-                  indent=4, cls=MisalignSRLEncoder)
+                  indent=4, 
+                  cls=MisalignSRLEncoder)
         
     def load_dataset_metadata(self):
         """
