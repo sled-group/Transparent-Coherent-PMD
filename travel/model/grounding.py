@@ -219,12 +219,22 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             look_at_noun = True
             spatial_relation = False
 
+            spatial_preps = ["in", "on", "inside", "outside", "inside of", "outside of",
+                         "off", "out", "out of", "within", "across"]
+            negation_preps = ["out", "out of", "outside", "outside of", "off"]
+            no_rephrase_words = ["top", "bottom", "left", "right"]
+            avoid_with_on = ["temprature", "heat"]
+
+            no_rephrase_word_present = False
+            is_negation_prep = False
+            is_avoid_on = "on" in question and any(word in question for word in avoid_with_on)
+
             # Function to extract the compound noun if it exists
             def get_compound_noun(token):
                 compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
                 return compound + " " + token.text if compound else token.text
 
-            for token in doc:
+            for idx, token in enumerate(doc):
                 # Detect negation
                 if token.dep_ == "neg":
                     negation_present = True
@@ -236,18 +246,29 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 
                 # Identify spatial relations based on specific dependencies
                 if token.dep_ == "prep":
-                    spatial_relation = True
-                    spatial_object_tokens = [get_compound_noun(child) for child in token.children]
+                    # Get preposition, for prep="of" we add the previous word
+                    prep = token.text
+                    if idx != 0 and prep == "of":
+                        prep = doc[idx - 1].text + " of"
+
+                    if prep in spatial_preps and not is_avoid_on:
+                        spatial_relation = True
+                        spatial_object_tokens = [get_compound_noun(child) for child in token.children]
+                        is_negation_prep = prep in negation_preps
+
+                if token.text in no_rephrase_words:
+                    no_rephrase_word_present = True
 
             # Adjust the logic based on question type and negation
             # Spatial questions with negation direct attention away from the noun
             if spatial_relation:
-                look_at_noun = not negation_present
+                look_at_noun = not negation_present if not is_negation_prep else negation_present
 
                 # Rephrase question if needed
-                if rephrase_questions:
+                if rephrase_questions and not no_rephrase_word_present:
                     for token in spatial_object_tokens:
                         question = question.replace(token, "image")
+                        question = question.replace(prep, "in")
 
                     if negation_present:
                         question = question.replace(negation_token, "").replace("  ", " ")
