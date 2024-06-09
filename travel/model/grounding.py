@@ -20,6 +20,7 @@ with open('config.yml', 'r') as file:
 OWLV2_PATH = config["grounding"]["owlv2_path"]
 OWL_THRESHOLD = config["grounding"]["owl_threshold"] 
 OWL_BATCH_SIZE = config["grounding"]["owl_batch_size"]
+MASK_STRENGTH = config["grounding"]["mask_strength"]
 
 def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
                                     detector: Owlv2ForObjectDetection,
@@ -135,9 +136,8 @@ class AdaptiveVisualFilter:
         """
         assert len(objects) == len(frames), "Expected same number of object lists and frames!"
         # Note the awkward hack where rare objects can be None due to failure of spatial parser
-        # TODO: this doesn't handle the case where the input_obj is plural
         max_n_objs = max([len(this_objects) for this_objects in objects])
-        owl_prompts = [[f"a photo of {'an' if input_objs[i][0] in ['a','e','i','o','u'] else 'a'} {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
+        owl_prompts = [[f"a photo of the {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         pad_labels = [[1 if (i < len(input_objs) and input_objs[i] is not None) else 0 for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         # skip_indices = [all(input_obj is None for input_obj in input_objs) for input_objs, _ in zip(objects, frames)]
 
@@ -219,12 +219,22 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             look_at_noun = True
             spatial_relation = False
 
+            spatial_preps = ["in", "on", "inside", "outside", "inside of", "outside of",
+                         "off", "out", "out of", "within", "across"]
+            negation_preps = ["out", "out of", "outside", "outside of", "off"]
+            no_rephrase_words = ["top", "bottom", "left", "right"]
+            avoid_with_on = ["temprature", "heat"]
+
+            no_rephrase_word_present = False
+            is_negation_prep = False
+            is_avoid_on = "on" in question and any(word in question for word in avoid_with_on)
+
             # Function to extract the compound noun if it exists
             def get_compound_noun(token):
                 compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
                 return compound + " " + token.text if compound else token.text
 
-            for token in doc:
+            for idx, token in enumerate(doc):
                 # Detect negation
                 if token.dep_ == "neg":
                     negation_present = True
@@ -236,18 +246,29 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 
                 # Identify spatial relations based on specific dependencies
                 if token.dep_ == "prep":
-                    spatial_relation = True
-                    spatial_object_tokens = [get_compound_noun(child) for child in token.children]
+                    # Get preposition, for prep="of" we add the previous word
+                    prep = token.text
+                    if idx != 0 and prep == "of":
+                        prep = doc[idx - 1].text + " of"
+
+                    if prep in spatial_preps and not is_avoid_on:
+                        spatial_relation = True
+                        spatial_object_tokens = [get_compound_noun(child) for child in token.children]
+                        is_negation_prep = prep in negation_preps
+
+                if token.text in no_rephrase_words:
+                    no_rephrase_word_present = True
 
             # Adjust the logic based on question type and negation
             # Spatial questions with negation direct attention away from the noun
             if spatial_relation:
-                look_at_noun = not negation_present
+                look_at_noun = not negation_present if not is_negation_prep else negation_present
 
                 # Rephrase question if needed
-                if rephrase_questions:
+                if rephrase_questions and not no_rephrase_word_present:
                     for token in spatial_object_tokens:
                         question = question.replace(token, "image")
+                        question = question.replace(prep, "in")
 
                     if negation_present:
                         question = question.replace(negation_token, "").replace("  ", " ")
@@ -282,7 +303,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 for bbox in bboxes:
                     # Set the area within the bounding box to 0
                     # Note the order: (ymin:ymax, xmin:xmax)
-                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0
+                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 1.0 - MASK_STRENGTH
                     
                 if look_at_noun:
                     mask = 1 - mask
@@ -323,11 +344,11 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
             doc = nlp(question)
             nouns = []
             for chunk in doc.noun_chunks:
-                nouns.append(chunk.text.replace("the ", ""))
+                nouns.append(chunk.text.replace("the ", "").replace("an ", "").replace("a ", ""))
             results.append(nouns)
         return results
 
-    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> tuple[list[Image.Image], list[str]]:
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> list[Image.Image]:
         # Parse objects from questions
         object_parse_results = self.parse_questions_for_contrastive_region_filter(nlp, questions)
         detection_results, padded_images = self.run_detection(object_parse_results, frames)
@@ -344,7 +365,7 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
                 for bbox in bboxes:
                     # Set the area within the bounding box to 0
                     # Note the order: (ymin:ymax, xmin:xmax)
-                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0
+                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 1.0 - MASK_STRENGTH
                                     
                 # Apply mask and undo padding of masked/cropped image to pass to VLM later
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
@@ -359,7 +380,42 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
 
         return new_frames
 
+class TargetObjectCounterFilter(AdaptiveVisualFilter):
+    """
+    This visual filter is used to count target objects from procedures in frames.
+    """
+    def __init__(self, **kwargs: dict[str, Any]):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def parse_procedures_for_target_objects(nlp: English, procedures: list[str]) -> list[list[str]]:
+        results = []
+        for procedure in procedures:
+            doc = nlp(procedure)
+            nouns = []
+            for chunk in doc.noun_chunks:
+                nouns.append(chunk.text.replace("the ", "").replace("an ", "").replace("a ", ""))
+            results.append(nouns)
+        return results
+    
+    def __call__(self, nlp: English, frames: list[Image.Image], procedures: list[str]) -> list[int]:
+        # Parse objects from questions
+        object_parse_results = self.parse_procedures_for_target_objects(nlp, procedures)
+        detection_results, _ = self.run_detection(object_parse_results, frames)
+        
+        target_object_counts = []
+
+        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
+        for detection_results_single in detection_results:
+            boxes = detection_results_single["boxes"]
+            bboxes = boxes.cpu().numpy() # (# boxes, 4)
+                    
+            target_object_counts.append(bboxes.shape[0])
+
+        return target_object_counts
+
 class VisualFilterTypes(Enum):
     Spatial = "spatial"
     Spatial_NoRephrase = "spatial_norephrase"
     Contrastive_Region = "contrastive_region"
+    # Don't include target object counter here because it won't be used in the same way as other filters

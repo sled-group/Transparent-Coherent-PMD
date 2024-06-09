@@ -171,11 +171,11 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
 
         if visual_filter_mode is not None and VisualFilterTypes(visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             original_logits = run_vqa(vlm,
-                                        vlm_processor,
-                                        prompts,
-                                        original_frames,
-                                        batch_size=vqa_batch_size,
-                                        cache_path=os.path.join(worker_cache_dir, f"chunk{chunk_idx}_crg_original.pt"))
+                                      vlm_processor,
+                                      prompts,
+                                      original_frames,
+                                      batch_size=vqa_batch_size,
+                                      cache_path=os.path.join(worker_cache_dir, f"chunk{chunk_idx}_crg_original.pt"))
         else:
             original_logits = None
 

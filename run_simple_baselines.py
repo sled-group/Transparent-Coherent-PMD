@@ -16,6 +16,7 @@ from travel.constants import RESULTS_DIR
 from travel.model.mistake_detection import mistake_detection_metrics
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d import CaptainCook4DDataset
+from travel.data.ego4d import Ego4DMistakeDetectionDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
@@ -23,16 +24,17 @@ parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "t
 args = parser.parse_args()
 
 timestamp = datetime.datetime.now()
-this_results_dir = f"simple_baselines"
+this_results_dir = os.path.join(args.task, f"simple_baselines_{args.task}")
 this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
 this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
 os.makedirs(this_results_dir)
 
 for eval_partition in args.eval_partitions:
     # Load mistake detection dataset
-    if args.task == "captaincook4d":
-        eval_dataset = CaptainCook4DDataset(data_split=eval_partition)
-    # TODO: integrate ego4d here
+    if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
+        eval_dataset = CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None)
+    elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
+        eval_dataset = Ego4DMistakeDetectionDataset(data_split=eval_partition, debug_n_examples_per_class=100 if args.debug else None)
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
     labels = [example.mistake for example in eval_dataset]
