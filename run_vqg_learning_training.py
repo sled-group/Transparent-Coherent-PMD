@@ -9,6 +9,7 @@ import datetime
 import itertools
 import os
 from peft import get_peft_model, LoraConfig, TaskType
+import pynvml
 import torch
 import torch.distributed as dist
 from torch.distributed.elastic.multiprocessing.errors import record
@@ -21,6 +22,7 @@ from travel.data.vqg_learning import load_vqg_training_examples
 
 @record
 def main():
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--training_data_directory", type=str, required=True, help="Directory where training vqg_training_examples.json is stored.")
     parser.add_argument("--val_data_directory", type=str, required=False, help="Directory where validation vqg_training_examples.json is stored. If not passed, will be set to the same as the training data directory.")
@@ -33,27 +35,40 @@ def main():
     args = parser.parse_args()
 
     # Load local rank from torchrun if we have it
-    try:
-        local_rank = int(os.environ["LOCAL_RANK"])
-    except:
-        local_rank = None
+    local_rank = int(os.environ["LOCAL_RANK"]) if "LOCAL_RANK" in os.environ else 0
+    global_rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
+    world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 0
 
     if args.val_data_directory is None:
         args.val_data_directory = args.training_data_directory
 
-    print("!!! Local rank: ", local_rank)
-
-    print("Preparing training and validation data...")
+    print(f"({global_rank}) Preparing training and validation data...")
     data = {
         "train": load_vqg_training_examples(args.training_data_directory, "train"),
         "val": load_vqg_training_examples(args.val_data_directory, "val")
     }
     # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
 
-    # Initialize the process group
-    is_parallel = local_rank is not None
-    if is_parallel:
-        dist.init_process_group(backend='nccl')
+    # Initialize the process group and print out information
+    dist.init_process_group(backend='nccl',
+                            world_size=world_size,
+                            rank=global_rank)
+
+    print("World size:", world_size)
+    print("Host address:", os.environ['MASTER_ADDR'] if 'MASTER_ADDR' in os.environ else None)
+    print("Host port:", os.environ['MASTER_PORT'] if 'MASTER_PORT' in os.environ else None)
+    print("Local rank:", local_rank)
+    print("Global rank:", global_rank)
+    print("Devices:", torch.cuda.device_count())
+    try:
+        pynvml.nvmlInit()
+        device_count = pynvml.nvmlDeviceGetCount()
+        for i in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            print(f"Device {i}: {pynvml.nvmlDeviceGetName(handle)}")
+        pynvml.nvmlShutdown()
+    except pynvml.NVMLError as e:
+        print(f"NVML Error: {e}")
 
     # Pair examples based on preference scores
     datasets = {}
@@ -80,7 +95,7 @@ def main():
                 rejected.append(gen2)
             else:
                 chosen.append(gen2)
-                rejected.append(gen1) 
+                rejected.append(gen1)
 
         # Cut down data if debug mode
         if args.debug:
@@ -98,8 +113,9 @@ def main():
         datasets[partition] = dataset
 
     # Set up LM for training
-    print("Loading LM...")
-    torch.cuda.set_device(f"cuda:{local_rank if is_parallel and local_rank is not None else 0}")
+    print(f"({global_rank}) Loading LM...")
+    device = torch.device(f'cuda:{local_rank}')
+    torch.cuda.set_device(device)
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         llm_int8_threshold=6.0,
@@ -111,8 +127,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.lm_name)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(args.lm_name,
-                                                quantization_config=bnb_config)
+    model = AutoModelForCausalLM.from_pretrained(args.lm_name, quantization_config=bnb_config)
 
     # TODO: is there a better option for PEFT on this model?
     peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text classification
@@ -124,10 +139,7 @@ def main():
     model = get_peft_model(model, peft_config)
 
     # Set up data parallelism if we have access to multiple GPUs
-    if is_parallel:
-        model = DistributedDataParallel(model, 
-                                        device_ids=[local_rank],
-                                        find_unused_parameters=False)
+    model = DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
 
     # Set up output directory, training args, and wandb
     timestamp = datetime.datetime.now()
@@ -154,22 +166,21 @@ def main():
                                     run_name=wandb_run_name)
 
     dpo_trainer = DPOTrainer(
-        model.module if is_parallel else model,
+        model.module,
         args=training_args,
         beta=0.1,
         max_prompt_length=2 * max([len(p.split()) for p in prompt]),
         max_length=2 * max([len(g.split()) for g in chosen + rejected]),
         train_dataset=datasets["train"],
-        eval_dataset=datasets["val"],    
+        eval_dataset=datasets["val"],
         tokenizer=tokenizer,
     )
 
-    print(f"({local_rank}) Starting model training...")
+    print(f"({global_rank}) Starting model training...")
     dpo_trainer.train()
 
     # Clean up
-    if is_parallel:
-        dist.destroy_process_group()
+    dist.destroy_process_group()
 
 if __name__ == "__main__":
     main()

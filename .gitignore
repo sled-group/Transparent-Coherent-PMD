@@ -18,3 +18,4 @@ config.yml
 wandb
 mprof*.pdf
 mprofile_*.dat
+*.out
