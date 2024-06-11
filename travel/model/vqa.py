@@ -218,7 +218,9 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                 example_vqa_outputs.append(frame_vqa_outputs)
 
             vqa_outputs.append(example_vqa_outputs)
-
+            
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     return vqa_outputs
 
 def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str, partition: str):
