@@ -141,6 +141,10 @@ class AdaptiveVisualFilter:
         pad_labels = [[1 if (i < len(input_objs) and input_objs[i] is not None) else 0 for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         # skip_indices = [all(input_obj is None for input_obj in input_objs) for input_objs, _ in zip(objects, frames)]
 
+        # Clear CUDA cache before
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         padded_images = []
         results = []
         with torch.no_grad():
