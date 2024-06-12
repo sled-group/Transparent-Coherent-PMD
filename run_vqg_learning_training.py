@@ -27,14 +27,14 @@ def main():
     parser.add_argument("--training_data_directory", type=str, required=True, help="Directory where training vqg_training_examples.json is stored.")
     parser.add_argument("--val_data_directory", type=str, required=False, help="Directory where validation vqg_training_examples.json is stored. If not passed, will be set to the same as the training data directory.")
     parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-    parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
+    parser.add_argument("--train_batch_size", type=int, default=3, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
     args = parser.parse_args()
 
-    # Load local rank from torchrun if we have it
+    # Load local rank from torchrun if we have it (for debugging purpose)
     local_rank = int(os.environ["LOCAL_RANK"]) if "LOCAL_RANK" in os.environ else 0
     global_rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
     world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 0
@@ -42,33 +42,19 @@ def main():
     if args.val_data_directory is None:
         args.val_data_directory = args.training_data_directory
 
-    print(f"({global_rank}) Preparing training and validation data...")
-    data = {
-        "train": load_vqg_training_examples(args.training_data_directory, "train"),
-        "val": load_vqg_training_examples(args.val_data_directory, "val")
-    }
-    # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
-
-    # Initialize the process group and print out information
-    dist.init_process_group(backend='nccl',
-                            world_size=world_size,
-                            rank=global_rank)
-
     print("World size:", world_size)
     print("Host address:", os.environ['MASTER_ADDR'] if 'MASTER_ADDR' in os.environ else None)
     print("Host port:", os.environ['MASTER_PORT'] if 'MASTER_PORT' in os.environ else None)
     print("Local rank:", local_rank)
     print("Global rank:", global_rank)
     print("Devices:", torch.cuda.device_count())
-    try:
-        pynvml.nvmlInit()
-        device_count = pynvml.nvmlDeviceGetCount()
-        for i in range(device_count):
-            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-            print(f"Device {i}: {pynvml.nvmlDeviceGetName(handle)}")
-        pynvml.nvmlShutdown()
-    except pynvml.NVMLError as e:
-        print(f"NVML Error: {e}")
+
+    print(f"({global_rank}) Preparing training and validation data...")
+    data = {
+        "train": load_vqg_training_examples(args.training_data_directory, "train"),
+        "val": load_vqg_training_examples(args.val_data_directory, "val")
+    }
+    # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
 
     # Pair examples based on preference scores
     datasets = {}
@@ -114,8 +100,6 @@ def main():
 
     # Set up LM for training
     print(f"({global_rank}) Loading LM...")
-    device = torch.device(f'cuda:{local_rank}')
-    torch.cuda.set_device(device)
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         llm_int8_threshold=6.0,
@@ -136,10 +120,6 @@ def main():
                             lora_alpha=16,               # scaling coefficient of weight update
                             lora_dropout=0.1,            # dropout regularization on LoRA weights
                             bias="all")                  # use LoRA to train "all" biases (alternatives: "none", "lora_only")
-    model = get_peft_model(model, peft_config)
-
-    # Set up data parallelism if we have access to multiple GPUs
-    model = DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
 
     # Set up output directory, training args, and wandb
     timestamp = datetime.datetime.now()
@@ -163,10 +143,11 @@ def main():
                                     report_to="wandb",
                                     logging_strategy="steps",
                                     logging_steps=1 if args.debug else 10,
-                                    run_name=wandb_run_name)
+                                    run_name=wandb_run_name,
+                                    ddp_backend="gloo",)
 
     dpo_trainer = DPOTrainer(
-        model.module,
+        model,
         args=training_args,
         beta=0.1,
         max_prompt_length=2 * max([len(p.split()) for p in prompt]),
@@ -174,13 +155,11 @@ def main():
         train_dataset=datasets["train"],
         eval_dataset=datasets["val"],
         tokenizer=tokenizer,
+        peft_config=peft_config,
     )
 
     print(f"({global_rank}) Starting model training...")
     dpo_trainer.train()
-
-    # Clean up
-    dist.destroy_process_group()
 
 if __name__ == "__main__":
     main()
