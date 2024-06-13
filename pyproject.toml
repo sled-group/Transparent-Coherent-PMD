@@ -17,7 +17,7 @@ torchvision = "^0.17"
 transformers = "4.39.3"
 ipywidgets = "^8.1.1"
 accelerate = "^0.26.1"
-bitsandbytes = "^0.42.0"
+bitsandbytes = "^0.43.0"
 torch = "2.2"
 peft = "^0.7.1"
 opencv-python = "^4.9.0.80"
@@ -35,6 +35,7 @@ protobuf = "^4.21"
 wandb = "^0.17"
 pympler = "^1.0.1"
 memory-profiler = "^0.61.0"
+pynvml = "^11.5.0"
 
 [build-system]
 requires = ["poetry-core"]
