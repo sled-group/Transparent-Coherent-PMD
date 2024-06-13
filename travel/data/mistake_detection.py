@@ -214,7 +214,7 @@ class MistakeDetectionDataset:
         example = MistakeDetectionExample.from_dict(example, load_frames=load_frames)
         return example
     
-    def save_dataset_metadata(self, MisalignSRLEncoder):
+    def save_dataset_metadata(self, cls=None):
         """
         Saves dataset metadata for later.
         """
@@ -223,7 +223,7 @@ class MistakeDetectionDataset:
         json.dump(self.__dict__,
                   open(os.path.join(self.cache_dir, "dataset.json"), "w"),
                   indent=4, 
-                  cls=MisalignSRLEncoder)
+                  cls=cls)
         
     def load_dataset_metadata(self):
         """

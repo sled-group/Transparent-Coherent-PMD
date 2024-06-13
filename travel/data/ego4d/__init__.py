@@ -789,7 +789,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 # Cache examples in buffer
                 for new_example in example_cache_buffer:
                     self.save_example_to_file(new_example)
-                self.save_dataset_metadata(MisalignSRLEncoder=MisalignSRLEncoder)
+                self.save_dataset_metadata(cls=MisalignSRLEncoder)
                 del example_cache_buffer
                 example_cache_buffer: list[MistakeDetectionExample] = []
 
@@ -847,25 +847,55 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
-                # NOTE: this doesn't do anything yet because nothing is ever returned in `mismatch_examples`
-                try: 
-                    mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
-                    # see which video_uids are matched
-                    # for fhouid in [_[1]["video_uid"] for _ in ego4d._labeled_videos]:
-                    #     inflag = fhouid in self.mismatch_sampler.narration_mapping_fho2srl_df["video_uid"].unique().tolist()
-                    #     print(f"{fhouid}, {inflag=}")
-                except Exception as e:
-                    # if the error is AttributeError: 'Ego4DMistakeDetectionDataset' object has no attribute 'mismatch_sampler', reinitialize the self.mismatch_sampler
-                    # It is weird to have this error. It means self.mismatch_sampler disappears in the middle of the loop.
-                    if "mismatch_sampler" not in dir(self):
-                        self.mismatch_sampler = MisalignSRL(
-                            EGO4D_ANNOTATION_PATH,
-                            EGO4D_MISMATCH_FHO2SRL_PATH,
-                            EGO4D_MISMATCH_NARRATIONS_PATH,
-                            EGO4D_MISMATCH_NARRATIONS_ROWS_PATH,
-                            EGO4D_MISMATCH_GROUPS_PATH,
-                            MISALIGNSRL_PATH
-                        )
+                # It is weird that could self.mismatch_sampler disappear time to time in the middle of the loop. just check and reinitialize it before we find out why.
+                if "mismatch_sampler" not in dir(self):
+                    self.mismatch_sampler = MisalignSRL(
+                        EGO4D_ANNOTATION_PATH,
+                        EGO4D_MISMATCH_FHO2SRL_PATH,
+                        EGO4D_MISMATCH_NARRATIONS_PATH,
+                        EGO4D_MISMATCH_NARRATIONS_ROWS_PATH,
+                        EGO4D_MISMATCH_GROUPS_PATH,
+                        MISALIGNSRL_PATH
+                    )
+                mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
+                
+                for misalignsrl_type in self.mismatch_sampler.type_name_col_name_map.keys():
+                    # skip if no misaligned sample for this type is found
+                    if mismatch_examples[misalignsrl_type] is None:
+                        continue
+                    
+                    video_id = mismatch_examples[misalignsrl_type]['video_uid']
+                    frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']
+                    # frame_time = mismatch_examples[misalignsrl_type]['end_sec']
+                    
+                    # NOTE: Seems `effect_frame` contains the pixels for the misalignsrl sample. In this case, we need to read it given the `video_id` (another video) and `frame_time`. 
+                    video_path = os.path.join(EGO4D_VIDEO_PATH, video_id+".mp4")
+                    # mimic Ego4dFHOMainDataset.__iter__ to get the frame
+                    # the misalignsrl sample not exists in this data split
+                    if video_path not in [tp[1] for tp in ego4d.video_info]:
+                        continue
+                    video_cap = get_video(video_path)
+                    effect_frame = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
+                    
+                    # NOTE: not sure what is `procedure_id` for here. Use the `procedure_id` of the current `clip` for now.
+                    # It it should be based on misalignsrl smaples, it is more challenging. Because `video_index` and `clip_index` are made when reading the clip in `Ego4dFHOMainDataset.__iter__`. There might be randomness in the process of `Ego4dFHOMainDataset.video_sampler`.
+                    procedure_id = procedure_id
+                    
+                    instruction_text = mismatch_examples[misalignsrl_type]['narration_text']
+                    # Generate positive example from effect frame
+                    misalignsrl_example = MistakeDetectionExample(
+                        task_name="ego4d",
+                        video_id=video_id,
+                        procedure_id=procedure_id,
+                        example_id=f"{clip_id}/misalignsrl",
+                        frames=[effect_frame],
+                        frame_times=[frame_time],
+                        procedure_description=instruction_text,
+                        mistake=True,
+                        mistake_type=misalignsrl_type,
+                    )
+                    example_cache_buffer.append(misalignsrl_example)
+            
             if debug_n_examples_per_class is not None and self.n_examples + len(example_cache_buffer) >= 2 * debug_n_examples_per_class:
                 break
 
