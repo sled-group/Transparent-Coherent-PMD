@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--training_data_directory", type=str, required=True, help="Directory where training vqg_training_examples.json is stored.")
     parser.add_argument("--val_data_directory", type=str, required=False, help="Directory where validation vqg_training_examples.json is stored. If not passed, will be set to the same as the training data directory.")
     parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-    parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
+    parser.add_argument("--train_batch_size", type=int, default=3, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
@@ -162,8 +162,8 @@ def main():
         model,
         args=training_args,
         beta=0.1,
-        max_prompt_length=2 * max([len(p.split()) for p in prompt]),
-        max_length=2 * max([len(g.split()) for g in chosen + rejected]),
+        max_prompt_length=int(1.5 * max([len(p.split()) for p in prompt])),
+        max_length=int(1.5 * max([len(g.split()) for g in chosen + rejected])),
         train_dataset=datasets["train"],
         eval_dataset=datasets["val"],
         tokenizer=tokenizer,
