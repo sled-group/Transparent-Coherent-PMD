@@ -6,15 +6,11 @@ import argparse
 from collections import defaultdict
 from datasets import Dataset
 import datetime
-import itertools
 import os
-from peft import get_peft_model, LoraConfig, TaskType
-import pynvml
+from peft import LoraConfig, TaskType
 import random
 import torch
-import torch.distributed as dist
 from torch.distributed.elastic.multiprocessing.errors import record
-from torch.nn.parallel import DistributedDataParallel
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from trl import DPOTrainer
@@ -31,6 +27,7 @@ def main():
     parser.add_argument("--train_batch_size", type=int, default=3, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
+    parser.add_argument("--beta", type=float, default=0.1, help="DPO beta parameter for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
     args = parser.parse_args()
@@ -161,7 +158,7 @@ def main():
     dpo_trainer = DPOTrainer(
         model,
         args=training_args,
-        beta=0.1,
+        beta=args.beta,
         max_prompt_length=int(1.5 * max([len(p.split()) for p in prompt])),
         max_length=int(1.5 * max([len(g.split()) for g in chosen + rejected])),
         train_dataset=datasets["train"],
