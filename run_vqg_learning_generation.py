@@ -90,10 +90,10 @@ else:
 for partition in args.generate_partitions:
     # Load Ego4D for mistake detection
     dataset = Ego4DMistakeDetectionDataset(data_split=partition,
-                                           mismatch_augmentation=False,
+                                           mismatch_augmentation=True,
                                            debug_n_examples_per_class=100 if args.debug else None)
     print(f"{len(dataset)} Ego4D mistake detection examples loaded from {partition} partition")
-
+    
     # Generate or load prompts
     prompts_fname = f"prompts_{partition}.json"
     if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, prompts_fname)):
