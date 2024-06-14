@@ -148,7 +148,16 @@ def load_vqg_training_examples(path: str, partition: str) -> list[VQGTrainingExa
     :param path: Path to directory to load json file from (a directory that includes a vqg_outputs.json in it).
     :param partition: Partition of dataset, e.g., 'train'.
     """
-    fname = f"vqg_training_examples_{partition}.json"       
-    vqg_training_examples = json.load(open(os.path.join(path, fname), "r"))
-    vqg_training_examples = [VQGTrainingExample(**v) for v in vqg_training_examples]
+    fname = f"vqg_training_examples_{partition}.json"
+    if os.path.exists(os.path.join(path, fname)):
+        # All examples are directly in this folder
+        vqg_training_examples = json.load(open(os.path.join(path, fname), "r"))
+        vqg_training_examples = [VQGTrainingExample(**v) for v in vqg_training_examples]
+    else:
+        # Examples have been saved in subdirectories
+        assert os.path.exists(os.path.join(path, f"VQA_scoring_cache_{partition}")), f"Could not find VQG training examples in directory {path}!"
+        vqg_training_examples = []
+        for chunk_dir in os.listdir(os.path.join(path, f"VQA_scoring_cache_{partition}")):
+            vqg_training_examples += load_vqg_training_examples(os.path.join(path, f"VQA_scoring_cache_{partition}", chunk_dir))
     return vqg_training_examples
+

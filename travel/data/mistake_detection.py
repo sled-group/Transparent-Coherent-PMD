@@ -134,7 +134,7 @@ class MistakeDetectionDataset:
         return len(self.example_dirs)
 
     def __getitem__(self, index):
-        return self.load_example_from_file[self.example_dirs[index]]
+        return self.load_example_from_file(self.example_dirs[index])
     
     def get_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> Iterable[list[MistakeDetectionExample]]:
         assert batch_size >= 1, "Batch size must be positive!"

@@ -57,9 +57,11 @@ def run_vqa(vlm: PreTrainedModel,
             inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
             inputs = inputs.to(vlm.device)
             this_logits = vlm(**inputs).logits
+            inputs = inputs.to('cpu')
             this_logits = this_logits[:, -1].detach().cpu()
             logits = torch.cat([logits, this_logits], dim=0)
             del this_logits
+            del inputs
 
             # Cache logits so far
             if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
@@ -141,7 +143,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
         else:
             questions, prompts, answers, frames, example_ids = pickle.load(open(prompt_cache_fname, "rb"))
         
-        vqa_cache_path = os.path.join(worker_cache_dir, f"VQA_cache_chunk{chunk_idx}.pt")
+        vqa_cache_path = os.path.join(worker_cache_dir, f"chunk{chunk_idx}.pt")
 
         # Intermediate results of detection aren't saved, so this is just a temporary hack just to check if we really need to run detection again
         logits = torch.zeros((0, vlm.vocab_size)).float()
@@ -159,6 +161,9 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                 prompts = [prompt.replace(question, new_question) for prompt, question, new_question in zip(prompts, questions, new_questions)]
                 questions = new_questions
 
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         # Then delete these pre-loaded logits
         del logits
 
@@ -167,9 +172,12 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                          prompts,
                          frames,
                          batch_size=vqa_batch_size,
-                         cache_path=os.path.join(worker_cache_dir, f"chunk{chunk_idx}.pt"))
+                         cache_path=vqa_cache_path)
 
-        if visual_filter_mode is not None and VisualFilterTypes(visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
             original_logits = run_vqa(vlm,
                                       vlm_processor,
                                       prompts,
@@ -180,6 +188,9 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             original_logits = None
 
         del original_frames
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         # Gather up important information from VQA outputs, organized by example ID
         outputs_by_id = defaultdict(list)
