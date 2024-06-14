@@ -6,7 +6,7 @@ cache:
   cache_frequency: 50
   results_dir: "saved_results"
 data:
-  video_frame_sampling_frequency: 2
+  video_frame_sampling_frequency: 5
   video_frame_dimension: 600
   images_chunk_size: 200
   captaincook4d:

@@ -86,7 +86,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                     if load_videos:
                         adjusted_start = step['start_time'] + min(step_duration * 0.05, 0.5) # Adjust the start time to be later by a maximum of 0.5 seconds
                         adjusted_end = step['end_time'] - min(step_duration * 0.3, 3) # Adjust the end time to be earlier by a maximum of 3 seconds
-                        times = generate_float_series(adjusted_start, adjusted_end, (adjusted_end - adjusted_start) / FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
+                        times = generate_float_series(adjusted_start, adjusted_end, 1 / FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
                         frames = extract_frames(sample_video, times)
                         frames = [Image.fromarray(frame) for frame in frames]
 
