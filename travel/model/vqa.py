@@ -40,7 +40,10 @@ def run_vqa(vlm: PreTrainedModel,
     if cache_path is not None:
         assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
         if os.path.exists(cache_path):
-            logits = torch.load(cache_path)
+            try:
+                logits = torch.load(cache_path)
+            except:
+                pass
         else:
             if not os.path.exists("/".join(cache_path.split("/")[:-1])):
                 os.makedirs("/".join(cache_path.split("/")[:-1]))

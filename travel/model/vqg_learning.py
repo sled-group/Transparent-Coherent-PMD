@@ -123,8 +123,11 @@ class FrameVQAMistakeDetectionScorer:
         if cache_path is not None:
             assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
             if os.path.exists(cache_path):
-                logits = torch.load(cache_path)
-
+                try:
+                    logits = torch.load(cache_path)
+                except:
+                    pass
+                    
         # Process frames using visual attention filter
         original_frames = frames
         if self.visual_filter is not None and logits.shape[0] < len(frames):
