@@ -104,25 +104,25 @@ def run_vqa_scoring_on_chunk(scorer: FrameVQAMistakeDetectionScorer,
 @profile
 def run_vqa_scoring_on_chunks(scorer: FrameVQAMistakeDetectionScorer,
                                 frameVQA_examples_chunks: list[list[FrameVQAMistakeDetectionExample]],
-                                first_chunk_idx: int) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
+                                chunks_cache_dirs: int) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
     """Local method to run VQA scoring on a list of chunks of data."""
-    for chunk_idx, frameVQA_examples_chunk in enumerate(tqdm(frameVQA_examples_chunks, desc="chunks")):
+    for frameVQA_examples_chunk, cache_dir in tqdm(zip(frameVQA_examples_chunks, chunks_cache_dirs), desc="chunks"):
         # if chunk_idx > 3:
         #     if args.track_memory:
         #         set_memory_limit(int(2.6214e+9)) # Set a limit of memory usage to catch memory spikes
 
-        if not os.path.exists(cache_dirs[first_chunk_idx + chunk_idx]):
-            os.makedirs(cache_dirs[first_chunk_idx + chunk_idx])
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
         this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer=scorer,
                                                                                 frameVQA_examples_chunk=frameVQA_examples_chunk,
-                                                                                cache_path=os.path.join(cache_dirs[first_chunk_idx + chunk_idx], "VQA_cache.pt"))
+                                                                                cache_path=os.path.join(cache_dir, "VQA_cache.pt"))
         if args.track_memory:
             print("\nMemory (after chunk)")
             tracker.print_diff()
 
         # Save progress in this chunk's subfolder
-        save_vqa_outputs([output for sub_output in this_vqa_outputs for output in sub_output], cache_dirs[first_chunk_idx + chunk_idx], args.partition)
-        save_vqg_training_examples(this_vqg_training_examples, cache_dirs[first_chunk_idx + chunk_idx], args.partition)
+        save_vqa_outputs([output for sub_output in this_vqa_outputs for output in sub_output], cache_dir, args.partition)
+        save_vqg_training_examples(this_vqg_training_examples, cache_dir, args.partition)
 
         del frameVQA_examples_chunk
 
@@ -138,9 +138,9 @@ else:
 if worker_index >= len(frameVQA_examples_split):
     print(f"Warning: Not enough chunks to parallelize into process {args.worker_index}. Exiting process.")
 else:
-    local_frameVQA_chunks = split_list_into_partitions(frameVQA_examples_split, n_workers)
-    first_chunk_index = sum([len(l) for l in local_frameVQA_chunks[:worker_index]])
-    local_frameVQA_chunks = local_frameVQA_chunks[worker_index]
+    local_frameVQA_chunks = split_list_into_partitions(frameVQA_examples_split, n_workers)[worker_index]
+    local_cache_dirs = split_list_into_partitions(cache_dirs, n_workers)[worker_index]
+    assert len(local_frameVQA_chunks) == len(local_cache_dirs), f"Mismatched number of chunks and cache directories for worker {worker_index}."
 
     scorer = FrameVQAMistakeDetectionScorer(args.vlm_name,
                                             visual_filter_type=VisualFilterTypes(args.visual_filter_mode) if args.visual_filter_mode is not None else None,
@@ -150,7 +150,7 @@ else:
     print(f"({worker_index}) Running VQA scoring over {len(local_frameVQA_chunks)} chunk(s): " + ", ".join([str(len(s)) for s in local_frameVQA_chunks]))
     run_vqa_scoring_on_chunks(scorer, 
                               local_frameVQA_chunks,
-                              first_chunk_index)
+                              local_cache_dirs)
 
 # All of the data has now been saved in subdirectories of this_results_dir; it can later be loaded from this_results_dir using load_vqg_training_examples method
 if worker_index == 0:
