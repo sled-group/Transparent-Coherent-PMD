@@ -125,8 +125,8 @@ def main():
     # TODO: is there a better option for PEFT on this model?
     peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text classification
                             inference_mode=False,        # enable training - for inference, we can pre-compute the weight update matrix
-                            r=8,                         # dimension of low-rank matrices
-                            lora_alpha=16,               # scaling coefficient of weight update
+                            r=256,                         # dimension of low-rank matrices
+                            lora_alpha=128,               # scaling coefficient of weight update
                             lora_dropout=0.1,            # dropout regularization on LoRA weights
                             bias="all")                  # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, asdict
 import os
 import json
-from typing import Any
+from typing import Any, Optional
 
 from travel.data.vqa import VQAResponse
 
@@ -24,7 +24,7 @@ class VQGOutputs:
     """Dataclass to hold all LM outputs from visual question generation (VQG)."""
     procedure_id: int
     procedure_description: str
-    target_object: str
+    target_object: Optional[str]
     questions: list[str]
     answers_str: list[str]
     answers: list[VQAResponse] = field(default_factory=list)
@@ -49,7 +49,7 @@ class VQGOutputs:
         return asdict(self)
 
 # List of examples to use for in-context learning for VQG
-VQG_DEMONSTRATIONS = [
+VQG_DEMONSTRATIONS_NEW = [
     VQGOutputs(
         procedure_id=168002,
         procedure_description="Drop the brush in your right hand on the oven",
@@ -63,20 +63,32 @@ VQG_DEMONSTRATIONS = [
         ]
     ),
     VQGOutputs(
-        procedure_id=682249,
-        procedure_description="Prune the plant with a pruning shear",
+        procedure_id=426130,
+        procedure_description="Fold the right edge of the wrapper",
         questions=[
-            "Is the brush on the oven?",
-            "Is the brush in someone's hand?"
+            "Is the wrapper completely flat?",
+            "Is the right edge of the wrapper folded?",
         ],
         answers_str=[
-            "Yes",
-            "No"
+            "No",
+            "Yes"
         ]
-    ),    
+    ),   
+    VQGOutputs(
+        procedure_id=682249,
+        procedure_description="Fold the right edge of the wrapper",
+        questions=[
+            "Is the wrapper completely flat?",
+            "Is the right edge of the wrapper folded?",
+        ],
+        answers_str=[
+            "No",
+            "Yes"
+        ]
+    ),   
 ]
 
-VQG_DEMONSTRATIONS_OLD = [
+VQG_DEMONSTRATIONS = [
     VQGOutputs(
         procedure_id=-1,
         procedure_description='Remove pears from syrup and cool.',
@@ -148,7 +160,6 @@ N_GENERATED_QUESTIONS = len(VQG_DEMONSTRATIONS[0].questions)
 
 VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} yes/no questions we could ask about an image of a target object and their expected answers?\n'
 VQG_EXAMPLE_TEMPLATE = VQG_PROMPT_TEMPLATE + \
-                       "Target object: {target_object}\n" + \
                        "{question_list}"
 VQG_QUESTION_TEMPLATE = "{question_number}. {question} (yes/no) {answer}"
 
@@ -160,18 +171,17 @@ def generate_vqg_prompt(instruction_step: str) -> str:
     :return: String including a prompt to generate `n_questions` questions to verify the success of `instruction_step`.
     """
     return VQG_PROMPT_TEMPLATE.format(instruction_step=instruction_step,
-                                        n_questions=str(N_GENERATED_QUESTIONS))
+                                      n_questions=str(N_GENERATED_QUESTIONS))
 
 def generate_vqg_example(vqg_output: VQGOutputs) -> str:
     """
     Returns a full VQG prompt example for in-context learning.
 
-    :param vqg_output: VQGOutputs object for VQG example.
+    :param vqg_output: VQGOutputs object for in-context VQG example.
     :return: String including a full demonstration of a prompt and several questions and expected answers for generating visual verification questions.
     """
     return VQG_EXAMPLE_TEMPLATE.format(instruction_step=vqg_output.procedure_description,
                                        n_questions = len(vqg_output.questions),
-                                       target_object=vqg_output.target_object,
                                        question_list="\n".join([VQG_QUESTION_TEMPLATE.format(
                                             question_number=question_idx + 1,
                                             question=question,
