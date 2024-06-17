@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 from travel.constants import DATA_CACHE_DIR, RANDOM_SEED
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
-                                        EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT, MISALIGNSRL_PATH
+                                        MISALIGNSRL_PATH
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
 from travel.data.utils import get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler
 from travel.data.utils.text import simple_present_to_imperative
@@ -630,7 +630,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                       worker_index: Optional[int]=None) -> str:
         cache_fname = f"ego4d_{data_split}_seed{RANDOM_SEED}"
         if mismatch_augmentation:
-            cache_fname += f"_mismatch{EGO4D_MISMATCH_COUNT}"
+            cache_fname += f"_mismatch"
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
         if n_workers is not None:
@@ -730,11 +730,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 # It is weird that could self.mismatch_sampler disappear time to time in the middle of the loop. just check and reinitialize it before we find out why.
                 if "mismatch_sampler" not in dir(self):
                     self.mismatch_sampler = MisalignSRL(
-                        EGO4D_ANNOTATION_PATH,
-                        EGO4D_MISMATCH_FHO2SRL_PATH,
-                        EGO4D_MISMATCH_NARRATIONS_PATH,
-                        EGO4D_MISMATCH_NARRATIONS_ROWS_PATH,
-                        EGO4D_MISMATCH_GROUPS_PATH,
                         MISALIGNSRL_PATH
                     )
                 mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)

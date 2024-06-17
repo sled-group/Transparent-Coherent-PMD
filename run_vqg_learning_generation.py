@@ -103,15 +103,16 @@ for partition in args.generate_partitions:
         prompts = []
         seen_video_clips = {}
         # TODO: use new get_procedures method on MistakeDetectionDataset
-        for example in tqdm(dataset, desc="generating prompts"):
-            if (example.video_id, example.procedure_id) in seen_video_clips:
+        for procedure_id, procedure_description in tqdm(dataset.get_all_procedures(), desc="generating prompts"):
+            if procedure_id in seen_video_clips:
                 continue
-            
-            prompt = generate_vqg_prompt_icl(example.procedure_description, n_demonstrations=args.n_demonstrations)
+            seen_video_clips[procedure_id] = True
+
+            prompt = generate_vqg_prompt_icl(procedure_description, n_demonstrations=args.n_demonstrations)
             prompts.append(
                 VQGInputs(
-                    procedure_id=example.procedure_id,
-                    procedure_description=example.procedure_description,
+                    procedure_id=procedure_id,
+                    procedure_description=procedure_description,
                     prompt=prompt
                 )
             )
