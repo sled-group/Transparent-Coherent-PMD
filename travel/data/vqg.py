@@ -24,10 +24,10 @@ class VQGOutputs:
     """Dataclass to hold all LM outputs from visual question generation (VQG)."""
     procedure_id: int
     procedure_description: str
-    target_object: Optional[str]
     questions: list[str]
     answers_str: list[str]
     answers: list[VQAResponse] = field(default_factory=list)
+    target_object: Optional[str] = None
     
     def __post_init__(self):
         """Validation steps to ensure every QA-pair is valid and every question has an answer."""
@@ -49,7 +49,7 @@ class VQGOutputs:
         return asdict(self)
 
 # List of examples to use for in-context learning for VQG
-VQG_DEMONSTRATIONS_NEW = [
+VQG_DEMONSTRATIONS = [
     VQGOutputs(
         procedure_id=168002,
         procedure_description="Drop the brush in your right hand on the oven",
@@ -63,6 +63,54 @@ VQG_DEMONSTRATIONS_NEW = [
         ]
     ),
     VQGOutputs(
+        procedure_id=442007,
+        procedure_description="Put the jug in the cabinet",
+        questions=[
+            "Is the jug in the cabinet?",
+            "Is the cabinet open?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ), 
+    VQGOutputs(
+        procedure_id=540088,
+        procedure_description="Soak the sponge in a soapy water with both hands",
+        questions=[
+            "Is the sponge wet?",
+            "Is the water soapy?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=600088,
+        procedure_description="Open the bottle",
+        questions=[
+            "Is the bottle open?",
+            "Does the bottle have a lid on it?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=72025,
+        procedure_description="Lift up a paint palette",
+        questions=[
+            "Is the paint palette being held?",
+            "Is the paint palette in the air?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
         procedure_id=426130,
         procedure_description="Fold the right edge of the wrapper",
         questions=[
@@ -75,20 +123,128 @@ VQG_DEMONSTRATIONS_NEW = [
         ]
     ),   
     VQGOutputs(
-        procedure_id=682249,
-        procedure_description="Fold the right edge of the wrapper",
+        procedure_id=13097,
+        procedure_description="Dip the brush in the cup of water",
         questions=[
-            "Is the wrapper completely flat?",
-            "Is the right edge of the wrapper folded?",
+            "Is the brush wet?",
+            "Is the brush in a cup?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=730006,
+        procedure_description="Pour the water into the blue container",
+        questions=[
+            "Is there water in the blue container?",
+            "Is the blue container empty?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),       
+    VQGOutputs(
+        procedure_id=449062,
+        procedure_description="Loosen the soil in the flower pot with your right hand",
+        questions=[
+            "Is the soil in the flower pot loose?",
+            "Is the hand in the soil?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=83057,
+        procedure_description="Paint the patio with the paint brush",
+        questions=[
+            "Is the patio painted?",
+            "Is someone holding a paint brush?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=83057,
+        procedure_description="Pick up a piece of onion",
+        questions=[
+            "Is the onion whole?",
+            "Is there any onion in someone's hand?",
         ],
         answers_str=[
             "No",
             "Yes"
         ]
-    ),   
+    ),    
+    VQGOutputs(
+        procedure_id=349206,
+        procedure_description="Squeeze the napkin",
+        questions=[
+            "Is the napkin in a hand?",
+            "Is the napkin squeezed?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=412036,
+        procedure_description="Spread the black peas on the salad with the spoon in your right hand",
+        questions=[
+            "Are the black peas on the salad?",
+            "Is the spoon in a hand?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=496081,
+        procedure_description="Put the dirt in the dust bin",
+        questions=[
+            "Is there dirt in the dust bin?",
+            "Is there any dirt that is not in the dust bin?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=540138,
+        procedure_description="Wash the car with a sponge in your right hand",
+        questions=[
+            "Is the car wet?",
+            "Is the sponge in a hand?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=349047,
+        procedure_description="Arrange the dumplings on the tray",
+        questions=[
+            "Are there dumplings on the tray?",
+            "Are there any dumplings that are not on the tray?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),
 ]
 
-VQG_DEMONSTRATIONS = [
+VQG_DEMONSTRATIONS_OLD = [
     VQGOutputs(
         procedure_id=-1,
         procedure_description='Remove pears from syrup and cool.',

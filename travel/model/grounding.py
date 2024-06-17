@@ -227,7 +227,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                          "off", "out", "out of", "within", "across"]
             negation_preps = ["out", "out of", "outside", "outside of", "off"]
             no_rephrase_words = ["top", "bottom", "left", "right"]
-            avoid_with_on = ["temprature", "heat"]
+            avoid_with_on = ["temperature", "heat"]
 
             no_rephrase_word_present = False
             is_negation_prep = False
@@ -272,7 +272,12 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 if rephrase_questions and not no_rephrase_word_present:
                     for token in spatial_object_tokens:
                         question = question.replace(token, "image")
-                        question = question.replace(prep, "in")
+                    question = question.replace(prep, "in")
+
+                    # Sometimes questions will use anonymous possessives like "someone's",
+                    # which doesn't work well when we replace spatial object with "image"
+                    if "someone's" in question:
+                        question = question.replace("someone's", "the")
 
                     if negation_present:
                         question = question.replace(negation_token, "").replace("  ", " ")
