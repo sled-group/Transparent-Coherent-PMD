@@ -30,7 +30,7 @@ def main():
     parser.add_argument("--beta", type=float, default=0.1, help="DPO beta parameter for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
-    parser.add_argument("--save_strategy", action="store_true", choices=["none", "epochs"], default="epochs", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
+    parser.add_argument("--save_strategy", type=str, choices=["none", "epochs"], default="epochs", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
     args = parser.parse_args()
 
     # Load local rank from torchrun if we have it (for debugging purpose)
