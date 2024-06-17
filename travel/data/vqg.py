@@ -49,8 +49,34 @@ class VQGOutputs:
         return asdict(self)
 
 # List of examples to use for in-context learning for VQG
-# TODO: add more?
 VQG_DEMONSTRATIONS = [
+    VQGOutputs(
+        procedure_id=168002,
+        procedure_description="Drop the brush in your right hand on the oven",
+        questions=[
+            "Is the brush on the oven?",
+            "Is the brush in someone's hand?"
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=682249,
+        procedure_description="Prune the plant with a pruning shear",
+        questions=[
+            "Is the brush on the oven?",
+            "Is the brush in someone's hand?"
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),    
+]
+
+VQG_DEMONSTRATIONS_OLD = [
     VQGOutputs(
         procedure_id=-1,
         procedure_description='Remove pears from syrup and cool.',
