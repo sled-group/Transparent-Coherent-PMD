@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 from travel.constants import DATA_CACHE_DIR, RANDOM_SEED
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
-                                        EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT
+                                        EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT, MISALIGNSRL_PATH
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
 from travel.data.utils import read_large_csv, get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler
 from travel.data.utils.text import simple_present_to_imperative
@@ -382,8 +382,16 @@ def preprocess_actions(actions: list[dict]) -> list[dict]:
     # don't want to change number of actions here or will have to re-extract frames
     return actions
 
+class MisalignSRLEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, MisalignSRL):
+            return obj.to_dict()
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+    
 class MisalignSRL:
-    def __init__(self, fho_main_path, narration_mapping_fho2srl_df_path, narration_df_path, fho_narration_df_rows_path, group_df_path):
+    def __init__(self, fho_main_path, narration_mapping_fho2srl_df_path, narration_df_path, fho_narration_df_rows_path, group_df_path, misalignsrl_path):
         '''
         fho_main_path: the path to json file (fho_main) with structure
             {"videos": 
@@ -434,53 +442,55 @@ class MisalignSRL:
         
         group_df_path: the path to csv/parquet file with columns ["txt_verb"(str), "txt_noun"(str), "narration_index"(list), "narration_indices"(list), "mismatch_noun"(list), "mismatch_verb"(list), "mismatch_verb_noun"(list)]. 
         '''
-        
-        print("Loading fho_main_json ...")
-        start_time = time.time()
-        # file_path = "/home/yayuanli/fun/mistake_detection/fine_grained_action_mistake_detection/dataset/fho_main.json"
-        with open(fho_main_path, "r") as file:
-            fho_main_json = json.load(file)
-        print(f"Loading fho_main.json took {time.time() - start_time} seconds.")
-        
-        print("Loading narration_df ...")
-        start_time = time.time()
-        # narration_df = "/z/home/yayuanli/dat/Ego4D_Mistake/v1/egoclip_narrations_exploed_groupby_no,txt.csv"
-        narration_df = pd.read_csv(narration_df_path, index_col=0)        
-        print(f"Loading narration_df took {time.time() - start_time} seconds.")
-        
-        print("Loading narration_mapping_fho2srl_df ...")  
-        start_time = time.time()
-        # 'narration_mapping_fho2srl_df.csv'
-        narration_mapping_fho2srl_df = pd.read_csv(narration_mapping_fho2srl_df_path, index_col=0)
-        narration_mapping_fho2srl_df["srl_index"] = narration_mapping_fho2srl_df["srl_index"].apply(ast.literal_eval)
-        print(f"Loading narration_mapping_fho2srl_df took {time.time() - start_time} seconds.")
-        
-        print("Loading fho_narration_df_rows ...")
-        start_time = time.time()
-        # fho_narration_df_rows.json
-        with open(fho_narration_df_rows_path, 'r') as f:
-            fho_narration_df_rows = json.load(f)
-        print(f"Loading fho_narration_df_rows took {time.time() - start_time} seconds.")
-        
-        print("Loading group_df ...")
-        start_time = time.time()
-        # f'/z/home/yayuanli/dat/Ego4D_Mistake/v1/egoclip_groups_groupby_no,txt.csv'
-        group_df = read_large_csv(group_df_path, 
-                                #   columns_str2list=["narration_index", "narration_indices", "mismatch_noun", "mismatch_verb", "mismatch_verb_noun"], 
-                                nrows=None, # None
-                                )
-        print(f"Loading group_df took {time.time() - start_time} seconds.")
-
-        self.fho_main_json = fho_main_json
-        self.narration_mapping_fho2srl_df = narration_mapping_fho2srl_df
-        self.narration_df = narration_df
-        self.fho_narration_df_rows = fho_narration_df_rows
-        self.group_df = group_df
-
         self.type_name_col_name_map = {"MisalignSRL_V": "mismatch_verb", "MisalignSRL_ARG1": "mismatch_noun", "MisalignSRL_V_ARG1": "mismatch_verb_noun"} # human readable name -> column name in group_df
+        
+        self.misalignsrl = pd.read_parquet(misalignsrl_path)
+        
+    def to_dict(self):
+        return {
+            "misalignsrl": self.misalignsrl.to_dict(),
+            "type_name_col_name_map": self.type_name_col_name_map
+        }
+        
+    @classmethod
+    def from_dict(cls, data):
+        misalignsrl = pd.DataFrame.from_dict(data["misalignsrl"])
+        type_name_col_name_map = data["type_name_col_name_map"]
+        return cls(misalignsrl, type_name_col_name_map)
+    
+    def get_misaligned_samples(self, clip, random_seed):      
+        mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
+        
+        video_uid_narration_timestamp_sec = clip["video_uid"] + "_" + str(clip["narration_timestamp_sec"])
+        
+        rows = self.misalignsrl[self.misalignsrl["video_uid_narration_timestamp_sec"] == video_uid_narration_timestamp_sec]
+        if len(rows) == 0:
+            print(f"NO MISALIGNSRL SAMPLE ANNOTATED") # there are about (50554) / 155369 = 0.3253802239 narration clips in fho_main couldn't annotate misalignsrl (e.g., some narrations doesn't have ARG1. "#C C paints on the floor with her right hand")
+            return mistake_example_meta_dict
+        else:
+            row = rows.sample(1, random_state=random_seed)
+            
+        for misalignsrl_type in self.type_name_col_name_map:
+            misalignsrl_index_list = row[misalignsrl_type].iloc[0]
+            if len(misalignsrl_index_list) == 0: # only about 150 / 47443 = 0.003161688763 samples doesn't have misaligned V or ARG1. just skip
+                continue
+            
+            max_sample_size = 1 
+            sampled_index_list = np.random.choice(misalignsrl_index_list, min(max_sample_size, len(misalignsrl_index_list)), replace=False)
+            sampled_example_list = []
+            for sample_i in range(len(sampled_index_list)):
+                sampled_example_list.append(self.misalignsrl.iloc[sampled_index_list[sample_i]].squeeze().to_dict())
+                
+            # NOTE: although multiple misalignsrl samples are prepared in the index file, we only sample one for now since not sure how outer code wants to organize the structure of multiple samples for one misalignsrl_type   
+            mistake_example_meta_dict[misalignsrl_type] = sampled_example_list[0]
+        
+        return mistake_example_meta_dict
+        
 
-    # TODO: make sure examples are only retrieved from the same split...
-    def get_misaligned_samples(self, clip, random_seed: Optional[int] = None):
+    def print_misalignsrl_sample_meta(self, misalignsrl_sample_dict, misalignsrl_type):
+        print(f"{misalignsrl_type}: {misalignsrl_sample_dict['narration_text']} (video_uid: {misalignsrl_sample_dict['video_uid']}, narration_timestamp_sec: {misalignsrl_sample_dict['narration_timestamp_sec']}, start_sec: {misalignsrl_sample_dict['start_frame']}, end_sec: {misalignsrl_sample_dict['end_frame']})")
+    
+    def DEP_get_misaligned_samples(self, clip, random_seed):
         '''
         clip: (obj?). Corresponds to one action clip in fho_main.json. The distinguishing information of this clip is `video_uid` and `narration_timestamp_sec`.
         
@@ -498,18 +508,19 @@ class MisalignSRL:
         
         # find the map_row (the row in `narration_mapping_fho2srl_df (pd.DataFrame)`) by matching `video_uid` and `narration_timestamp_sec`
         match_video_uid = self.narration_mapping_fho2srl_df["video_uid"] == video_uid
-        pprint(video_uid)
-        pprint(match_video_uid.value_counts())
-        pprint(self.narration_mapping_fho2srl_df["video_uid"])
+        # pprint(video_uid)
+        # pprint(match_video_uid.value_counts())
+        # pprint(self.narration_mapping_fho2srl_df["video_uid"])
         match_narration_timestamp_sec = self.narration_mapping_fho2srl_df["narration_timestamp_sec"] == narration_timestamp_sec
-        pprint(narration_timestamp_sec)
-        pprint(match_narration_timestamp_sec.value_counts())
-        pprint(self.narration_mapping_fho2srl_df["narration_timestamp_sec"])
+        # pprint(narration_timestamp_sec)
+        # pprint(match_narration_timestamp_sec.value_counts())
+        # pprint(self.narration_mapping_fho2srl_df["narration_timestamp_sec"])
         map_row = self.narration_mapping_fho2srl_df[match_video_uid & match_narration_timestamp_sec]
         
         # return if no map_row found. Meaning, this clip does not have misalignsrl sample in current group_df.
         if len(map_row) == 0:
             # TODO: we always return here because we can't match the video_uid or narration_timestamp_sec
+            print(f"WARNING MISTAKE EXAMPLE NOT FOUND")
             return mistake_example_meta_dict
         
         # get the `fho_index` (index in `fho_narration_df_rows`) and `srl_index` (index in `narration_df`) from the map_row (a row in `narration_mapping_fho2srl_df (pd.DataFrame)`)
@@ -726,7 +737,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 EGO4D_MISMATCH_FHO2SRL_PATH,
                 EGO4D_MISMATCH_NARRATIONS_PATH,
                 EGO4D_MISMATCH_NARRATIONS_ROWS_PATH,
-                EGO4D_MISMATCH_GROUPS_PATH
+                EGO4D_MISMATCH_GROUPS_PATH,
+                MISALIGNSRL_PATH,
             )
         else:
             self.mismatch_sampler = None
@@ -783,7 +795,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 # Cache examples in buffer
                 for new_example in example_cache_buffer:
                     self.save_example_to_file(new_example)
-                self.save_dataset_metadata()
+                self.save_dataset_metadata(cls=MisalignSRLEncoder)
                 del example_cache_buffer
                 example_cache_buffer: list[MistakeDetectionExample] = []
 
@@ -841,12 +853,58 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
-                # NOTE: this doesn't do anything yet because nothing is ever returned in `mismatch_examples`
-                mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id) # Ensure random seed is consistently set in parallel settings by using global random seed and procedure ID (which is unique for each video clip)
-                pprint(clip.keys())
-                print("==========")
-                pprint(mismatch_examples)
-
+                # It is weird that could self.mismatch_sampler disappear time to time in the middle of the loop. just check and reinitialize it before we find out why.
+                if "mismatch_sampler" not in dir(self):
+                    self.mismatch_sampler = MisalignSRL(
+                        EGO4D_ANNOTATION_PATH,
+                        EGO4D_MISMATCH_FHO2SRL_PATH,
+                        EGO4D_MISMATCH_NARRATIONS_PATH,
+                        EGO4D_MISMATCH_NARRATIONS_ROWS_PATH,
+                        EGO4D_MISMATCH_GROUPS_PATH,
+                        MISALIGNSRL_PATH
+                    )
+                mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
+                
+                print(f"=======MisalignSRL samples =========")
+                print(f"current clip narration: {clip['narration_text']} (video_uid: {clip['video_uid']}, narration_timestamp_sec: {clip['narration_timestamp_sec']})")
+                for misalignsrl_type in self.mismatch_sampler.type_name_col_name_map.keys():
+                    # skip if no misaligned sample for this type is found
+                    if mismatch_examples[misalignsrl_type] is None:
+                        continue
+                    
+                    video_id = mismatch_examples[misalignsrl_type]['video_uid']
+                    frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']
+                    # frame_time = mismatch_examples[misalignsrl_type]['end_sec']
+                    
+                    # `effect_frame` contains the pixels for the misalignsrl sample. In this case, we need to read it given the `video_id` (another video) and `frame_time`. 
+                    video_path = os.path.join(EGO4D_VIDEO_PATH, video_id+".mp4")
+                    # mimic Ego4dFHOMainDataset.__iter__ to get the frame
+                    if video_path not in [tp[1] for tp in ego4d.video_info]:
+                        # the misalignsrl sample does not exists in this data split
+                        continue
+                    video_cap = get_video(video_path)
+                    effect_frame = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
+                    
+                    # `procedure_id` is meant to be an ID for the clip.
+                    procedure_id = procedure_id
+                    
+                    instruction_text = mismatch_examples[misalignsrl_type]['narration_text']
+                    # Generate positive example from effect frame
+                    misalignsrl_example = MistakeDetectionExample(
+                        task_name="ego4d",
+                        video_id=video_id,
+                        procedure_id=procedure_id,
+                        example_id=f"{clip_id}/{misalignsrl_type}",
+                        frames=[effect_frame],
+                        frame_times=[frame_time],
+                        procedure_description=instruction_text,
+                        mistake=True,
+                        mistake_type=misalignsrl_type,
+                    )
+                    example_cache_buffer.append(misalignsrl_example)
+                    print(f"Appended example:")
+                    self.mismatch_sampler.print_misalignsrl_sample_meta(mismatch_examples[misalignsrl_type], misalignsrl_type)
+                print(f"===================================")
             if debug_n_examples_per_class is not None and self.n_examples + len(example_cache_buffer) >= 2 * debug_n_examples_per_class:
                 break
 
