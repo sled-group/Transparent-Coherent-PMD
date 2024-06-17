@@ -763,7 +763,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                         task_name="ego4d",
                         video_id=video_id,
                         procedure_id=procedure_id,
-                        example_id=f"{clip_id}/{misalignsrl_type}",
+                        example_id=f"{clip_id}/easyneg_{misalignsrl_type}",
                         frames=[effect_frame],
                         frame_times=[frame_time],
                         procedure_description=instruction_text,
