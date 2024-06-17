@@ -15,7 +15,8 @@ class FrameVQAMistakeDetectionExample:
     video_id: str
     procedure_id: int
     example_id: str # Mistake detection example that frame will come from (should be unique, since this is one-to-one with MistakeDetectionExample dataset we started with)
-    frame: Union[Image.Image, str]
+    frame_path: str
+    frame: Optional[Image.Image]
     frame_time: float
     procedure_description: str
     mistake: bool
@@ -28,7 +29,7 @@ class FrameVQAMistakeDetectionExample:
             assert len(cqs.questions) == len(cqs.answers), "FrameVQAMistakeDetectionExample expected same number of questions and answers for each candidate question set!"
         self.n_candidates = len(self.candidate_question_sets)
 
-    def to_dict(self, image_base_path: Optional[str]=None):
+    def to_dict(self):
         """
         Helper method to create a JSON-serializable version of the class instance.
 
@@ -37,12 +38,9 @@ class FrameVQAMistakeDetectionExample:
         return_dict = {
             k: v for k, v in asdict(self).items() if k not in ["frame"]
         }
-        if image_base_path is not None and type(self.frame) == Image.Image:
-            image_base_path = os.path.join(image_base_path, "frames")
-            if not os.path.exists(image_base_path):
-                os.makedirs(image_base_path)
-            self.cache_frame(image_base_path)
-            return_dict["frame"] = self.frame
+        if self.frame is not None:
+            self.cache_frame()
+        return_dict["frame"] = self.frame_path
         return_dict['frame_time'] = float(round(return_dict['frame_time'], 9))
         return return_dict
 
@@ -54,28 +52,23 @@ class FrameVQAMistakeDetectionExample:
         :param data: Dictionary of instance data.
         """
         assert "frame" in data, "Can't use from_dict on this class without including a `frame` image."
+        data["frame_path"] = data["frame"]
         if load_frame:
             data["frame"] = Image.open(data["frame"])
+        else:
+            data["frame"] = None
         data["candidate_question_sets"] = [VQGOutputs(**output) for output in data["candidate_question_sets"]]
         example = FrameVQAMistakeDetectionExample(**data)
         return example
     
-    def cache_frame(self, image_base_path: str):
-        assert type(self.frame) == Image.Image, "Can only cache PIL images!"
-
-        if not os.path.exists(os.path.join(image_base_path, "frames")):
-            os.makedirs(os.path.join(image_base_path, "frames"))
-
-        frame_path = os.path.join(image_base_path, "frames", f"frame_{self.example_id.replace('/', '-')}.jpg")
-
-        self.frame.save(frame_path)
-        # self.frame.close()
-
-        self.frame = frame_path
+    def cache_frame(self):
+        assert self.frame is not None, "Frame already cached for this FrameVQAMistakeDetectionExample!"
+        self.frame.save(self.frame_path)
+        self.frame = None
 
     def uncache_frame(self):
-        assert type(self.frame) == str and self.frame.endswith(".jpg"), "Can only uncache string .jpg filenames!"
-        self.frame = Image.open(self.frame)
+        assert self.frame is None, "Frame already uncached for this FrameVQAMistakeDetectionExample!"
+        self.frame = Image.open(self.frame_path)
     
 def save_frameVQA_examples(frameVQA_examples: list[FrameVQAMistakeDetectionExample], path: str, partition: str):
     """
@@ -88,7 +81,7 @@ def save_frameVQA_examples(frameVQA_examples: list[FrameVQAMistakeDetectionExamp
     fname = f"frameVQA_examples_{partition}.json"
     if not os.path.exists(path):
         os.makedirs(path)
-    json.dump([example.to_dict(path) for example in frameVQA_examples], 
+    json.dump([example.to_dict() for example in frameVQA_examples], 
               open(os.path.join(path, fname), "w"),
               indent=4)
 
