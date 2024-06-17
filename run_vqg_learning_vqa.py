@@ -156,3 +156,7 @@ else:
 if worker_index == 0:
     shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
     json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
+
+    # Delete extra cached logits (each of which take up about 250MB)
+    for cache_dir in cache_dirs:
+        os.remove(os.path.join(cache_dir, "VQA_cache.pt"))
