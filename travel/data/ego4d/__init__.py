@@ -10,16 +10,13 @@ from numpy.linalg import norm
 import os
 import pandas as pd
 from PIL import Image
-from pprint import pprint
 from pytorchvideo.data import ClipSampler
 from pytorchvideo.data.clip_sampling import ClipInfo
 import random
 import re
 import spacy
 import string
-import time
 import torch
-from torch.nn.functional import cosine_similarity
 from transformers import BatchEncoding, DataCollatorForSeq2Seq, PreTrainedTokenizer
 from typing import Any, TypeVar, Optional
 from tqdm import tqdm
@@ -28,7 +25,7 @@ from travel.constants import DATA_CACHE_DIR, RANDOM_SEED
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
                                         EGO4D_MISMATCH_FHO2SRL_PATH, EGO4D_MISMATCH_NARRATIONS_PATH, EGO4D_MISMATCH_NARRATIONS_ROWS_PATH, EGO4D_MISMATCH_GROUPS_PATH, EGO4D_MISMATCH_COUNT, MISALIGNSRL_PATH
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
-from travel.data.utils import read_large_csv, get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler
+from travel.data.utils import get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler
 from travel.data.utils.text import simple_present_to_imperative
 from travel.data.utils.video import get_video, extract_frames
 
@@ -391,56 +388,9 @@ class MisalignSRLEncoder(json.JSONEncoder):
         return super().default(obj)
     
 class MisalignSRL:
-    def __init__(self, fho_main_path, narration_mapping_fho2srl_df_path, narration_df_path, fho_narration_df_rows_path, group_df_path, misalignsrl_path):
+    def __init__(self, misalignsrl_path):
         '''
-        fho_main_path: the path to json file (fho_main) with structure
-            {"videos": 
-                [{"annotated_intervals": [{"clip_uid": str, ... , 
-                                            "narrated_actions": [{"narration_text": str, 
-                                                                "narration_timestamp_sec"}, ...]
-                                            }, ...
-                ], 
-                "video_metadata": {}, 
-                "video_uid": str}]},
-            "date": xx, 
-            "description": xx, 
-            "metadata": xx}
-        
-        narration_mapping_fho2srl_df_path: the path to csv file with columns ["video_uid", "narration_text", "narration_timestamp_sec", "srl_index", "fho_index"]
-        
-        narration_df_path: the path to csv file with example row:
-            video_uid                 26202090-684d-4be8-b3cc-de04da827e91
-            video_dur                                          3127.233333
-            narration_source                              narration_pass_1
-            narration_ind                                                7
-            narration_time                                         40.8375
-            clip_start                                           40.583986
-            clip_end                                             41.090933
-            clip_text                C takes his hand out of the paper bag
-            tag_verb                                                  [93]
-            tag_noun                                        [321, 12, 349]
-            ARG0                                                         C
-            V                                                        takes
-            ARG1                                                  his hand
-            valid_tag_noun                                           [321]
-            valid_txt_noun                                        ['hand']
-            valid_tag_verb                                            [93]
-            valid_txt_verb                                        ['take']
-            index                                                   322348
-            valid_txt_verb_single                                     take
-            valid_txt_noun_single                                     hand        
-        
-        fho_narration_df_rows_path: the path to json file with structure: a list of dict. An example dict:
-                    {
-                      'video_index': 1, # the index of the video in the fho_main.json
-                      'interval_index': 0, # the index of the interval in the fho_main.json
-                      'action_index': 3, # the index of the action in the fho_main.json                      
-                      'narration_timestamp_sec': 35.4317396,
-                      'video_uid': '26202090-684d-4be8-b3cc-de04da827e91',
-                      'narration_text': '#C C takes a steel bowl out of the '
-                                        'paper bag',}
-        
-        group_df_path: the path to csv/parquet file with columns ["txt_verb"(str), "txt_noun"(str), "narration_index"(list), "narration_indices"(list), "mismatch_noun"(list), "mismatch_verb"(list), "mismatch_verb_noun"(list)]. 
+        Class to generate misaligned (negative) examples for Ego4D clips.
         '''
         self.type_name_col_name_map = {"MisalignSRL_V": "mismatch_verb", "MisalignSRL_ARG1": "mismatch_noun", "MisalignSRL_V_ARG1": "mismatch_verb_noun"} # human readable name -> column name in group_df
         
@@ -486,79 +436,8 @@ class MisalignSRL:
         
         return mistake_example_meta_dict
         
-
     def print_misalignsrl_sample_meta(self, misalignsrl_sample_dict, misalignsrl_type):
-        print(f"{misalignsrl_type}: {misalignsrl_sample_dict['narration_text']} (video_uid: {misalignsrl_sample_dict['video_uid']}, narration_timestamp_sec: {misalignsrl_sample_dict['narration_timestamp_sec']}, start_sec: {misalignsrl_sample_dict['start_frame']}, end_sec: {misalignsrl_sample_dict['end_frame']})")
-    
-    def DEP_get_misaligned_samples(self, clip, random_seed):
-        '''
-        clip: (obj?). Corresponds to one action clip in fho_main.json. The distinguishing information of this clip is `video_uid` and `narration_timestamp_sec`.
-        
-        return:
-            mistake_example_meta_dict: {misalignsrl_type -> one action clip in fho_main.json (fho_main_json["videos"][video_index]["annotated_intervals"][big_clip_index]["narrated_actions"][narration_clip_index])}
-        '''
-        numpy_random = np.random.RandomState(random_seed)
-
-        # for each misalignsrl_type, sample one srl_index in the group, and return the index of that narration clip in `fho_main.json`
-        # mistake_example_meta_dict: misalignsrl_type -> fho_narration_df_rows. To be returned.
-        mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
-        
-        video_uid = clip["video_uid"]
-        narration_timestamp_sec = clip["narration_timestamp_sec"]
-        
-        # find the map_row (the row in `narration_mapping_fho2srl_df (pd.DataFrame)`) by matching `video_uid` and `narration_timestamp_sec`
-        match_video_uid = self.narration_mapping_fho2srl_df["video_uid"] == video_uid
-        # pprint(video_uid)
-        # pprint(match_video_uid.value_counts())
-        # pprint(self.narration_mapping_fho2srl_df["video_uid"])
-        match_narration_timestamp_sec = self.narration_mapping_fho2srl_df["narration_timestamp_sec"] == narration_timestamp_sec
-        # pprint(narration_timestamp_sec)
-        # pprint(match_narration_timestamp_sec.value_counts())
-        # pprint(self.narration_mapping_fho2srl_df["narration_timestamp_sec"])
-        map_row = self.narration_mapping_fho2srl_df[match_video_uid & match_narration_timestamp_sec]
-        
-        # return if no map_row found. Meaning, this clip does not have misalignsrl sample in current group_df.
-        if len(map_row) == 0:
-            # TODO: we always return here because we can't match the video_uid or narration_timestamp_sec
-            print(f"WARNING MISTAKE EXAMPLE NOT FOUND")
-            return mistake_example_meta_dict
-        
-        # get the `fho_index` (index in `fho_narration_df_rows`) and `srl_index` (index in `narration_df`) from the map_row (a row in `narration_mapping_fho2srl_df (pd.DataFrame)`)
-        fho_index = map_row["fho_index"].values[0]
-        
-        srl_index = numpy_random.choice(map_row["srl_index"].values[0]) # randomly pick one. one narration could be in multiple groups. E.g., "pick up a bag of clothes" could be in "pick up bag" and "pick up cloth"
-        
-        # find the group in `group_df` to which the `srl_narration_row` belongs
-        srl_narration_row = self.narration_df.iloc[srl_index]
-        match_txt_verb = self.group_df["txt_verb"] == srl_narration_row["valid_txt_verb_single"]
-        match_txt_noun = self.group_df["txt_noun"] == srl_narration_row["valid_txt_noun_single"]
-        target_group = self.group_df[match_txt_verb & match_txt_noun] # a row in `group_df` (pd.Series)
-        
-        # fill in the mistake_example_meta_dict   
-        for misalignsrl_type in self.type_name_col_name_map:
-            # index_list: list of int. the srl index in the srl narration df.
-            index_list = target_group[self.type_name_col_name_map[misalignsrl_type]].iloc[0] 
-            # TODO: this row can be optmized by saving group_df as parquet file instead of csv
-            if not isinstance(index_list, list):
-                index_list = ast.literal_eval(index_list)
-                
-            # shuffle the index_list so that different given `clip` is less likely to get the same sample for a misalignsrl_type. For example, for given `clip`s "cut carrot" and "pour sauce", the first sample for "MisalignSRL_VN" could be the same -- "pick up cap"
-            index_list = numpy_random.permutation(index_list)
-            # find fho_index (for fho_narration_df_rows)        
-            for srl_index in index_list:
-                # narration_mapping_fho2srl_df["srl_index"] is a column where each row is a list of int. srl_index is a int. 
-                # Find the row where the srl_index is in the list of the row narration_mapping_fho2srl_df["srl_index"]
-                # it may not be since current group_df is made from `egoclip.csv` (refer to: https://github.com/facebookresearch/EgoVLPv2), which contains narration clips over whole Ego4D while the fho_main.json is a subset of Ego4D (with bbox annotation).
-                match_misalign_sample_in_fho_main = self.narration_mapping_fho2srl_df["srl_index"].apply(lambda x: srl_index in x)
-                fho_index_row = self.narration_mapping_fho2srl_df[match_misalign_sample_in_fho_main] 
-                if len(fho_index_row) > 0:
-                    fho_index = fho_index_row["fho_index"].values[0]
-                    mistake_example_meta_dict[misalignsrl_type] = self.fho_narration_df_rows[fho_index]
-                    break
-
-        # return mistake_example_meta_dict. For each misalignsrl_type, if None, it means no sample is found in the group. (This could be improved making group_df.parquet from fho_main.json instead of from egoclip)
-        return mistake_example_meta_dict    
-        
+        print(f"{misalignsrl_type}: {misalignsrl_sample_dict['narration_text']} (video_uid: {misalignsrl_sample_dict['video_uid']}, narration_timestamp_sec: {misalignsrl_sample_dict['narration_timestamp_sec']}, start_sec: {misalignsrl_sample_dict['start_frame']}, end_sec: {misalignsrl_sample_dict['end_frame']})")        
 
     def get_clip_info_from_fho_main_index(self, video_index, big_clip_index, narration_clip_index):
         narration_clip_info = self.fho_main_json["videos"][video_index]["annotated_intervals"][big_clip_index]["narrated_actions"][narration_clip_index]
@@ -733,11 +612,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         if mismatch_augmentation:
             # TODO: this takes several minutes - if we already have the data cached, we don't even need this - add logic for this
             self.mismatch_sampler = MisalignSRL(
-                EGO4D_ANNOTATION_PATH,
-                EGO4D_MISMATCH_FHO2SRL_PATH,
-                EGO4D_MISMATCH_NARRATIONS_PATH,
-                EGO4D_MISMATCH_NARRATIONS_ROWS_PATH,
-                EGO4D_MISMATCH_GROUPS_PATH,
                 MISALIGNSRL_PATH,
             )
         else:

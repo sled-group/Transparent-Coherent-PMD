@@ -16,9 +16,7 @@ data:
     annotation_path: "/nfs/turbo/coe-chaijy-unreplicated/datasets/ego4d/v2/annotations/fho_main.json"
     split_path: "/nfs/turbo/coe-chaijy/generated-data/ego4d/v2/splits"
     video_path: "/nfs/turbo/coe-chaijy-unreplicated/datasets/ego4d/v2/full_scale"
-    mismatch_dir: "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/ego4d_mismatch_srl_files"
-    misalignsrl_path: "/home/yayuanli/fun/mistake_detection/fine_grained_action_mistake_detection/dataset/ego4d_fho_main/misalignsrl.parquet"
-    mismatch_count: 3
+    misalignsrl_path: "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/ego4d_mismatch_srl_files/misalignsrl.parquet"
 grounding:
   owlv2_path: "google/owlv2-base-patch16"
   owl_threshold: 0.2
