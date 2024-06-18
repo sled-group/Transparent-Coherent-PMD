@@ -123,7 +123,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(args.lm_name, quantization_config=bnb_config)
 
     # TODO: is there a better option for PEFT on this model?
-    peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text classification
+    peft_config = LoraConfig(task_type=TaskType.SEQ_2_SEQ_LM,  # configured for text classification
                             inference_mode=False,        # enable training - for inference, we can pre-compute the weight update matrix
                             r=256,                         # dimension of low-rank matrices
                             lora_alpha=128,               # scaling coefficient of weight update
