@@ -20,7 +20,7 @@ from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, SUCCESSVQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, MASK_STRENGTH
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds
 from travel.model.vqa import run_vqa_for_mistake_detection
 
@@ -99,7 +99,7 @@ if args.resume_dir is None:
         this_results_dir += f"_debug"
     this_results_dir += f"_{args.vlm_name.split('/')[-1]}"
     if args.visual_filter_mode is not None:
-        this_results_dir += f"_{args.visual_filter_mode}"
+        this_results_dir += f"_{args.visual_filter_mode}{MASK_STRENGTH}"
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     os.makedirs(this_results_dir)

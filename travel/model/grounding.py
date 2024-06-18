@@ -2,6 +2,7 @@ import dataclasses
 from enum import Enum
 import numpy as np
 from PIL import Image
+from pprint import pprint
 import spacy
 from spacy.lang.en import English
 import torch
@@ -21,6 +22,7 @@ OWLV2_PATH = config["grounding"]["owlv2_path"]
 OWL_THRESHOLD = config["grounding"]["owl_threshold"] 
 OWL_BATCH_SIZE = config["grounding"]["owl_batch_size"]
 MASK_STRENGTH = config["grounding"]["mask_strength"]
+MINIMUM_CROP_SIZE = config["grounding"]["minimum_crop_size"]
 
 def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
                                     detector: Owlv2ForObjectDetection,
@@ -107,7 +109,6 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     dataset.examples = filtered_examples
     return dataset
     
-# TODO: debug the below 2 classes
 class AdaptiveVisualFilter:
     """Parent class for adaptive attention filters that use phrase grounding models to mask/crop images based on visual questions."""
 
@@ -193,7 +194,9 @@ class AdaptiveVisualFilter:
                 detection_result['boxes'] = torch.zeros([0, 4])
                 detection_result['scores'] = torch.zeros([0])
                 detection_result['labels'] = torch.zeros([0])
-                
+    
+        # results = [detection_result for detection_result in results if detection_result['scores'] >= OWL_THRESHOLD]
+        
         # Filter results for cases where no objects were passed
         return results, padded_images
     
@@ -215,6 +218,13 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         :param questions: List of yes/no questions about an image (e.g., are there any cherry tomatoes in the bowl?).
         :return: List of tuples, each of which include a bool and object string indicating regions of interest, and a rephrased form of a question without spatial dependencies. 
         """
+
+        spatial_preps = ["in", "on", "inside", "outside", "inside of", "outside of",
+                        "off", "out", "out of", "within", "across"]
+        negation_preps = ["out", "out of", "outside", "outside of", "off"]
+        no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every"]
+        avoid_with_on = ["temperature", "heat", "low", "medium", "high"]
+
         results = []
         for question in questions:
             doc = nlp(question)
@@ -222,12 +232,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             negation_present = False
             look_at_noun = True
             spatial_relation = False
-
-            spatial_preps = ["in", "on", "inside", "outside", "inside of", "outside of",
-                         "off", "out", "out of", "within", "across"]
-            negation_preps = ["out", "out of", "outside", "outside of", "off"]
-            no_rephrase_words = ["top", "bottom", "left", "right"]
-            avoid_with_on = ["temperature", "heat"]
 
             no_rephrase_word_present = False
             is_negation_prep = False
@@ -247,6 +251,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # For subjects and objects, capture the noun considering compound modifiers
                 if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
                     target_noun = get_compound_noun(token)
+                    print(target_noun)
                 
                 # Identify spatial relations based on specific dependencies
                 if token.dep_ == "prep":
@@ -258,6 +263,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     if prep in spatial_preps and not is_avoid_on:
                         spatial_relation = True
                         spatial_object_tokens = [get_compound_noun(child) for child in token.children]
+                        print(spatial_object_tokens)
                         is_negation_prep = prep in negation_preps
 
                 if token.text in no_rephrase_words:
@@ -274,11 +280,11 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                         question = question.replace(token, "image")
                     question = question.replace(prep, "in")
 
-                    # Sometimes questions will use anonymous possessives like "someone's",
-                    # which doesn't work well when we replace spatial object with "image"
-                    if "someone's" in question:
-                        question = question.replace("someone's", "the")
+                    # Replace articles and possessives that don't play well with "image"
+                    for determiner_phrase in [" someone's image", " an image", " a image"]:
+                        question = question.replace(determiner_phrase, " the image")
 
+                    # Remove negation
                     if negation_present:
                         question = question.replace(negation_token, "").replace("  ", " ")
 
@@ -286,7 +292,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             else:
                 look_at_noun = True
 
-            results.append((look_at_noun, target_noun if target_noun != "" else None, question))
+            results.append((look_at_noun, target_noun if target_noun != "" and target_noun not in avoid_with_on else None, question))
         return results
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE) -> tuple[list[Image.Image], list[str]]:
@@ -301,6 +307,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         new_questions = []
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
         for (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
+            pprint(detection_result)
             boxes = detection_result["boxes"]
             bboxes = boxes.cpu().numpy() # (# boxes, 4)
 
@@ -308,15 +315,37 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
 
                 # Mask out the areas for this noun
-                # TODO: crop image to the clustered bounding box?
                 for bbox in bboxes:
+                    # If looking specifically at this noun, make sure bounding boxes are a minimum size (configured in config.yml)
+                    if look_at_noun:
+                        bbox_height = bbox[3] - bbox[1]
+                        if bbox_height < MINIMUM_CROP_SIZE:
+                            bbox[1] -= (MINIMUM_CROP_SIZE - bbox_height) / 2
+                            bbox[3] += (MINIMUM_CROP_SIZE - bbox_height) / 2
+                            if bbox[1] < 0:
+                                bbox[1] = 0
+                            if bbox[3] >= mask.shape[0]:
+                                bbox[3] = mask.shape[0] - 1
+
+                        bbox_width = bbox[2] - bbox[0]
+                        if bbox_width < MINIMUM_CROP_SIZE:
+                            bbox[0] -= (MINIMUM_CROP_SIZE - bbox_width) / 2
+                            bbox[2] += (MINIMUM_CROP_SIZE - bbox_width) / 2
+                            if bbox[0] < 0:
+                                bbox[0] = 0
+                            if bbox[2] >= mask.shape[1]:
+                                bbox[2] = mask.shape[1] - 1                        
+                        
                     # Set the area within the bounding box to 0
-                    # Note the order: (ymin:ymax, xmin:xmax)
-                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 1.0 - MASK_STRENGTH
+                    # Note the order: (ymin:ymax, xmin:xmax)                        
+                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
                     
                 if look_at_noun:
                     mask = 1 - mask
                                 
+                # Apply mask strength to black parts of resulting mask
+                mask = (1.0 - (1 - mask) * MASK_STRENGTH)
+                
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
 
                 # Apply mask and undo padding of masked/cropped image to pass to VLM later
@@ -374,8 +403,11 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
                 for bbox in bboxes:
                     # Set the area within the bounding box to 0
                     # Note the order: (ymin:ymax, xmin:xmax)
-                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 1.0 - MASK_STRENGTH
+                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
                                     
+                # Apply mask strength to black parts of resulting mask
+                mask = (1.0 - (1 - mask) * MASK_STRENGTH)
+                        
                 # Apply mask and undo padding of masked/cropped image to pass to VLM later
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
                 new_frame = np.array(frame_padded) * mask

@@ -17,7 +17,7 @@ from travel.constants import IMAGES_CHUNK_SIZE, CACHE_FREQUENCY
 from travel.data.utils import split_list_into_partitions
 from travel.data.vqa import VQAOutputs
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
-from travel.model.grounding import VisualFilterTypes
+from travel.model.grounding import VisualFilterTypes, MASK_STRENGTH
 from travel.model.vqa import save_vqa_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
@@ -44,7 +44,7 @@ if args.resume_dir is None:
     timestamp = datetime.datetime.now()
     this_results_dir = os.path.join(args.vqg_directory, f"VQA_data_{args.vlm_name.split('/')[-1]}")
     if args.visual_filter_mode is not None:
-        this_results_dir += f"_{args.visual_filter_mode}"
+        this_results_dir += f"_{args.visual_filter_mode}{MASK_STRENGTH}"
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
 else:
     this_results_dir = args.resume_dir
