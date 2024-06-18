@@ -11,7 +11,7 @@ from travel.data.captaincook4d.constants import VIDEO_DIR, ANNOTATIONS_DIR, DATA
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
 from travel.data.utils import generate_float_series
 from travel.data.utils.image import variance_of_laplacian
-from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY
+from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY, FRAME_KEEP_FREQUENCY
 from travel.model.grounding import TargetObjectCounterFilter
 
 
@@ -32,7 +32,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                       load_videos: bool=True,
                       debug_n_examples_per_class: Optional[int]=None) -> str:
         # Check if we already loaded data before
-        cache_fname = f"captaincook4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}" 
+        cache_fname = f"captaincook4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}-{FRAME_KEEP_FREQUENCY}" 
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
         if not load_videos:
@@ -90,21 +90,21 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         frames = extract_frames(sample_video, times)
                         frames = [Image.fromarray(frame) for frame in frames]
 
-                        # While we sampled FRAME_SAMPLING_FREQUENCY frames / second, we will only sample one frame per second and pick a frame that is not blurry and has the maximum number of target objects
+                        # While we initially sampled FRAME_SAMPLING_FREQUENCY frames / second, we'll only keep FRAME_KEEP_FREQUENCY frames per second - for each interval, pick a frame that is not blurry and has the maximum number of target objects
                         counts = object_counter(nlp, frames, [procedure_description] * len(frames))
-                        frame_info_by_second = defaultdict(list)
+                        frame_info_by_interval = defaultdict(list)
                         assert len(times) == len(frames) == len(counts), "Frames, times, and object counts must be the same."
                         for frame, time, count in zip(frames, times, counts):
-                            frame_info_by_second[int(math.floor(time))].append((frame, time, count))
+                            frame_info_by_interval[int(time // (1 / FRAME_KEEP_FREQUENCY))].append((frame, time, count))
                         
                         new_frames = []
                         new_times = []
-                        for second in frame_info_by_second:
-                            max_count = max([count for _, _, count in frame_info_by_second[second]])
+                        for interval in frame_info_by_interval:
+                            max_count = max([count for _, _, count in frame_info_by_interval[interval]])
                             if max_count == 0:
                                 # Skip this second of the video if there are no target objects in view
                                 continue
-                            frame_info_with_max_count = [info for info in frame_info_by_second[second] if info[2] == max_count]
+                            frame_info_with_max_count = [info for info in frame_info_by_interval[interval] if info[2] == max_count]
                             if len(frame_info_with_max_count) > 1:
                                 # If multiple frames have maximum number of target objects, take the least blurry one (max variance of laplacian)
                                 frame_info_with_max_count = max(frame_info_with_max_count, key = lambda x: variance_of_laplacian(x[0]))
