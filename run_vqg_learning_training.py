@@ -36,7 +36,7 @@ def main():
     # Load local rank from torchrun if we have it (for debugging purpose)
     local_rank = int(os.environ["LOCAL_RANK"]) if "LOCAL_RANK" in os.environ else 0
     global_rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
-    world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 0
+    world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
 
     if args.val_data_directory is None:
         args.val_data_directory = args.training_data_directory
@@ -94,9 +94,9 @@ def main():
 
         # Cut down data if debug mode
         if args.debug:
-            prompt = prompt[:10]
-            chosen = chosen[:10]
-            rejected = rejected[:10]
+            prompt = prompt[:100]
+            chosen = chosen[:100]
+            rejected = rejected[:100]
 
         dataset = Dataset.from_dict(
             {
@@ -123,7 +123,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(args.lm_name, quantization_config=bnb_config)
 
     # TODO: is there a better option for PEFT on this model?
-    peft_config = LoraConfig(task_type=TaskType.SEQ_2_SEQ_LM,  # configured for text classification
+    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM,  # configured for causal LM
                             inference_mode=False,        # enable training - for inference, we can pre-compute the weight update matrix
                             r=256,                         # dimension of low-rank matrices
                             lora_alpha=128,               # scaling coefficient of weight update
