@@ -52,7 +52,6 @@ EGO4D_IGNORE_VERBS = [
     'cross', # People crossing over things
     'kick', # Kicking objects with foot - usually not related to any task
     "check", # Check on something, e.g., look at something - doesn't imply a state change
-    "smoke", # Person smoking
 ] 
 
 C_REGEX = re.compile(r"^\#C\s+C", re.IGNORECASE)

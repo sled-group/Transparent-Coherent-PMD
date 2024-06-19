@@ -60,7 +60,6 @@ class VQGOutputs:
 # - Picked up
 # - Sliced
 # - Toggled
-
 VQG_DEMONSTRATIONS = [
     VQGOutputs(
         procedure_id=540088,
