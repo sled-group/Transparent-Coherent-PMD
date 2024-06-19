@@ -1,7 +1,7 @@
 from collections import defaultdict
-import math
 import os, json
 from PIL import Image
+from pprint import pprint
 import spacy
 from tqdm import tqdm
 from typing import Optional
@@ -48,6 +48,8 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         # TODO: When loading CaptainCook4D at least a few videos cannot be successfully loaded. Need to look into this at some point
 
         already_processed_videos = get_subdirectories(self.cache_dir)
+        print("Already processed videos:")
+        pprint(already_processed_videos)
 
         # Sample videos from CaptainCook4D
         all_video_ids = DATA_SPLITS[data_split]
@@ -82,6 +84,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
                     # Check if we already processed this video
                     if example_id in already_processed_videos:
+                        print(f"Skipping example {example_id} because we already processed it.")
                         continue
 
                     # Some steps are skipped
@@ -174,8 +177,9 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                             success_examples.append(example)
                     self.save_dataset_metadata()
 
-                except:
+                except Exception as e:
                     print(f"Warning: Video {sample_video_id} step {step_id} could not be processed!")
+                    print(e)
                     continue
 
             if debug_n_examples_per_class is not None:
