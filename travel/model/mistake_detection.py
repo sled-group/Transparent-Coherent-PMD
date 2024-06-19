@@ -10,7 +10,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, Bits
 from typing import Union, Any, Optional
 import yaml
 
-from travel.data.mistake_detection import MistakeDetectionDataset
+from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
 from travel.data.utils import generate_float_series
 from travel.data.vqa import VQAOutputs, VQAResponse
 
@@ -126,6 +126,16 @@ with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 DETECTION_FRAMES_PROPORTION = int(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 
+def aggregate_mistake_probs_over_frames(mistake_prob: np.ndarray, example: MistakeDetectionExample) -> float:
+    example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
+    assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
+    assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
+
+    mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
+    mean_mistake_prob = [p * (t / max(example.frame_times)) for p, t in zip(mean_mistake_prob, example.frame_times)] # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
+    mean_mistake_prob = np.mean(mistake_prob) # Get mean mistakeprobability over all frames
+    return mean_mistake_prob
+
 class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
     """Heuristic mistake detection evaluator which simply takes the average mistake probability over the passed chunk of video frames."""
         
@@ -153,12 +163,7 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
         agg_preds = []
         for mistake_prob, example in tqdm(zip(mistake_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
             if len(mistake_prob) > 0:
-                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
-                assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
-                
-                mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-                mean_mistake_prob = np.mean(mistake_prob) # Get mean mistakeprobability over all frames
-                                
+                mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example)                                
                 mistake_pred_final = True if mean_mistake_prob > detection_threshold else False
             else:
                 # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;
@@ -331,13 +336,8 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
         agg_preds = []
         for mistake_prob, nli_mistake_prob, nli_relevance_prob, example in tqdm(zip(mistake_probs, compiled_nli_mistake_probs, compiled_nli_relevance_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
             if len(mistake_prob) > 0:
-                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
-                assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
-                
-                mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-                mean_mistake_prob = np.mean(mistake_prob) # Get mean mistake probability over all frames
-                                
-                mistake_pred_final = True if mean_mistake_prob > detection_threshold else False
+                mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example)                                
+                mistake_pred_final = True if mean_mistake_prob >= detection_threshold else False
             else:
                 # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;
                 # in this case, the target object is likely not present at all in the video, suggesting an incorrect object is used instead
