@@ -553,7 +553,11 @@ class Ego4dFHOMainDataset:
 
     def __iter__(self) -> Iterable[dict[str, Any]]:
         for video_index, video_path, video_metadata in self.video_sampler(self.video_info):
-            video_cap = get_video(video_path)
+            try:
+                video_cap = get_video(video_path)
+            except:
+                print(f"Warning: could not load video at {video_path}.")
+                continue
 
             for clip_index, clip_info in enumerate(video_metadata['narrated_actions']):
                 pre_time = clip_info['pre_frame'] / clip_info['fps'] if clip_info['pre_frame'] is not None else None
@@ -763,6 +767,11 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                         # the misalignsrl sample does not exists in this data split
                         continue
                     video_cap = get_video(video_path)
+                    try:
+                        video_cap = get_video(video_path)
+                    except:
+                        print(f"Warning: could not load video at {video_path}.")
+                        continue                    
                     effect_frame = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
                     
                     # `procedure_id` is meant to be an ID for the narration.
