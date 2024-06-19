@@ -312,6 +312,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                             frame_mistake_probs.append(nli_mistake_probs[parallel_idx])
                         else:
                             frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
+                        # TODO: consider combining NLI probabilities by creating one premise based on relevant evidence and do one more inference (follow recoverr paper)
 
                     frame_nli_mistake_probs.append(nli_mistake_probs[parallel_idx])
                     frame_nli_relevance_probs.append(nli_relevance[parallel_idx])

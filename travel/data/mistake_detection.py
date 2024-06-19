@@ -127,6 +127,7 @@ class MistakeDetectionDataset:
             self.load_dataset_metadata()
             if not self.data_generated:
                 self.generate_examples(data_split, **kwargs)
+
         self.data_generated = True
         self.save_dataset_metadata()
 
@@ -214,7 +215,7 @@ class MistakeDetectionDataset:
         example = MistakeDetectionExample.from_dict(example, load_frames=load_frames)
         return example
     
-    def save_dataset_metadata(self, cls=None):
+    def save_dataset_metadata(self):
         """
         Saves dataset metadata for later.
         """
@@ -222,8 +223,7 @@ class MistakeDetectionDataset:
             os.makedirs(self.cache_dir)
         json.dump(self.__dict__,
                   open(os.path.join(self.cache_dir, "dataset.json"), "w"),
-                  indent=4, 
-                  cls=cls)
+                  indent=4)
         
     def load_dataset_metadata(self):
         """
