@@ -15,6 +15,7 @@ from pytorchvideo.data.clip_sampling import ClipInfo
 import random
 import re
 import spacy
+from spacy.lang.en import English
 import string
 import torch
 from transformers import BatchEncoding, DataCollatorForSeq2Seq, PreTrainedTokenizer
@@ -638,6 +639,18 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             cache_fname += f"_partition{worker_index+1}of{n_workers}"
         return os.path.join(DATA_CACHE_DIR, cache_fname)
     
+    def ego4d_narration_to_instruction(self, narration_text: str, nlp: English) -> str:
+        instruction_text = clean_narration_text(narration_text) # Replace symbols in narration text with words
+        instruction_text = simple_present_to_imperative(nlp, instruction_text)
+        for original_text, replaced_text in [("in your left hand", "in your hand"),
+                                                ("in your right hand", "in your hand"),
+                                                ("with your left hand", "with your hand"),
+                                                ("with your right hand", "with your hand"),
+                                                ("with both hands", "with your hands")]:
+            # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove mentions of this
+            instruction_text = instruction_text.replace(original_text, replaced_text)
+        return instruction_text
+
     # TODO: when generating non-augmented dataset, make it possible to borrow from augmented dataset if it exists
     def generate_examples(self,
                           data_split: str,
@@ -682,28 +695,20 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             if not filter_action_for_mistake_detection(clip):
                 continue
             
-            # Convert narration text to imperative form to match the sentence structure of recipes and task instructions    
-            instruction_text = clean_narration_text(clip['narration_text']) # Replace symbols in narration text with words
-            instruction_text = simple_present_to_imperative(nlp, instruction_text)
-            for original_text, replaced_text in [("in your left hand", "in your hand"),
-                                                 ("in your right hand", "in your hand"),
-                                                 ("with your left hand", "with your hand"),
-                                                 ("with your right hand", "with your hand"),
-                                                 ("with both hands", "with your hands")]:
-                # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove mentions of this
-                instruction_text = instruction_text.replace(original_text, replaced_text)
-
+            # Convert narration text to imperative form to match the sentence structure of recipes and task instructions
+            instruction_text = self.ego4d_narration_to_instruction(clip['narration_text'], nlp)
+            
             # clip['video'] shape: (C, # frames, H, W)
             precondition_frame_arr, effect_frame_arr = clip['pre_frame'], clip['post_frame']
             precondition_frame, effect_frame = Image.fromarray(precondition_frame_arr), Image.fromarray(effect_frame_arr)
-            
+
             # Omit examples where precondition and effect frame are overly similar
             precondition_effect_similarity = dot(precondition_frame_arr.astype(float).flatten(), effect_frame_arr.astype(float).flatten()) / (norm(precondition_frame_arr.astype(float).flatten()) * norm(effect_frame_arr.astype(float).flatten()))
             if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
                 continue
             
             # Generate examples from this clip
-            # NOTE: example IDs intentionally have "/"s in them to ensure there's one directory per video and per clip (enables easy resuming of incomplete runs, and easy inspection of data)
+            # NOTE: example IDs intentionally have "/"s in them to ensure there's one directory per video and per clip (enables easy resuming of incomplete runs and inspection of data)
 
             # Generate positive example from effect frame
             positive_example = MistakeDetectionExample(
@@ -742,8 +747,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     )
                 mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
                 
-                print(f"=======MisalignSRL samples =========")
-                print(f"current clip narration: {clip['narration_text']} (video_uid: {clip['video_uid']}, narration_timestamp_sec: {clip['narration_timestamp_sec']})")
+                # print(f"=======MisalignSRL samples =========")
+                # print(f"current clip narration: {clip['narration_text']} (video_uid: {clip['video_uid']}, narration_timestamp_sec: {clip['narration_timestamp_sec']})")
                 for misalignsrl_type in self.mismatch_sampler.type_name_col_name_map.keys():
                     # skip if no misaligned sample for this type is found
                     if mismatch_examples[misalignsrl_type] is None:
@@ -751,7 +756,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
                     frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']
-                    # frame_time = mismatch_examples[misalignsrl_type]['end_sec']
                     
                     # `effect_frame` contains the pixels for the misalignsrl sample. In this case, we need to read it given the `video_id` (another video) and `frame_time`. 
                     video_path = os.path.join(EGO4D_VIDEO_PATH, video_id+".mp4")
@@ -762,16 +766,15 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     video_cap = get_video(video_path)
                     effect_frame = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
                     
-                    # `procedure_id` is meant to be an ID for the clip.
+                    # `procedure_id` is meant to be an ID for the narration.
                     procedure_id = procedure_id
                     
-                    instruction_text = mismatch_examples[misalignsrl_type]['narration_text']
                     # Generate positive example from effect frame
                     misalignsrl_example = MistakeDetectionExample(
                         task_name="ego4d",
                         video_id=video_id,
                         procedure_id=procedure_id,
-                        example_id=f"{clip_id}/easyneg_{misalignsrl_type}",
+                        example_id=f"{clip_id}/easyneg_{misalignsrl_type}_{video_id}_{frame_time}",
                         frames=[effect_frame],
                         frame_times=[frame_time],
                         procedure_description=instruction_text,
@@ -779,16 +782,16 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                         mistake_type=misalignsrl_type,
                     )
                     example_cache_buffer.append(misalignsrl_example)
-                    print(f"Appended example:")
+                    # print(f"Appended example:")
                     self.mismatch_sampler.print_misalignsrl_sample_meta(mismatch_examples[misalignsrl_type], misalignsrl_type)
-                print(f"===================================")
+                # print(f"===================================")
             if debug_n_examples_per_class is not None and self.n_examples + len(example_cache_buffer) >= 2 * debug_n_examples_per_class:
                 break
 
         # Cache any last examples in buffer
         for new_example in example_cache_buffer:
             self.save_example_to_file(new_example)
-        self.save_dataset_metadata()
+        self.save_dataset_metadata(cls=MisalignSRLEncoder)
         del example_cache_buffer
         example_cache_buffer: list[MistakeDetectionExample] = []
 
