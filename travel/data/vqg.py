@@ -63,7 +63,7 @@ class VQGOutputs:
 VQG_DEMONSTRATIONS = [
     VQGOutputs(
         procedure_id=540088,
-        procedure_description="Soak the sponge in a soapy water with both hands",
+        procedure_description="Soak the sponge in a soapy water with your hands",
         questions=[
             "Is the sponge in water?",
             "Is the water soapy?",
@@ -123,7 +123,7 @@ VQG_DEMONSTRATIONS = [
     ),   
     VQGOutputs(
         procedure_id=412036,
-        procedure_description="Spread the black peas on the salad with the spoon in your right hand",
+        procedure_description="Spread the black peas on the salad with the spoon in your hand",
         questions=[
             "Are the black peas on the salad?",
             "Is there a spoon in someone's hand?",
@@ -147,7 +147,7 @@ VQG_DEMONSTRATIONS = [
     ),   
     VQGOutputs(
         procedure_id=540138,
-        procedure_description="Wash the car with a sponge in your right hand",
+        procedure_description="Wash the car with a sponge in your hand",
         questions=[
             "Is the car clean?",
             "Is the sponge being held?",
@@ -207,10 +207,10 @@ VQG_DEMONSTRATIONS = [
     ),   
     VQGOutputs(
         procedure_id=513269,
-        procedure_description="Break the walnut with the nutcracker in your right hand",
+        procedure_description="Break the walnut with the nutcracker in your hand",
         questions=[
             "Is there a cracked nut?",
-            "Is the nut cracker being held in someone's right hand?",
+            "Is the nut cracker being held in someone's hand?",
         ],
         answers_str=[
             "Yes",
@@ -219,7 +219,7 @@ VQG_DEMONSTRATIONS = [
     ),   
     VQGOutputs(
         procedure_id=168002,
-        procedure_description="Drop the brush in your right hand on the oven",
+        procedure_description="Drop the brush in your hand on the oven",
         questions=[
             "Is the brush on the oven?",
             "Is the brush in a hand?"
@@ -346,10 +346,10 @@ VQG_DEMONSTRATIONS_OLD = [
     ),
     VQGOutputs(
         procedure_id=449062,
-        procedure_description="Loosen the soil in the flower pot with your right hand",
+        procedure_description="Loosen the soil in the flower pot with your hand",
         questions=[
             "Is the soil in the flower pot loose?",
-            "Is the hand in the soil?",
+            "Is the hand dirty?",
         ],
         answers_str=[
             "Yes",
