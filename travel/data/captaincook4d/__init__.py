@@ -98,7 +98,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         adjusted_end = step['end_time'] - min(step_duration * 0.3, 3) # Adjust the end time to be earlier by a maximum of 3 seconds
                         times = generate_float_series(adjusted_start, adjusted_end, 1 / FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
                         frames = extract_frames(sample_video, times)
-                        frames = [Image.fromarray(frame) for frame in frames]
+                        frames = [Image.fromarray(frame) for frame in frames] # TODO: this sometimes crashes if a frame is None due to error retrieving frame from video; Fengyuan is working on fixing bugs here so will leave it for now
 
                         # While we initially sampled FRAME_SAMPLING_FREQUENCY frames / second, we'll only keep FRAME_KEEP_FREQUENCY frames per second - for each interval, pick a frame that is not blurry and has the maximum number of target objects
                         counts = object_counter(nlp, frames, [procedure_description] * len(frames))
