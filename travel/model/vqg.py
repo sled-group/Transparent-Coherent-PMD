@@ -7,10 +7,7 @@ from typing import Optional
 from travel.constants import CACHE_FREQUENCY
 from travel.data.vqg import VQGInputs, VQGOutputs, parse_vqg_outputs, save_vqg_outputs
 
-# TODO: include Ruixuan's improvements here... some of which are below
-# TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name?
-# TODO: does there need to be a single target object for VQG?
-# TODO: increase number of questions to 3? or use a variable number
+# TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name? - at least for CaptainCook4D
 def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}) -> dict[str, VQGOutputs]:
     """
     Runs VQG with a given LM text generation pipeline and list of VQG inputs.

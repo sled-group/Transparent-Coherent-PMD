@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field, asdict
 import os
 import json
+import random
 from typing import Any, Optional
 
 from travel.data.vqa import VQAResponse
@@ -72,7 +73,7 @@ VQG_DEMONSTRATIONS = [
             "Yes",
             "Yes"
         ]
-    ),   
+    ),
     VQGOutputs(
         procedure_id=600088,
         procedure_description="Open the bottle",
@@ -86,6 +87,18 @@ VQG_DEMONSTRATIONS = [
         ]
     ),
     VQGOutputs(
+        procedure_id=107275,
+        procedure_description="Take the baking tray away from the table",
+        questions=[
+            "Is the baking tray on the table?",
+            "Is the baking tray somewhere not on the table?",
+        ],
+        answers_str=[
+            "No",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
         procedure_id=426130,
         procedure_description="Fold the right edge of the wrapper",
         questions=[
@@ -96,7 +109,7 @@ VQG_DEMONSTRATIONS = [
             "No",
             "Yes"
         ]
-    ),   
+    ),
     VQGOutputs(
         procedure_id=730006,
         procedure_description="Pour the water into the blue container",
@@ -108,7 +121,7 @@ VQG_DEMONSTRATIONS = [
             "Yes",
             "No"
         ]
-    ),       
+    ),
     VQGOutputs(
         procedure_id=83057,
         procedure_description="Paint the patio with the paint brush",
@@ -120,7 +133,7 @@ VQG_DEMONSTRATIONS = [
             "Yes",
             "Yes"
         ]
-    ),   
+    ),
     VQGOutputs(
         procedure_id=412036,
         procedure_description="Spread the black peas on the salad with the spoon in your hand",
@@ -269,7 +282,7 @@ VQG_DEMONSTRATIONS = [
         procedure_id=25084,
         procedure_description="Chop green beans with a knife on the chopping board",
         questions=[
-            "Are the green beans on the cutting board chopped?",
+            "Are the green beans on the cutting board sliced?",
             "Is someone using a knife?",
         ],
         answers_str=[
@@ -373,7 +386,7 @@ VQG_DEMONSTRATIONS_OLD = [
 
 N_GENERATED_QUESTIONS = len(VQG_DEMONSTRATIONS[0].questions)
 
-VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} yes/no questions we could ask about an image of the affected objects and their expected answers?\n'
+VQG_PROMPT_TEMPLATE = 'The instructions say "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} questions we could ask about an image of the scene and their expected answers?\n'
 VQG_EXAMPLE_TEMPLATE = VQG_PROMPT_TEMPLATE + \
                        "{question_list}"
 VQG_QUESTION_TEMPLATE = "{question_number}. {question} (yes/no) {answer}"
@@ -425,7 +438,6 @@ def load_vqg_inputs(path: str) -> list[VQGInputs]:
     """
     return [VQGInputs.from_dict(inp) for inp in json.load(open(path, "r"))]
 
-# TODO: later may need to account for chat-based prompts
 def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3) -> str:
     """
     Returns a prompt for VQG including in-context demonstrations.
@@ -435,8 +447,9 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
     :return: Prompt for VQG including in-context demonstrations.
     """
     assert n_demonstrations <= len(VQG_DEMONSTRATIONS), f"Requested {n_demonstrations} in-context demonstrations for VQG, but only {len(VQG_DEMONSTRATIONS)} are available in travel.model.vqg.VQG_DEMONSTRATIONS."
-
-    examples = [generate_vqg_example(demo) for demo in VQG_DEMONSTRATIONS[:n_demonstrations]]
+    demonstrations = VQG_DEMONSTRATIONS[:n_demonstrations]
+    random.shuffle(demonstrations) # Shuffle demonstrations for each prompt to ensure the ordering is not sub-optimal
+    examples = [generate_vqg_example(demo) for demo in demonstrations]
     examples += [generate_vqg_prompt(procedure_description)]
     return "\n\n".join(examples)
 
