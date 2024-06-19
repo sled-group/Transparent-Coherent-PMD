@@ -23,10 +23,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks]) # TODO: support running for Ego4D's evaluation sets
 parser.add_argument("--partition", type=str, required=False, choices=["val", "test"], help="Partition to run VQG on. For some tasks with a consistent set of procedures shared across partitions, this may not be required.")
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
+parser.add_argument("--n_demonstrations", type=int, default=16, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
-parser.add_argument("--batch_size", type=int, default=40, help="Batch size for VQG.")
+parser.add_argument("--batch_size", type=int, default=16, help="Batch size for VQG.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating visual questions.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 args = parser.parse_args()
@@ -142,7 +142,7 @@ if n_workers == 1:
         prompts,
         prompt_ids,
         batch_size=args.batch_size,
-        save_path=this_results_dir,
+        save_path=os.path.join(this_results_dir, vqg_outputs_fname),
         vqg_outputs=vqg_outputs # Will send in partly completed VQG outputs if we have them
     )
 else:
@@ -196,7 +196,7 @@ else:
     for p in partitions:
         vqg_outputs |= p
 
-    # Save combined VQG outputs for this temperature
+    # Save combined VQG outputs
     save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
 
 print(f"{len(vqg_outputs)} VQG outputs generated!")

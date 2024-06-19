@@ -10,20 +10,18 @@ from travel.model.mistake_detection import generate_det_curves
 
 # Configure arguments here
 results_fnames = [
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/SuccessVQA_llava-1.5-7b-hf_20240516113912/metrics_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/VQG2VQA_llava-1.5-7b-hf_20240516145453/metrics_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/VQG2VQA_llava-1.5-7b-hf_20240516145453/metrics_nli_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/VQG2VQA_llava-1.5-7b-hf_20240516145506_spatial_norephrase/metrics_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/VQG2VQA_llava-1.5-7b-hf_20240521172640_spatial/metrics_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/VQG2VQA_llava-1.5-7b-hf_20240521172640_spatial/metrics_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/captaincook4d/SuccessVQA_captaincook4d_llava-1.5-7b-hf_20240516113912/metrics_heuristic_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/captaincook4d/VQG2VQA_captaincook4d_llava-1.5-7b-hf_20240617181122/metrics_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/captaincook4d/VQG2VQA_captaincook4d_llava-1.5-7b-hf_20240617181622_spatial/metrics_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/captaincook4d/VQG2VQA_captaincook4d_llava-1.5-7b-hf_20240617181122/metrics_heuristic_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/captaincook4d/VQG2VQA_captaincook4d_llava-1.5-7b-hf_20240617181622_spatial/metrics_heuristic_val.json",
 ]
 results_names = [
     "SuccessVQA",
-    "VQG2VQA",
     "VQG2VQA + NLI",
-    "VQG2VQA + Spatial",
-    "VQG2VQA + Spatial (No Rephrase)",
-    "VQG2VQA + Spatial + NLI",
+    "VQG2VQA + NLI + Spatial",
+    "VQG2VQA",
+    "VQG2VQA + Spatial"
 ]
 output_fname_prefix = "det_comparison_val"
 

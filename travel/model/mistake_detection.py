@@ -19,6 +19,7 @@ with open('config.yml', 'r') as file:
 NLI_MODEL_PATH = config["mistake_detection_strategies"]["nli_model_path"]
 NLI_BATCH_SIZE = int(config["mistake_detection_strategies"]["nli_batch_size"])
 NLI_RELEVANCE_DELTA = float(config["mistake_detection_strategies"]["nli_relevance_delta"]) # Minimum difference of entailment probabilities between VQA answer and negated answer to judge question and answer as relevant for mistake detection
+NLI_REPLACE_PROBS = bool(config["mistake_detection_strategies"]["nli_replace_probs"])
 
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
 
@@ -306,7 +307,11 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                         # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
                         mistake_answer = VQAResponse(1-int(question_output.expected_answer.value))
                         mistake_prob = question_output.answer_probs[mistake_answer]
-                        frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
+                        # Configure whether to only use NLI probs for final mistake detection, or otherwise multiply probabilities from VQA and NLI
+                        if NLI_REPLACE_PROBS:
+                            frame_mistake_probs.append(nli_mistake_probs[parallel_idx])
+                        else:
+                            frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
 
                     frame_nli_mistake_probs.append(nli_mistake_probs[parallel_idx])
                     frame_nli_relevance_probs.append(nli_relevance[parallel_idx])

@@ -26,7 +26,7 @@ from travel.model.vqg import run_vqg
 parser = argparse.ArgumentParser()
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--generate_partitions", nargs='+', type=str, default=["train", "val"], help="List of partitions to generate data for.")
-parser.add_argument("--n_demonstrations", type=int, default=5, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
+parser.add_argument("--n_demonstrations", type=int, default=16, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument('--temperatures', nargs='+', type=float, default=[0.0, 0.5, 1.0])
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
 parser.add_argument("--batch_size", type=int, default=40, help="Batch size for VQG.")
@@ -102,16 +102,16 @@ for partition in args.generate_partitions:
         # Generate prompts - one per example
         prompts = []
         seen_video_clips = {}
-        # TODO: use new get_procedures method on MistakeDetectionDataset
-        for example in tqdm(dataset, desc="generating prompts"):
-            if (example.video_id, example.procedure_id) in seen_video_clips:
+        for procedure_id, procedure_description in tqdm(dataset.get_all_procedures(), desc="generating prompts"):
+            if procedure_id in seen_video_clips:
                 continue
-            
-            prompt = generate_vqg_prompt_icl(example.procedure_description, n_demonstrations=args.n_demonstrations)
+            seen_video_clips[procedure_id] = True
+
+            prompt = generate_vqg_prompt_icl(procedure_description, n_demonstrations=args.n_demonstrations)
             prompts.append(
                 VQGInputs(
-                    procedure_id=example.procedure_id,
-                    procedure_description=example.procedure_description,
+                    procedure_id=procedure_id,
+                    procedure_description=procedure_description,
                     prompt=prompt
                 )
             )

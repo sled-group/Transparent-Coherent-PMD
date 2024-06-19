@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, asdict
 import os
 import json
-from typing import Any
+from typing import Any, Optional
 
 from travel.data.vqa import VQAResponse
 
@@ -24,10 +24,10 @@ class VQGOutputs:
     """Dataclass to hold all LM outputs from visual question generation (VQG)."""
     procedure_id: int
     procedure_description: str
-    target_object: str
     questions: list[str]
     answers_str: list[str]
     answers: list[VQAResponse] = field(default_factory=list)
+    target_object: Optional[str] = None
     
     def __post_init__(self):
         """Validation steps to ensure every QA-pair is valid and every question has an answer."""
@@ -49,8 +49,249 @@ class VQGOutputs:
         return asdict(self)
 
 # List of examples to use for in-context learning for VQG
-# TODO: add more?
+# Examples are arbitrarily selected from Ego4D training data, but intend to cover the state change space in simulators, e.g., those annotated in PIGLeT data: https://aclanthology.org/2021.acl-long.159.pdf
+# - Receptacle/location
+# - Temperature
+# - Broken
+# - Cooked
+# - Dirty
+# - Filled with liquid / used up
+# - Open
+# - Picked up
+# - Sliced
+# - Toggled
 VQG_DEMONSTRATIONS = [
+    VQGOutputs(
+        procedure_id=540088,
+        procedure_description="Soak the sponge in a soapy water with your hands",
+        questions=[
+            "Is the sponge in water?",
+            "Is the water soapy?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=600088,
+        procedure_description="Open the bottle",
+        questions=[
+            "Is the bottle open?",
+            "Does the bottle have a lid on it?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=426130,
+        procedure_description="Fold the right edge of the wrapper",
+        questions=[
+            "Is the wrapper completely flat?",
+            "Is the right edge of the wrapper folded?",
+        ],
+        answers_str=[
+            "No",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=730006,
+        procedure_description="Pour the water into the blue container",
+        questions=[
+            "Is there water in the blue container?",
+            "Is the blue container empty?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),       
+    VQGOutputs(
+        procedure_id=83057,
+        procedure_description="Paint the patio with the paint brush",
+        questions=[
+            "Is the patio painted?",
+            "Is someone holding a paint brush?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=412036,
+        procedure_description="Spread the black peas on the salad with the spoon in your hand",
+        questions=[
+            "Are the black peas on the salad?",
+            "Is there a spoon in someone's hand?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=80062,
+        procedure_description="Scoop paint from the pallet on the table with the paint brush",
+        questions=[
+            "Is there paint on the paint brush?",
+            "Is the paint brush in someone's hand?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=540138,
+        procedure_description="Wash the car with a sponge in your hand",
+        questions=[
+            "Is the car clean?",
+            "Is the sponge being held?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=599053,
+        procedure_description="Pick the scrubber from the sink",
+        questions=[
+            "Is the scrubber in the sink?",
+            "Is the scrubber in someone's hand?",
+        ],
+        answers_str=[
+            "No",
+            "Yes"
+        ]
+    ), 
+    VQGOutputs(
+        procedure_id=404040,
+        procedure_description="Peel the onion",
+        questions=[
+            "Is the onion's skin removed?",
+            "Is the onion peeled?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),       
+    VQGOutputs(
+        procedure_id=496081,
+        procedure_description="Put the dirt in the dust bin",
+        questions=[
+            "Is there dirt in the dust bin?",
+            "Is there any dirt that is not in the dust bin?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=581090,
+        procedure_description="Cut dough into two",
+        questions=[
+            "Is the dough in two pieces?",
+            "Is the dough whole?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=513269,
+        procedure_description="Break the walnut with the nutcracker in your hand",
+        questions=[
+            "Is there a cracked nut?",
+            "Is the nut cracker being held in someone's hand?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=168002,
+        procedure_description="Drop the brush in your hand on the oven",
+        questions=[
+            "Is the brush on the oven?",
+            "Is the brush in a hand?"
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=188064,
+        procedure_description="Turn off the tap",
+        questions=[
+            "Is the water running?",
+            "Is the faucet switched off?",
+        ],
+        answers_str=[
+            "No",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=523017,
+        procedure_description="Heat the edge of the bag with the lighter",
+        questions=[
+            "Is there a flame coming from the lighter?",
+            "Is the lighter near the bag?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),   
+    VQGOutputs(
+        procedure_id=321040,
+        procedure_description="Close the fridge",
+        questions=[
+            "Is the fridge open?",
+            "Can you see inside the fridge?",
+        ],
+        answers_str=[
+            "No",
+            "No"
+        ]
+    ),       
+    VQGOutputs(
+        procedure_id=25084,
+        procedure_description="Chop green beans with a knife on the chopping board",
+        questions=[
+            "Are the green beans on the cutting board chopped?",
+            "Is someone using a knife?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),       
+    VQGOutputs(
+        procedure_id=349047,
+        procedure_description="Arrange the dumplings on the tray",
+        questions=[
+            "Are there dumplings on the tray?",
+            "Are there any dumplings that are not on the tray?",
+        ],
+        answers_str=[
+            "Yes",
+            "No"
+        ]
+    ),
+]
+
+VQG_DEMONSTRATIONS_OLD = [
     VQGOutputs(
         procedure_id=-1,
         procedure_description='Remove pears from syrup and cool.',
@@ -104,6 +345,18 @@ VQG_DEMONSTRATIONS = [
         ]
     ),
     VQGOutputs(
+        procedure_id=449062,
+        procedure_description="Loosen the soil in the flower pot with your hand",
+        questions=[
+            "Is the soil in the flower pot loose?",
+            "Is the hand dirty?",
+        ],
+        answers_str=[
+            "Yes",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
         procedure_id=-1,
         procedure_description='In a bowl, beat eggs, milk, salt and mustard.',
         target_object='bowl',
@@ -120,9 +373,8 @@ VQG_DEMONSTRATIONS = [
 
 N_GENERATED_QUESTIONS = len(VQG_DEMONSTRATIONS[0].questions)
 
-VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} yes/no questions we could ask about an image of a target object and their expected answers?\n'
+VQG_PROMPT_TEMPLATE = 'The instructions say to "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} yes/no questions we could ask about an image of the affected objects and their expected answers?\n'
 VQG_EXAMPLE_TEMPLATE = VQG_PROMPT_TEMPLATE + \
-                       "Target object: {target_object}\n" + \
                        "{question_list}"
 VQG_QUESTION_TEMPLATE = "{question_number}. {question} (yes/no) {answer}"
 
@@ -134,18 +386,17 @@ def generate_vqg_prompt(instruction_step: str) -> str:
     :return: String including a prompt to generate `n_questions` questions to verify the success of `instruction_step`.
     """
     return VQG_PROMPT_TEMPLATE.format(instruction_step=instruction_step,
-                                        n_questions=str(N_GENERATED_QUESTIONS))
+                                      n_questions=str(N_GENERATED_QUESTIONS))
 
 def generate_vqg_example(vqg_output: VQGOutputs) -> str:
     """
     Returns a full VQG prompt example for in-context learning.
 
-    :param vqg_output: VQGOutputs object for VQG example.
+    :param vqg_output: VQGOutputs object for in-context VQG example.
     :return: String including a full demonstration of a prompt and several questions and expected answers for generating visual verification questions.
     """
     return VQG_EXAMPLE_TEMPLATE.format(instruction_step=vqg_output.procedure_description,
                                        n_questions = len(vqg_output.questions),
-                                       target_object=vqg_output.target_object,
                                        question_list="\n".join([VQG_QUESTION_TEMPLATE.format(
                                             question_number=question_idx + 1,
                                             question=question,
@@ -198,15 +449,13 @@ def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_desc
     :param procedure_description: Procedure description in text (e.g., recipe or instruction step text).
     :return: VQGOutputs parsed from generated language.
     """
-    target_object = generated_language.split("\n")[0].split("Target object: ")[1].strip()
-    questions_answers = [(q_a.split("? (yes/no)")[0].strip() + "?", q_a.split("(yes/no)")[1].strip()) for q_a in generated_language.split("\n")[1:3]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
+    questions_answers = [(q_a.split("? (yes/no)")[0].strip() + "?", q_a.split("(yes/no)")[1].strip()) for q_a in generated_language.split("\n")[0:2]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
     questions = [q[2:].strip() for q, _ in questions_answers]          
     answers = [a for _, a in questions_answers]
-    output = VQGOutputs(procedure_id,
-                        procedure_description,
-                        target_object,
-                        questions,
-                        answers)
+    output = VQGOutputs(procedure_id=procedure_id,
+                        procedure_description=procedure_description,
+                        questions=questions,
+                        answers_str=answers)
     return output
 
 def save_vqg_outputs(vqg_outputs: dict[Any, VQGOutputs], path: str):

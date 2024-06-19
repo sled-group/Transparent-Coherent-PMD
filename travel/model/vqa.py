@@ -40,7 +40,10 @@ def run_vqa(vlm: PreTrainedModel,
     if cache_path is not None:
         assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
         if os.path.exists(cache_path):
-            logits = torch.load(cache_path)
+            try:
+                logits = torch.load(cache_path)
+            except:
+                pass
         else:
             if not os.path.exists("/".join(cache_path.split("/")[:-1])):
                 os.makedirs("/".join(cache_path.split("/")[:-1]))
@@ -157,9 +160,8 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                 frames = visual_filter(nlp, frames, questions)
             elif visual_filter_mode in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase]:
                 frames, new_questions = visual_filter(nlp, frames, questions)
-                # Replace rephrased questions into prompts
+                # Replace rephrased questions into prompts, but save original questions for bookkeeping
                 prompts = [prompt.replace(question, new_question) for prompt, question, new_question in zip(prompts, questions, new_questions)]
-                questions = new_questions
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

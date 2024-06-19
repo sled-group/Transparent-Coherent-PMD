@@ -24,12 +24,17 @@ def simple_present_to_imperative(nlp: spacy.Language, sentence: str) -> str:
             subj_idx = token.i
         if token.pos_ == "VERB" and verb is None:  # Get the first verb
             verb = token
+
+    # Hack: spacy can't handle if sentence starts with "someone", so correct it here
+    if sentence.lower().strip().startswith("someone"):
+        subj_idx = 0
     
     # If a subject and verb are found, and the subject precedes the verb
     if subj_idx != -1 and verb is not None and subj_idx < verb.i:
         # Reconstruct the sentence without the subject and use the lemma of the verb
         imperative_tokens = [verb.lemma_] + [token.text for token in doc if token.i != subj_idx and token.i != verb.i]
-        imperative_tokens = [token.replace("his", "your").replace("her", "your").replace("their", "your") for token in imperative_tokens]
+        imperative_tokens = [token if token.lower() not in ["his", "her", "their"] else "your" for token in imperative_tokens]
+        imperative_tokens = [token if token.lower() not in ["himself", "herself", "themself"] else "yourself" for token in imperative_tokens]
         imperative_sentence = ' '.join(imperative_tokens)
         if imperative_sentence.endswith("."):
             imperative_sentence = imperative_sentence[:-1].strip()

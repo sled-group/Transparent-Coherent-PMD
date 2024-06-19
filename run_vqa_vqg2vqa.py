@@ -20,7 +20,7 @@ from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, SUCCESSVQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, MASK_STRENGTH
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds
 from travel.model.vqa import run_vqa_for_mistake_detection
 
@@ -29,7 +29,6 @@ parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired vqg_outputs.json is stored.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
-# parser.add_argument("--detector_name", type=str, default="google/owlv2-base-patch16", help="Name or path to HuggingFace OWL model for object detection. Must be compatible with Owlv2ForObjectDetection model.")
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
@@ -38,8 +37,6 @@ parser.add_argument("--debug", action="store_true", help="Pass this argument to 
 args = parser.parse_args()
 
 assert args.task in args.vqg_directory, f"VQG outputs should be generated from the {args.task} dataset!"
-
-# TODO: implement filtering by target objects? - have to integrate with existing visual filter code and get that code up to date
 
 # Load VLM(s), processors, visual filters, etc. - if multiple GPUs available, use them
 print("Setting up VLMs and visual filters...")
@@ -100,9 +97,10 @@ if args.resume_dir is None:
     this_results_dir = os.path.join(args.task, f"VQG2VQA_{args.task}")
     if args.debug:
         this_results_dir += f"_debug"
-    this_results_dir += f"_{args.vlm_name.split('/')[-1]}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    this_results_dir += f"_{args.vlm_name.split('/')[-1]}"
     if args.visual_filter_mode is not None:
-        this_results_dir += f"_{args.visual_filter_mode}"
+        this_results_dir += f"_{args.visual_filter_mode}{MASK_STRENGTH}"
+    this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     os.makedirs(this_results_dir)
 else:

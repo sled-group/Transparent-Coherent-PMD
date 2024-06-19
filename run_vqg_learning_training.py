@@ -8,6 +8,7 @@ from datasets import Dataset
 import datetime
 import os
 from peft import LoraConfig, TaskType
+from pprint import pprint
 import random
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
@@ -24,18 +25,19 @@ def main():
     parser.add_argument("--training_data_directory", type=str, required=True, help="Directory where training vqg_training_examples.json is stored.")
     parser.add_argument("--val_data_directory", type=str, required=False, help="Directory where validation vqg_training_examples.json is stored. If not passed, will be set to the same as the training data directory.")
     parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-    parser.add_argument("--train_batch_size", type=int, default=3, help="Batch size for training.")
+    parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
     parser.add_argument("--beta", type=float, default=0.1, help="DPO beta parameter for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
+    parser.add_argument("--save_strategy", type=str, choices=["no", "epochs"], default="epochs", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
     args = parser.parse_args()
 
     # Load local rank from torchrun if we have it (for debugging purpose)
     local_rank = int(os.environ["LOCAL_RANK"]) if "LOCAL_RANK" in os.environ else 0
     global_rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
-    world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 0
+    world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
 
     if args.val_data_directory is None:
         args.val_data_directory = args.training_data_directory
@@ -91,11 +93,15 @@ def main():
                 chosen.append(gen2)
                 rejected.append(gen1)
 
+        pprint(prompt[:10])
+        pprint(chosen[:10])
+        pprint(rejected[:10])
+
         # Cut down data if debug mode
         if args.debug:
-            prompt = prompt[:10]
-            chosen = chosen[:10]
-            rejected = rejected[:10]
+            prompt = prompt[:100]
+            chosen = chosen[:100]
+            rejected = rejected[:100]
 
         dataset = Dataset.from_dict(
             {
@@ -110,11 +116,8 @@ def main():
     print(f"({global_rank}) Loading LM...")
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
-        llm_int8_threshold=6.0,
-        llm_int8_has_fp16_weight=False,
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
         bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,
     )
     tokenizer = AutoTokenizer.from_pretrained(args.lm_name)
     tokenizer.pad_token = tokenizer.eos_token
@@ -122,12 +125,13 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(args.lm_name, quantization_config=bnb_config)
 
     # TODO: is there a better option for PEFT on this model?
-    peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,  # configured for text classification
-                            inference_mode=False,        # enable training - for inference, we can pre-compute the weight update matrix
-                            r=8,                         # dimension of low-rank matrices
-                            lora_alpha=16,               # scaling coefficient of weight update
-                            lora_dropout=0.1,            # dropout regularization on LoRA weights
-                            bias="all")                  # use LoRA to train "all" biases (alternatives: "none", "lora_only")
+    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM,  # configured for causal LM
+                            inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
+                            r=128,                          # dimension of low-rank matrices
+                            lora_alpha=16,                 # scaling coefficient of weight update
+                            target_modules="all-linear",
+                            lora_dropout=0.05,               # dropout regularization on LoRA weights
+                            bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 
     # Set up output directory, training args, and wandb
     timestamp = datetime.datetime.now()
@@ -143,12 +147,13 @@ def main():
                                     num_train_epochs=args.n_epochs,
                                     fp16=True,
                                     gradient_accumulation_steps=1 if args.debug else 10,
-                                    save_strategy="epoch",
+                                    save_strategy=args.save_strategy,
+                                    save_total_limit=3,
                                     save_only_model=False,
                                     remove_unused_columns=False,
                                     do_eval=True,
                                     evaluation_strategy="steps",
-                                    eval_steps=0.05,
+                                    eval_steps=0.05, # TODO: adjust later once model is actually training, e.g., change back to "epoch"
                                     report_to="wandb",
                                     logging_strategy="steps",
                                     logging_steps=1 if args.debug else 10,
@@ -169,6 +174,9 @@ def main():
 
     print(f"({global_rank}) Starting model training...")
     dpo_trainer.train()
+
+    print("Saving best model...")
+    dpo_trainer.save_model(this_results_dir)
 
 if __name__ == "__main__":
     main()
