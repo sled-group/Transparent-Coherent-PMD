@@ -9,7 +9,7 @@ from typing import Optional
 from travel.constants import DATA_CACHE_DIR
 from travel.data.captaincook4d.constants import VIDEO_DIR, ANNOTATIONS_DIR, DATA_SPLITS
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
-from travel.data.utils import generate_float_series
+from travel.data.utils import generate_float_series, get_subdirectories
 from travel.data.utils.image import variance_of_laplacian
 from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY, FRAME_KEEP_FREQUENCY
 from travel.model.grounding import TargetObjectCounterFilter
@@ -47,6 +47,8 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
         # TODO: When loading CaptainCook4D at least a few videos cannot be successfully loaded. Need to look into this at some point
 
+        already_processed_videos = get_subdirectories(self.cache_dir)
+
         # Sample videos from CaptainCook4D
         all_video_ids = DATA_SPLITS[data_split]
         all_video_paths = [os.path.join(VIDEO_DIR, f"{vid}_360p.mp4") for vid in all_video_ids]
@@ -76,6 +78,11 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                     # Extract some keyframes for the action
                     step_duration = step['end_time'] - step['start_time']
                     step_id = int(step['step_id'])
+                    example_id = f"{sample_video_id}_{step_idx}"
+
+                    # Check if we already processed this video
+                    if example_id in already_processed_videos:
+                        continue
 
                     # Some steps are skipped
                     if step_duration < 0.1:
@@ -139,7 +146,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                             task_name=MistakeDetectionTasks.CaptainCook4D,
                             video_id=sample_video_id,
                             procedure_id=step_id,
-                            example_id=f"{sample_video_id}_{step_idx}",
+                            example_id=example_id,
                             frames=frames,
                             frame_times=[time - min(times) for time in times],
                             procedure_description=procedure_description,
@@ -156,7 +163,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                             task_name=MistakeDetectionTasks.CaptainCook4D,
                             video_id=sample_video_id,
                             procedure_id=step_id,
-                            example_id=f"{sample_video_id}_{step_idx}",
+                            example_id=example_id,
                             frames=frames,
                             frame_times=[time - min(times) for time in times],
                             procedure_description=procedure_description,

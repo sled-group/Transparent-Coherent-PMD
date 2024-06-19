@@ -638,6 +638,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             cache_fname += f"_partition{worker_index+1}of{n_workers}"
         return os.path.join(DATA_CACHE_DIR, cache_fname)
     
+    # TODO: when generating non-augmented dataset, make it possible to borrow from augmented dataset if it exists
     def generate_examples(self,
                           data_split: str,
                           mismatch_augmentation: bool=False,
@@ -684,6 +685,13 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # Convert narration text to imperative form to match the sentence structure of recipes and task instructions    
             instruction_text = clean_narration_text(clip['narration_text']) # Replace symbols in narration text with words
             instruction_text = simple_present_to_imperative(nlp, instruction_text)
+            for original_text, replaced_text in [("in your left hand", "in your hand"),
+                                                 ("in your right hand", "in your hand"),
+                                                 ("with your left hand", "with your hand"),
+                                                 ("with your right hand", "with your hand"),
+                                                 ("with both hands", "with your hands")]:
+                # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove mentions of this
+                instruction_text = instruction_text.replace(original_text, replaced_text)
 
             # clip['video'] shape: (C, # frames, H, W)
             precondition_frame_arr, effect_frame_arr = clip['pre_frame'], clip['post_frame']

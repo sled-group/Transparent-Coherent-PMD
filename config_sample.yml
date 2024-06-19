@@ -25,7 +25,8 @@ grounding:
   mask_strength: 1.0
   minimum_crop_size: 50
 mistake_detection_strategies:
-  frames_proportion: 0.1
+  frames_proportion: 0.5
   nli_model_path: "facebook/bart-large-mnli"
   nli_batch_size: 128
   nli_relevance_delta: 0.2
+  nli_replace_probs: false
