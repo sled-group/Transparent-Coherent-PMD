@@ -610,13 +610,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         :param n_workers: Number of workers to parallelize dataset generation over.
         """
         # Handle Ego4D-specific initialization logic
-        if mismatch_augmentation:
-            # TODO: this takes several minutes - if we already have the data cached, we don't even need this - add logic for this
-            self.mismatch_sampler = MisalignSRL(
-                MISALIGNSRL_PATH,
-            )
-        else:
-            self.mismatch_sampler = None
+        self.mismatch_augmentation = mismatch_augmentation
         super().__init__(data_split,
                          mismatch_augmentation=mismatch_augmentation,
                          debug_n_examples_per_class=debug_n_examples_per_class,
@@ -662,6 +656,11 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         # Resume from partial generation (Ego4D is very large so we need this to avoid wasting time in generating the mistake detection data)
         already_processed_videos = get_subdirectories(self.cache_dir) # Each subdirectory of Ego4D's cache dir should be a video ID
 
+        if mismatch_augmentation:
+            mismatch_sampler = MisalignSRL(
+                MISALIGNSRL_PATH,
+            )
+
         ego4d = Ego4dFHOMainDataset(
             EGO4D_ANNOTATION_PATH,
             EGO4D_SPLIT_PATHS[data_split],
@@ -683,7 +682,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 # Cache examples in buffer
                 for new_example in example_cache_buffer:
                     self.save_example_to_file(new_example)
-                self.save_dataset_metadata(cls=MisalignSRLEncoder)
+                self.save_dataset_metadata()
                 del example_cache_buffer
                 example_cache_buffer: list[MistakeDetectionExample] = []
 
@@ -740,16 +739,16 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
-                # It is weird that could self.mismatch_sampler disappear time to time in the middle of the loop. just check and reinitialize it before we find out why.
-                if "mismatch_sampler" not in dir(self):
-                    self.mismatch_sampler = MisalignSRL(
-                        MISALIGNSRL_PATH
-                    )
-                mismatch_examples = self.mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
+                # It is weird that could mismatch_sampler disappear time to time in the middle of the loop. just check and reinitialize it before we find out why.
+                # if "mismatch_sampler" not in dir(self):
+                #     mismatch_sampler = MisalignSRL(
+                #         MISALIGNSRL_PATH
+                #     )
+                mismatch_examples = mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
                 
                 # print(f"=======MisalignSRL samples =========")
                 # print(f"current clip narration: {clip['narration_text']} (video_uid: {clip['video_uid']}, narration_timestamp_sec: {clip['narration_timestamp_sec']})")
-                for misalignsrl_type in self.mismatch_sampler.type_name_col_name_map.keys():
+                for misalignsrl_type in mismatch_sampler.type_name_col_name_map.keys():
                     # skip if no misaligned sample for this type is found
                     if mismatch_examples[misalignsrl_type] is None:
                         continue
@@ -783,7 +782,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     )
                     example_cache_buffer.append(misalignsrl_example)
                     # print(f"Appended example:")
-                    self.mismatch_sampler.print_misalignsrl_sample_meta(mismatch_examples[misalignsrl_type], misalignsrl_type)
+                    # mismatch_sampler.print_misalignsrl_sample_meta(mismatch_examples[misalignsrl_type], misalignsrl_type)
                 # print(f"===================================")
             if debug_n_examples_per_class is not None and self.n_examples + len(example_cache_buffer) >= 2 * debug_n_examples_per_class:
                 break
@@ -791,7 +790,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         # Cache any last examples in buffer
         for new_example in example_cache_buffer:
             self.save_example_to_file(new_example)
-        self.save_dataset_metadata(cls=MisalignSRLEncoder)
+        self.save_dataset_metadata()
         del example_cache_buffer
         example_cache_buffer: list[MistakeDetectionExample] = []
 
