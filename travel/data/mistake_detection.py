@@ -101,9 +101,12 @@ class MistakeDetectionExample:
         """
         Cuts off example's frames and frame times to the last `proportion`% of frames based on their times.
         """
+        original_length = len(self.frames)
         cutoff_time = get_cutoff_time_by_proportion(self.frame_times, proportion)
         self.frames = [f for f, t in zip(self.frames, self.frame_times) if t >= cutoff_time]
         self.frame_times = [t for t in self.frame_times if t >= cutoff_time]
+        new_length = len(self.frames)
+        print(f"{self.example_id}: cut off from {original_length} to {new_length} frames")
 
 class MistakeDetectionDataset:
     """Superclass for loading and storing a mistake detection dataset."""

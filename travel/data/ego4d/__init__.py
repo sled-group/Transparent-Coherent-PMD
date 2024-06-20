@@ -664,6 +664,14 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             mismatch_sampler = MisalignSRL(
                 MISALIGNSRL_PATH,
             )
+        else:
+            # If we already generated mismatch-augmented data, just use the data from there rather than re-generating
+            mismatch_cache_dir = self.get_cache_dir(data_split, True, debug_n_examples_per_class=debug_n_examples_per_class)
+            if os.path.exists(mismatch_cache_dir):
+                mismatch_example_dirs = json.load(open(os.path.join(mismatch_cache_dir, "dataset.json"), "r"))["example_dirs"]
+                self.example_dirs = [d for d in mismatch_example_dirs if "MisalignSRL" not in d]
+                self.n_examples += len(self.example_dirs)
+                return                
 
         ego4d = Ego4dFHOMainDataset(
             EGO4D_ANNOTATION_PATH,
