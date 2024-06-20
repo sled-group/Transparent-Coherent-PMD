@@ -43,7 +43,6 @@ class FrameVQAMistakeDetectionScorer:
         if vlm_device is not None:
             torch.cuda.set_device(f"cuda:{vlm_device}")
         self.vlm = AutoModelForVision2Seq.from_pretrained(vlm_name, 
-                                                          cache_dir=DATA_CACHE_DIR,
                                                           quantization_config=bnb_config)
         self.vlm.language_model.generation_config.top_p = None
         self.vlm.language_model.generation_config.temperature = None

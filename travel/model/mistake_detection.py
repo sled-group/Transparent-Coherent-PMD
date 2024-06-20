@@ -126,7 +126,9 @@ with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 DETECTION_FRAMES_PROPORTION = int(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 
-def aggregate_mistake_probs_over_frames(mistake_prob: np.ndarray, example: MistakeDetectionExample) -> float:
+def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], example: MistakeDetectionExample) -> float:
+    mistake_prob = np.array(mistake_prob)
+
     example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
     assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
     assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
