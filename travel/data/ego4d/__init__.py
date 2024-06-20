@@ -766,7 +766,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     if video_path not in [tp[1] for tp in ego4d.video_info]:
                         # the misalignsrl sample does not exists in this data split
                         continue
-                    video_cap = get_video(video_path)
                     try:
                         video_cap = get_video(video_path)
                     except:
