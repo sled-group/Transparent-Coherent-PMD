@@ -126,13 +126,15 @@ with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 DETECTION_FRAMES_PROPORTION = int(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 
-def aggregate_mistake_probs_over_frames(mistake_prob: np.ndarray, example: MistakeDetectionExample) -> float:
+def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], example: MistakeDetectionExample) -> float:
+    mistake_prob = np.array(mistake_prob)
+
     example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
     assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
     assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
 
     mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-    mean_mistake_prob = [p * (t / max(example.frame_times)) for p, t in zip(mean_mistake_prob, example.frame_times)] # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
+    mean_mistake_prob = [(p * (t / max(example.frame_times)) if len(example.frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, example.frame_times)] # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
     mean_mistake_prob = np.mean(mistake_prob) # Get mean mistakeprobability over all frames
     return mean_mistake_prob
 

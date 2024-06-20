@@ -142,7 +142,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
                         # altered_procedure_description = step['modified_description'] # NOTE: can use this later if needed
 
-                        if len(step['errors']) > 1:
+                        if len(mistake_types_descriptions) > 1:
                             print("Warning: Some error information discarded from only using the first annotated error.")            
 
                         example = MistakeDetectionExample(

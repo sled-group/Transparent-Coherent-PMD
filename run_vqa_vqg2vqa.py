@@ -57,7 +57,6 @@ for worker_index in range(n_workers):
     if torch.cuda.is_available():
         torch.cuda.set_device(f"cuda:{worker_index}")
     vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, 
-                                                 cache_dir=DATA_CACHE_DIR,
                                                  quantization_config=bnb_config)
     vlm.language_model.generation_config.temperature = None
     vlm.language_model.generation_config.top_p = None
