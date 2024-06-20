@@ -251,7 +251,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # For subjects and objects, capture the noun considering compound modifiers
                 if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
                     target_noun = get_compound_noun(token)
-                    print(target_noun)
                 
                 # Identify spatial relations based on specific dependencies
                 if token.dep_ == "prep":
@@ -263,7 +262,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     if prep in spatial_preps and not is_avoid_on:
                         spatial_relation = True
                         spatial_object_tokens = [get_compound_noun(child) for child in token.children]
-                        print(spatial_object_tokens)
                         is_negation_prep = prep in negation_preps
 
                 if token.text in no_rephrase_words:
@@ -307,7 +305,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         new_questions = []
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
         for (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
-            pprint(detection_result)
             boxes = detection_result["boxes"]
             bboxes = boxes.cpu().numpy() # (# boxes, 4)
 

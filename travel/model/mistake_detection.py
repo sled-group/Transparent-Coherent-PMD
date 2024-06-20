@@ -124,7 +124,7 @@ class MistakeDetectionEvaluator:
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
-DETECTION_FRAMES_PROPORTION = int(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
+DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 
 def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], example: MistakeDetectionExample) -> float:
     mistake_prob = np.array(mistake_prob)
