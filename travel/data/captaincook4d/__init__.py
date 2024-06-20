@@ -1,7 +1,7 @@
 from collections import defaultdict
-import math
 import os, json
 from PIL import Image
+from pprint import pprint
 import spacy
 from tqdm import tqdm
 from typing import Optional
@@ -48,6 +48,8 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         # TODO: When loading CaptainCook4D at least a few videos cannot be successfully loaded. Need to look into this at some point
 
         already_processed_videos = get_subdirectories(self.cache_dir)
+        print("Already processed videos:")
+        pprint(already_processed_videos)
 
         # Sample videos from CaptainCook4D
         all_video_ids = DATA_SPLITS[data_split]
@@ -82,6 +84,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
                     # Check if we already processed this video
                     if example_id in already_processed_videos:
+                        print(f"Skipping example {example_id} because we already processed it.")
                         continue
 
                     # Some steps are skipped
@@ -95,7 +98,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         adjusted_end = step['end_time'] - min(step_duration * 0.3, 3) # Adjust the end time to be earlier by a maximum of 3 seconds
                         times = generate_float_series(adjusted_start, adjusted_end, 1 / FRAME_SAMPLING_FREQUENCY) # ultimately, we'll want to look at every image frame in some regular interval to determine if there's a mistake
                         frames = extract_frames(sample_video, times)
-                        frames = [Image.fromarray(frame) for frame in frames]
+                        frames = [Image.fromarray(frame) for frame in frames] # TODO: this sometimes crashes if a frame is None due to error retrieving frame from video; Fengyuan is working on fixing bugs here so will leave it for now
 
                         # While we initially sampled FRAME_SAMPLING_FREQUENCY frames / second, we'll only keep FRAME_KEEP_FREQUENCY frames per second - for each interval, pick a frame that is not blurry and has the maximum number of target objects
                         counts = object_counter(nlp, frames, [procedure_description] * len(frames))
@@ -174,8 +177,9 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                             success_examples.append(example)
                     self.save_dataset_metadata()
 
-                except:
+                except Exception as e:
                     print(f"Warning: Video {sample_video_id} step {step_id} could not be processed!")
+                    print(e)
                     continue
 
             if debug_n_examples_per_class is not None:
