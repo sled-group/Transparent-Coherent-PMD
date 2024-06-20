@@ -134,7 +134,7 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], example
     assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
 
     mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-    mean_mistake_prob = [(p * (t / max(example.frame_times)) if len(example.frame_times) > 0 else p) for p, t in zip(mean_mistake_prob, example.frame_times)] # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
+    mean_mistake_prob = [(p * (t / max(example.frame_times)) if len(example.frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, example.frame_times)] # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
     mean_mistake_prob = np.mean(mistake_prob) # Get mean mistakeprobability over all frames
     return mean_mistake_prob
 
