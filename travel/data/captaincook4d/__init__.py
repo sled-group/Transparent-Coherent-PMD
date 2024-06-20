@@ -65,8 +65,6 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
         nlp = spacy.load('en_core_web_sm')
         object_counter = TargetObjectCounterFilter()
 
-        success_examples = []
-        error_examples = []
         for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos", total=len(all_video_ids)):            
             try:
                 sample_video = get_video(sample_video_path)
@@ -159,8 +157,6 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         )
                         self.save_example_to_file(example)
 
-                        if debug_n_examples_per_class is not None:
-                            error_examples.append(example)
                     else:
                         example = MistakeDetectionExample(
                             task_name=MistakeDetectionTasks.CaptainCook4D,
@@ -173,8 +169,6 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                             mistake=False
                         )
                         self.save_example_to_file(example)
-                        if debug_n_examples_per_class is not None:
-                            success_examples.append(example)
                     self.save_dataset_metadata()
 
                 except Exception as e:
@@ -183,12 +177,9 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                     continue
 
             if debug_n_examples_per_class is not None:
-                if len(error_examples) >= debug_n_examples_per_class and len(success_examples) >= debug_n_examples_per_class:
+                if self.n_examples >= 2 * debug_n_examples_per_class:
                     print("Collected enough positive and negative examples!")
                     break
-                else:
-                    print("Error examples:", len(error_examples))
-                    print("Success examples:", len(success_examples))
 
             sample_video.release()
       
