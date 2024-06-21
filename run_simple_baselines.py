@@ -34,7 +34,9 @@ for eval_partition in args.eval_partitions:
     if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
         eval_dataset = CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None)
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
-        eval_dataset = Ego4DMistakeDetectionDataset(data_split=eval_partition, debug_n_examples_per_class=100 if args.debug else None)
+        eval_dataset = Ego4DMistakeDetectionDataset(data_split=eval_partition, 
+                                                    mismatch_augmentation=True,
+                                                    debug_n_examples_per_class=100 if args.debug else None)
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
     labels = [example.mistake for example in eval_dataset]
