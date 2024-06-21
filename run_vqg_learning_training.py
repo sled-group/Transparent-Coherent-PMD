@@ -7,7 +7,7 @@ from collections import defaultdict
 from datasets import Dataset
 import datetime
 import os
-from peft import LoraConfig, TaskType
+from peft import LoraConfig, TaskType, prepare_model_for_kbit_training
 from pprint import pprint
 import random
 import torch
@@ -118,19 +118,22 @@ def main():
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,
     )
     tokenizer = AutoTokenizer.from_pretrained(args.lm_name)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(args.lm_name, quantization_config=bnb_config)
+    model = AutoModelForCausalLM.from_pretrained(args.lm_name, 
+                                                 quantization_config=bnb_config, 
+                                                 trust_remote_code=True)
+    model = prepare_model_for_kbit_training(model)
 
-    # TODO: is there a better option for PEFT on this model?
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM,  # configured for causal LM
                             inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
-                            r=128,                          # dimension of low-rank matrices
-                            lora_alpha=16,                 # scaling coefficient of weight update
+                            r=128,                           # dimension of low-rank matrices
+                            lora_alpha=16,                  # scaling coefficient of weight update
                             target_modules="all-linear",
-                            lora_dropout=0.05,               # dropout regularization on LoRA weights
+                            lora_dropout=0.1,               # dropout regularization on LoRA weights
                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 
     # Set up output directory, training args, and wandb
@@ -141,24 +144,25 @@ def main():
     this_results_dir = os.path.join(args.training_data_directory, output_dir_name)
     wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_directory.split('/')[-2:])}"
     training_args = TrainingArguments(output_dir=this_results_dir,
-                                    per_device_train_batch_size=args.train_batch_size,
-                                    per_device_eval_batch_size=args.eval_batch_size,
-                                    learning_rate=args.learning_rate,
-                                    num_train_epochs=args.n_epochs,
-                                    fp16=True,
-                                    gradient_accumulation_steps=1 if args.debug else 10,
-                                    save_strategy=args.save_strategy,
-                                    save_total_limit=3,
-                                    save_only_model=False,
-                                    remove_unused_columns=False,
-                                    do_eval=True,
-                                    evaluation_strategy="steps",
-                                    eval_steps=0.05, # TODO: adjust later once model is actually training, e.g., change back to "epoch"
-                                    report_to="wandb",
-                                    logging_strategy="steps",
-                                    logging_steps=1 if args.debug else 10,
-                                    run_name=wandb_run_name,
-                                    ddp_backend="gloo",)
+                                      per_device_train_batch_size=args.train_batch_size,
+                                      per_device_eval_batch_size=args.eval_batch_size,
+                                      learning_rate=args.learning_rate,
+                                      optim='paged_adamw_8bit',
+                                      bf16=True,
+                                      num_train_epochs=args.n_epochs,
+                                      gradient_accumulation_steps=1 if args.debug else 10,
+                                      save_strategy=args.save_strategy,
+                                      save_total_limit=3,
+                                      save_only_model=False,
+                                      remove_unused_columns=False,
+                                      do_eval=True,
+                                      evaluation_strategy="steps",
+                                      eval_steps=0.05, # TODO: adjust later once model is actually training, e.g., change back to "epoch"
+                                      report_to="wandb",
+                                      logging_strategy="steps",
+                                      logging_steps=1 if args.debug else 10,
+                                      run_name=wandb_run_name,
+                                      ddp_backend="gloo",)
 
     dpo_trainer = DPOTrainer(
         model,
