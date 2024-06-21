@@ -649,7 +649,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             instruction_text = instruction_text.replace(original_text, replaced_text)
         return instruction_text
 
-    # TODO: when generating non-augmented dataset, make it possible to borrow from augmented dataset if it exists
     def generate_examples(self,
                           data_split: str,
                           mismatch_augmentation: bool=False,
@@ -671,7 +670,17 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 mismatch_example_dirs = json.load(open(os.path.join(mismatch_cache_dir, "dataset.json"), "r"))["example_dirs"]
                 self.example_dirs = [d for d in mismatch_example_dirs if "MisalignSRL" not in d]
                 self.n_examples += len(self.example_dirs)
-                return                
+                return
+
+        # If we're only loading a small amount of data for debugging purpose but we've loaded the full data before, just borrow the data from the full dataset
+        if debug_n_examples_per_class is not None:
+            full_cache_dir = self.get_cache_dir(data_split, mismatch_augmentation, debug_n_examples_per_class=None)
+            if os.path.exists(full_cache_dir):
+                full_example_dirs = json.load(open(os.path.join(full_cache_dir, "dataset.json"), "r"))["example_dirs"]
+                random.shuffle(full_example_dirs)
+                self.example_dirs = [full_example_dirs[:2*debug_n_examples_per_class]]
+                self.n_examples += len(self.example_dirs)
+                return
 
         ego4d = Ego4dFHOMainDataset(
             EGO4D_ANNOTATION_PATH,

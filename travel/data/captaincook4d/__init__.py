@@ -131,7 +131,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                     if "errors" in step and len(step["errors"]) > 0:               
 
                         # Filter out error types that aren't perceivable from individual images
-                        mistake_types_descriptions = [m for m in step['errors'] if m['tag'] not in ["Order Error", "Timing Error", "Temperature Error"]]
+                        mistake_types_descriptions = [m for m in step['errors'] if m['tag'] not in ["Order Error", "Timing Error", "Temperature Error", "Measurement Error"]]
                         if len(mistake_types_descriptions) > 0:
                             mistake_type, mistake_description = mistake_types_descriptions[0]['tag'], mistake_types_descriptions[0]['description']
                         else:

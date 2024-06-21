@@ -222,7 +222,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         spatial_preps = ["in", "on", "inside", "outside", "inside of", "outside of",
                         "off", "out", "out of", "within", "across"]
         negation_preps = ["out", "out of", "outside", "outside of", "off"]
-        no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every"]
+        no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every", "single"]
         avoid_with_on = ["temperature", "heat", "low", "medium", "high"]
 
         results = []
