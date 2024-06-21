@@ -91,7 +91,7 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
         dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                                mismatch_augmentation=False,
-                                               debug_n_examples_per_class=20 if args.debug else None)
+                                               debug_n_examples_per_class=100 if args.debug else None)
         indexed_procedures = dataset.get_all_procedures
 
     # Generate prompts - one per example

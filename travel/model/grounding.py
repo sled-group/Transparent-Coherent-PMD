@@ -304,7 +304,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         new_frames = []
         new_questions = []
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
-        for (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
+        for old_question, (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(questions, spatial_parse_results, detection_results, frames, padded_images):
             boxes = detection_result["boxes"]
             bboxes = boxes.cpu().numpy() # (# boxes, 4)
 
@@ -360,11 +360,11 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     new_frame = new_frame.crop((min_x, min_y, max_x, max_y))
                 
                 new_frames.append(new_frame)
+                new_questions.append(new_question)
             else:
-                # No detection - don't modify the image
+                # No detection - don't modify the image or question
                 new_frames.append(frame)
-
-            new_questions.append(new_question)
+                new_questions.append(old_question)
 
         return new_frames, new_questions
 

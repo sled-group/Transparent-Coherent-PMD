@@ -53,6 +53,8 @@ EGO4D_IGNORE_VERBS = [
     'cross', # People crossing over things
     'kick', # Kicking objects with foot - usually not related to any task
     "check", # Check on something, e.g., look at something - doesn't imply a state change
+    # "adjust_(regulate,_increase/reduce,_change)", # Adjust something (not clear in which way, and usually requires several frames to judge)
+    # "turn_(spin,_rotate,_flip,_turn_over)" # Turn something (requires multiple frames to judge)
 ] 
 
 C_REGEX = re.compile(r"^\#C\s+C", re.IGNORECASE)
@@ -678,7 +680,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             if os.path.exists(full_cache_dir):
                 full_example_dirs = json.load(open(os.path.join(full_cache_dir, "dataset.json"), "r"))["example_dirs"]
                 random.shuffle(full_example_dirs)
-                self.example_dirs = [full_example_dirs[:2*debug_n_examples_per_class]]
+                self.example_dirs = full_example_dirs[:2*debug_n_examples_per_class]
                 self.n_examples += len(self.example_dirs)
                 return
 
