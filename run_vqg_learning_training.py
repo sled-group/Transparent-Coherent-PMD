@@ -120,7 +120,7 @@ def main():
         bnb_4bit_compute_dtype=torch.bfloat16,
         bnb_4bit_use_double_quant=True,
     )
-    tokenizer = AutoTokenizer.from_pretrained(args.lm_name)
+    tokenizer = AutoTokenizer.from_pretrained(args.lm_name, add_eos_token=True, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     model = AutoModelForCausalLM.from_pretrained(args.lm_name, 

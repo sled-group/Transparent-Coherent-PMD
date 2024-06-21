@@ -202,8 +202,6 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
         # Gather up VQA outputs in the correct structure for a MistakeDetectionEvaluator
         for example in tqdm(dataset_chunk, desc=f"gathering VQA outputs ({vlm.device})"):
             
-            # Cutoff again since the example will be reloaded from disk when we access it
-            example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
             step_id = example.procedure_id
             example_vqa_outputs = []
 

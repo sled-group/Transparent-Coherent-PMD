@@ -132,7 +132,7 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
         print("Mistake probs (input):")
         pprint(mistake_prob)
 
-    assert len(frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
+    assert len(frame_times) == len(mistake_prob), f"Compilation of mistake detections for example has a shape issue! Frame times length = {len(frame_times)}; Mistake probs length = {len(mistake_prob)}"
     assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
 
     # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
@@ -144,16 +144,18 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
 
     # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
     mean_mistake_prob = [(p * (t / max(frame_times)) if len(frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, frame_times)] 
+    # mean_mistake_prob = [(p * (t / sum(frame_times)) if len(frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, frame_times)] 
 
     if verbose:
         print("Mistake probs (after time-weighting)")
         pprint(mean_mistake_prob)
 
     # Get mean mistake probability over all frames
-    mean_mistake_prob = np.mean(mistake_prob) 
+    mean_mistake_prob = np.mean(mean_mistake_prob) 
+    # mean_mistake_prob = np.sum(mean_mistake_prob) 
 
     if verbose:
-        print("Mistake prob (final):")
+        print("Mistake prob (final mean):")
         print(mean_mistake_prob)
 
     return mean_mistake_prob
@@ -187,7 +189,7 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
             if len(mistake_prob) > 0:
                 example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache                
                 mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example.frame_times)                                
-                mistake_pred_final = True if mean_mistake_prob > detection_threshold else False
+                mistake_pred_final = True if mean_mistake_prob >= detection_threshold else False
             else:
                 # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;
                 # in this case, the target object is likely not present at all in the video, suggesting an incorrect object is used instead
