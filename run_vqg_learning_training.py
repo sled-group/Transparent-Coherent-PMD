@@ -22,8 +22,8 @@ from travel.data.vqg_learning import load_vqg_training_examples
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--training_data_directory", type=str, required=True, help="Directory where training vqg_training_examples.json is stored.")
-    parser.add_argument("--val_data_directory", type=str, required=False, help="Directory where validation vqg_training_examples.json is stored. If not passed, will be set to the same as the training data directory.")
+    parser.add_argument("--training_data_path", type=str, required=True, help="File or directory where training vqg_training_examples.json is stored.")
+    parser.add_argument("--val_data_path", type=str, required=False, help="File or directory where validation vqg_training_examples.json is stored. If not passed, will be set to the same as the training data directory.")
     parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
@@ -39,8 +39,8 @@ def main():
     global_rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
     world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
 
-    if args.val_data_directory is None:
-        args.val_data_directory = args.training_data_directory
+    if args.val_data_path is None:
+        args.val_data_path = args.val_data_path
 
     print("World size:", world_size)
     print("Host address:", os.environ['MASTER_ADDR'] if 'MASTER_ADDR' in os.environ else None)
@@ -51,9 +51,15 @@ def main():
 
     print(f"({global_rank}) Preparing training and validation data...")
     data = {
-        "train": load_vqg_training_examples(args.training_data_directory, "train"),
-        "val": load_vqg_training_examples(args.val_data_directory, "val")
+        "train": load_vqg_training_examples(args.training_data_path, "train"),
+        "val": load_vqg_training_examples(args.val_data_path, "val")
     }
+    # If a path to a .json file was provided, change it to the directory the .json file is in
+    if args.training_data_path.endswith(".json"):
+        args.training_data_path = "/".join(args.training_data_path.split("/")[:-1])
+    if args.val_data_path.endswith(".json"):
+        args.val_data_path = "/".join(args.val_data_path.split("/")[:-1])
+    
     # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
 
     # Pair examples based on preference scores
@@ -80,7 +86,8 @@ def main():
         chosen = []
         rejected = []
         for ex1, ex2 in tqdm(pairs, "Pairing examples"):
-            assert ex1.prompt == ex2.prompt, "Prompts for training pair don't match!"
+            if not args.debug:
+                assert ex1.prompt == ex2.prompt, f"Prompts for training pair don't match!\n\n{ex1.prompt}\n\n{ex2.prompt}"
             prompt.append(ex1.prompt)
 
             gen1 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex1.questions)])
@@ -141,8 +148,8 @@ def main():
     output_dir_name = f"DPO_{timestamp.strftime('%Y%m%d%H%M%S')}"
     if args.debug:
         output_dir_name += "_debug"
-    this_results_dir = os.path.join(args.training_data_directory, output_dir_name)
-    wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_directory.split('/')[-2:])}"
+    this_results_dir = os.path.join(args.training_data_path, output_dir_name)
+    wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
     training_args = TrainingArguments(output_dir=this_results_dir,
                                       per_device_train_batch_size=args.train_batch_size,
                                       per_device_eval_batch_size=args.eval_batch_size,
