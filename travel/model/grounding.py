@@ -224,6 +224,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         negation_preps = ["out", "out of", "outside", "outside of", "off"]
         no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every", "single"]
         avoid_with_on = ["temperature", "heat", "low", "medium", "high"]
+        avoid_with_in = ["hand", "left hand", "right hand", "someone's hand"]
 
         results = []
         for question in questions:
@@ -235,7 +236,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
             no_rephrase_word_present = False
             is_negation_prep = False
-            is_avoid_on = "on" in question and any(word in question for word in avoid_with_on)
 
             # Function to extract the compound noun if it exists
             def get_compound_noun(token):
@@ -259,10 +259,13 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     if idx != 0 and prep == "of":
                         prep = doc[idx - 1].text + " of"
 
-                    if prep in spatial_preps and not is_avoid_on:
-                        spatial_relation = True
+                    if prep in spatial_preps and not is_avoid_on and not is_avoid_in:
                         spatial_object_tokens = [get_compound_noun(child) for child in token.children]
-                        is_negation_prep = prep in negation_preps
+                        is_avoid_on = prep == "on" and any(word.lower() in avoid_with_on for word in avoid_with_on)
+                        is_avoid_in = prep == "in" and any(word.lower() in avoid_with_in for word in avoid_with_on)
+                        if not is_avoid_on and not is_avoid_in:
+                            spatial_relation = True
+                            is_negation_prep = prep in negation_preps
 
                 if token.text in no_rephrase_words:
                     no_rephrase_word_present = True

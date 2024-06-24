@@ -145,6 +145,9 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             pickle.dump((questions, prompts, answers, frames, example_ids), open(prompt_cache_fname, "wb"))
         else:
             questions, prompts, answers, frames, example_ids = pickle.load(open(prompt_cache_fname, "rb"))
+            # Still clip the example frames
+            for example in dataset_chunk:
+                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
         
         vqa_cache_path = os.path.join(worker_cache_dir, f"chunk{chunk_idx}.pt")
 
@@ -160,8 +163,12 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                 frames = visual_filter(nlp, frames, questions)
             elif visual_filter_mode in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase]:
                 frames, new_questions = visual_filter(nlp, frames, questions)
+                
                 # Replace rephrased questions into prompts, but save original questions for bookkeeping
                 prompts = [prompt.replace(question, new_question) for prompt, question, new_question in zip(prompts, questions, new_questions)]
+
+                # Save prompts one more time so they can be reloaded later
+                pickle.dump((questions, prompts, answers, frames, example_ids), open(prompt_cache_fname, "wb"))
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -196,6 +203,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
 
         # Gather up important information from VQA outputs, organized by example ID
         outputs_by_id = defaultdict(list)
+        assert len(frames) == len(questions) == len(prompts) == len(answers) == len(example_ids), f"Length issue with frames ({len(frames)}), questions ({len(questions)}), prompts ({len(prompts)}), answers ({len(answers)}), or example_ids ({len(example_ids)})!"
         for output_index, (frame, question, prompt, answer, eid) in enumerate(zip(frames, questions, prompts, answers, example_ids)):
             outputs_by_id[eid].append((output_index, frame, question, prompt, answer))
 
@@ -209,6 +217,8 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             for _ in example.frames:
                 frame_vqa_outputs = []
                 for _ in range(n_prompts_per_frame):
+                    print(example.example_id, parallel_idx)
+                    print(outputs_by_id.keys())
                     output_index, frame, question, prompt, answer = outputs_by_id[example.example_id][parallel_idx]
                     frame_vqa_outputs.append(
                         VQAOutputs(
