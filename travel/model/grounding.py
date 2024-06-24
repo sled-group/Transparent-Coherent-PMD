@@ -224,7 +224,9 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         negation_preps = ["out", "out of", "outside", "outside of", "off"]
         no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every", "single"]
         avoid_with_on = ["temperature", "heat", "low", "medium", "high"]
-        avoid_with_in = ["hand", "left hand", "right hand", "someone's hand"]
+        avoid_with_in = ["hand", "left hand", "right hand", "someone's hand", "someone's left hand", "someone's right hand"]
+        is_avoid_on = False
+        is_avoid_in = False
 
         results = []
         for question in questions:
@@ -243,10 +245,11 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 return compound + " " + token.text if compound else token.text
 
             for idx, token in enumerate(doc):
-                # Detect negation
-                if token.dep_ == "neg":
+                # Detect negation of a spatial relation
+                if token.dep_ == "neg" and doc[idx+1].dep_ == "prep" and doc[idx+1].text in spatial_preps:
                     negation_present = True
                     negation_token = token.text
+                    print([c.text for c in token.children])
 
                 # For subjects and objects, capture the noun considering compound modifiers
                 if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
@@ -259,10 +262,10 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     if idx != 0 and prep == "of":
                         prep = doc[idx - 1].text + " of"
 
-                    if prep in spatial_preps and not is_avoid_on and not is_avoid_in:
+                    if prep in spatial_preps:
                         spatial_object_tokens = [get_compound_noun(child) for child in token.children]
-                        is_avoid_on = prep == "on" and any(word.lower() in avoid_with_on for word in avoid_with_on)
-                        is_avoid_in = prep == "in" and any(word.lower() in avoid_with_in for word in avoid_with_on)
+                        is_avoid_on = prep == "on" and any(word.lower() in spatial_object_tokens for word in avoid_with_on)
+                        is_avoid_in = prep == "in" and any(word.lower() in spatial_object_tokens for word in avoid_with_in)
                         if not is_avoid_on and not is_avoid_in:
                             spatial_relation = True
                             is_negation_prep = prep in negation_preps
@@ -279,7 +282,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 if rephrase_questions and not no_rephrase_word_present:
                     for token in spatial_object_tokens:
                         question = question.replace(token, "image")
-                    question = question.replace(prep, "in")
+                    question = question.replace(" " + prep + " ", " in ")
 
                     # Replace articles and possessives that don't play well with "image"
                     for determiner_phrase in [" someone's image", " an image", " a image"]:
@@ -293,7 +296,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             else:
                 look_at_noun = True
 
-            results.append((look_at_noun, target_noun if target_noun != "" and target_noun not in avoid_with_on else None, question))
+            results.append((look_at_noun, target_noun if (target_noun != "" and not is_avoid_on and not is_avoid_in) else None, question))
         return results
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE) -> tuple[list[Image.Image], list[str]]:
