@@ -167,7 +167,6 @@ class AdaptiveVisualFilter:
                 # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
                 padded_images += this_padded_images
                 results += self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
-                
                 del inputs
                 del outputs
 
@@ -263,7 +262,8 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                         prep = doc[idx - 1].text + " of"
 
                     if prep in spatial_preps:
-                        spatial_object_tokens = [get_compound_noun(child) for child in token.children]
+                        spatial_object_tokens = [get_compound_noun(child) for child in token.children if child.pos_ == "NOUN"]
+                        print(spatial_object_tokens)
                         is_avoid_on = prep == "on" and any(word.lower() in spatial_object_tokens for word in avoid_with_on)
                         is_avoid_in = prep == "in" and any(word.lower() in spatial_object_tokens for word in avoid_with_in)
                         if not is_avoid_on and not is_avoid_in:
@@ -281,7 +281,8 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # Rephrase question if needed
                 if rephrase_questions and not no_rephrase_word_present:
                     for token in spatial_object_tokens:
-                        question = question.replace(token, "image")
+                        question = question.replace(f"{token}?", "image?")
+                        question = question.replace(f" {token} ", " image ")
                     question = question.replace(" " + prep + " ", " in ")
 
                     # Replace articles and possessives that don't play well with "image"
