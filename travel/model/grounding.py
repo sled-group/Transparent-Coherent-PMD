@@ -248,11 +248,16 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 if token.dep_ == "neg" and doc[idx+1].dep_ == "prep" and doc[idx+1].text in spatial_preps:
                     negation_present = True
                     negation_token = token.text
-                    print([c.text for c in token.children])
 
                 # For subjects and objects, capture the noun considering compound modifiers
                 if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
                     target_noun = get_compound_noun(token)
+                    
+                    # We should never apply spatial filter on the nouns in avoid_with_on and avoid_with_in
+                    if target_noun in avoid_with_on:
+                        target_noun = ""
+                    if target_noun in avoid_with_in:
+                        target_noun = ""
                 
                 # Identify spatial relations based on specific dependencies
                 if token.dep_ == "prep":
@@ -263,7 +268,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
                     if prep in spatial_preps:
                         spatial_object_tokens = [get_compound_noun(child) for child in token.children if child.pos_ == "NOUN"]
-                        print(spatial_object_tokens)
                         is_avoid_on = prep == "on" and any(word.lower() in spatial_object_tokens for word in avoid_with_on)
                         is_avoid_in = prep == "in" and any(word.lower() in spatial_object_tokens for word in avoid_with_in)
                         if not is_avoid_on and not is_avoid_in:
