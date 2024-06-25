@@ -42,3 +42,23 @@ def simple_present_to_imperative(nlp: spacy.Language, sentence: str) -> str:
     
     # If the sentence doesn't match the expected pattern, return it as is
     return sentence
+
+def get_compound_noun(token):
+    """Extracts compound noun from a spacy token if it exists. Pass the next two tokens after token as a list [token1, token2] for an additional method to find noun phrases."""
+    # print(token.text, "lefts", [t.text for t in token.lefts])
+    # print(token.text, "rights", [t.text for t in token.rights])
+    # print(token.text, "head", token.head.text, token.head.head.text)
+    # for t in token.rights:
+    #     print(f"{t.text}", "subrights", [t2 for t2 in t.children])
+    compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
+    if compound:
+        compound = compound + " " + token.text
+    else:
+        compound = token.text
+
+    # Also check if this token is preceded by "____ of", e.g., "pile of" or "piece of"
+    if token.head.text == "of" and token.head.head.pos_ == "NOUN":
+        compound = token.head.head.text + " of " + compound
+
+    return compound
+

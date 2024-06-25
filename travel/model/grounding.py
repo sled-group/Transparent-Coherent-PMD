@@ -13,6 +13,7 @@ import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils.image import get_preprocessed_image
+from travel.data.utils.text import get_compound_noun
 from travel.data.vqg import VQGOutputs
 
 with open('config.yml', 'r') as file:
@@ -204,7 +205,10 @@ class AdaptiveVisualFilter:
 
 DO_NOT_PARSE_NOUNS = [
     "image",
-    "anyone"
+    "anyone",
+    "heat",
+    "temperature",
+    "someone",
 ]
 
 class TargetObjectCounterFilter(AdaptiveVisualFilter):
@@ -216,16 +220,15 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
 
     @staticmethod
     def parse_sentences_for_target_objects(nlp: English, sentences: list[str]) -> list[list[str]]:
-        # Function to extract the compound noun if it exists
-        def get_compound_noun(token):
-            compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
-            return compound + " " + token.text if compound else token.text
-
         results = []
         for sentence in sentences:
             doc = nlp(sentence)
             nouns = []
             
+            # for token in doc:
+            #     print(token.text, token.dep_, token.pos_)
+            # print("\n\n")
+
             # Grab nouns from sentence
             for token_idx, token in enumerate(doc):
                 if token.dep_ in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
@@ -234,16 +237,21 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
                     # nsubj should never be at the end of the sentence in questions, so ignore if this happens
                     if token.dep_ == "nsubj" and token_idx == len(doc) - 2 and doc[token_idx + 1].pos_ == "PUNCT":
                         continue
-                    nouns.append(get_compound_noun(token))
+                    
+                    # If this noun is followed by "of", skip since we'll add the full noun phrase later
+                    if "of" in [t.text for t in token.rights]:
+                        continue
+
+                    # Some common words should not be counted as objects
+                    if token.text not in DO_NOT_PARSE_NOUNS:
+                        nouns.append(get_compound_noun(token))
             
             # If we didn't find a noun with first logic, be a bit more lenient and look for anything else labeled as a noun
             if len(nouns) == 0:
                 for token in doc:
                     if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
-                        nouns.append(token.text)
-
-            # Make sure "image" and other common non-object words are not recognized as objects
-            nouns = [n for n in nouns if n not in DO_NOT_PARSE_NOUNS]
+                        if token.text not in DO_NOT_PARSE_NOUNS:
+                            nouns.append(get_compound_noun(token))
 
             results.append(nouns)
         return results
@@ -308,11 +316,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
             no_rephrase_word_present = False
             is_negation_prep = False
-
-            # Function to extract the compound noun if it exists
-            def get_compound_noun(token):
-                compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
-                return compound + " " + token.text if compound else token.text
             
             # Detect negation of a spatial relation
             for idx, token in enumerate(doc):
@@ -322,25 +325,29 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
             # For subjects and objects, capture the noun considering compound modifiers
             for idx, token in enumerate(doc):
-                if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN" and token.text not in DO_NOT_PARSE_NOUNS:
-                    target_noun = get_compound_noun(token)
+                if token.dep_ in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
+                    this_target_noun = get_compound_noun(token)
                     
-                    # We should never apply spatial filter on the nouns in avoid_with_on and avoid_with_in
-                    if target_noun in avoid_with_on:
-                        target_noun = ""
-                    if target_noun in avoid_with_in:
-                        target_noun = ""
-
-                    # Sometimes adjectives near the end of a sentence are mistakenly labeled as nsubj; 
-                    # nsubj should never be at the end of the sentence in questions, so ignore if this happens
-                    if token.dep_ == "nsubj" and idx == len(doc) - 2 and doc[idx + 1].pos_ == "PUNCT":
-                        target_noun = ""
+                    # Check the following conditions:
+                    # - We should never apply spatial filter on the nouns in avoid_with_on and avoid_with_in and DO_NOT_PARSE_NOUNS
+                    # - Some common words are never objects, e.g., "anyone", "image"
+                    # - Also, sometimes adjectives near the end of a sentence are mistakenly labeled as nsubj; nsubj should never be at the end of the sentence in questions, so ignore if this happens
+                    # - Noun must not be followed by "of", e.g., "piece of wood"; for these noun phrases with "of", we gather them from the tail noun (e.g., "wood", not "piece")
+                    if not(this_target_noun in avoid_with_on \
+                           or this_target_noun in avoid_with_in \
+                            or this_target_noun in DO_NOT_PARSE_NOUNS \
+                            or token.dep_ == "nsubj" and idx == len(doc) - 2 and doc[idx + 1].pos_ == "PUNCT" \
+                            or "of" in [t.text for t in token.rights]):
+                        target_noun = this_target_noun
             
             # If we didn't find a noun with first logic, be a bit more lenient and look for anything else labeled as a noun
             if target_noun == "":
                 for token in doc:
-                    if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"] and token.text not in DO_NOT_PARSE_NOUNS:
-                        target_noun = token.text
+                    if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
+                        if not(this_target_noun in avoid_with_on \
+                            or this_target_noun in avoid_with_in \
+                                or this_target_noun in DO_NOT_PARSE_NOUNS):
+                            target_noun = token.text
 
             # Identify spatial relations based on specific dependencies
             for idx, token in enumerate(doc):
@@ -473,45 +480,12 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
     def __init__(self, **kwargs: dict[str, Any]):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def parse_questions_for_contrastive_region_filter(nlp: English, questions: list[str]) -> list[list[str]]:
-        # Function to extract the compound noun if it exists
-        def get_compound_noun(token):
-            compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
-            return compound + " " + token.text if compound else token.text
-
-        results = []
-        for sentence in questions:
-            doc = nlp(sentence)
-            nouns = []
-            
-            # Grab nouns from sentence
-            for token_idx, token in enumerate(doc):
-                if token.dep_ in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
-                    
-                    # Sometimes adjectives near the end of a sentence are mistakenly labeled as nsubj; 
-                    # nsubj should never be at the end of the sentence in questions, so ignore if this happens
-                    if token.dep_ == "nsubj" and token_idx == len(doc) - 2 and doc[token_idx + 1].pos_ == "PUNCT":
-                        continue
-                    nouns.append(get_compound_noun(token))
-            
-            # If we didn't find a noun with first logic, be a bit more lenient and look for anything else labeled as a noun
-            if len(nouns) == 0:
-                for token in doc:
-                    if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
-                        nouns.append(token.text)
-
-            # Make sure "image" and other common non-object words are not recognized as objects
-            nouns = [n for n in nouns if n not in DO_NOT_PARSE_NOUNS]
-
-            results.append(nouns)
-        return results
-
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> list[Image.Image]:
-        # Parse objects from questions
-        object_parse_results = self.parse_questions_for_contrastive_region_filter(nlp, questions)
+        # Parse objects from questions - reuse parsing method from TargetObjectCounterFilter
+        object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
         detection_results, padded_images = self.run_detection(object_parse_results, frames)
         new_frames = []
+
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
         for detection_results_single, frame, frame_padded in zip(detection_results, frames, padded_images):
             mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
