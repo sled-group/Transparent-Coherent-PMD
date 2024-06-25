@@ -136,7 +136,7 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
     assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
 
     # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-    mean_mistake_prob = np.max(mistake_prob, axis=1)
+    mean_mistake_prob = np.max(mistake_prob, axis=-1)
 
     if verbose:
         print("Mistake probs (after max):")
@@ -187,9 +187,10 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
         # Heuristic: average likelihood of mistake then use a threshold to decide if there's a mistake
         agg_preds = []
         for mistake_prob, example in tqdm(zip(mistake_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
-            if len(mistake_prob) > 0:
+            print(mistake_prob, len(mistake_prob))
+            if len(mistake_prob) > 0 and len(mistake_prob[0]) > 0:
                 example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache                
-                mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example.frame_times)                                
+                mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example.frame_times)
                 mistake_pred_final = True if mean_mistake_prob >= detection_threshold else False
             else:
                 # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;
