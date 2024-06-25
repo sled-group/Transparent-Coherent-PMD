@@ -8,7 +8,7 @@ from spacy.lang.en import English
 import torch
 from tqdm import tqdm
 from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesConfig, BatchEncoding
-from typing import Optional, Any
+from typing import Optional, Any, Union
 import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
@@ -221,8 +221,10 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
         return results
     
     @staticmethod
-    def count_objects_in_detection_results(detection_results_single: list[dict[Any, Any]]):
+    def count_objects_in_detection_results(detection_results_single: Union[list[dict[Any, Any]], dict[Any, Any]]):
         """Counts the unique objects recognized in detection results."""
+        if type(detection_results_single) == dict:
+            detection_results_single = [detection_results_single]
         detection_results_single = [result["labels"].cpu().numpy() for result in detection_results_single]
         object_counts = []
         for result in detection_results_single:
@@ -237,11 +239,8 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
         object_parse_results = self.parse_sentences_for_target_objects(nlp, procedures)
         detection_results, _ = self.run_detection(object_parse_results, frames)
         
-        target_object_counts = []
-
-        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
-        for detection_results_single in detection_results:
-            target_object_counts.append(sum(list(TargetObjectCounterFilter.count_objects_in_detection_results(detection_results_single).values())))
+        # Get target object counts
+        target_object_counts = [sum(list(result.values())) for result in TargetObjectCounterFilter.count_objects_in_detection_results(detection_results)]
 
         return target_object_counts
 
@@ -349,6 +348,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         return results
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE) -> tuple[list[Image.Image], list[str]]:
+        
         # Parse spatial dependencies from questions and use them to detect objects
         spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions, rephrase_questions=self.rephrase_questions)
         detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], 
@@ -359,7 +359,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
         counting_results, _ = self.run_detection(object_parse_results, frames)
         object_counts = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results)
-        object_counts = [{object_parse_results[object_count_idx][label_idx]: label_count for label_idx, label_count in object_count.items()} for object_count_idx, object_count in enumerate(object_counts)]
+        object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_counts)]
 
         new_frames = []
         new_questions = []
@@ -411,8 +411,8 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 new_height = new_frame.width / frame.width * frame.height
                 new_frame = new_frame.crop((0, 0, new_frame.width - 1, new_height))
 
-                if look_at_noun:
-                    # If we're blocking out everything but some bboxes
+                if look_at_noun and MASK_STRENGTH == 1.0:
+                    # If we're blocking out everything but some bboxes, crop the image to only look at them
                     min_x = np.min(bboxes[:, 0])
                     min_y = np.min(bboxes[:, 1])
                     max_x = np.max(bboxes[:, 2])
