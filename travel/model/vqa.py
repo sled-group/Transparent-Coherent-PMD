@@ -152,29 +152,28 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
         vqa_cache_path = os.path.join(worker_cache_dir, f"chunk{chunk_idx}.pt")
 
         # Intermediate results of detection aren't saved, so this is just a temporary hack just to check if we really need to run detection again
-        logits = torch.zeros((0, vlm.vocab_size)).float()
-        if os.path.exists(vqa_cache_path):
-            logits = torch.load(vqa_cache_path)
+        visible_target_objects = None
 
         # Run visual filter if we have one, and we haven't already previously run it in full
         original_frames = frames
-        if visual_filter_mode is not None and visual_filter is not None and logits.shape[0] < len(frames):
+        if visual_filter_mode is not None and visual_filter is not None:
             if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
                 frames = visual_filter(nlp, frames, questions)
             elif visual_filter_mode in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase]:
-                frames, new_questions = visual_filter(nlp, frames, questions)
+                spatial_cache_fname = os.path.join(worker_cache_dir, f"spatial_filter_outputs_chunk{chunk_idx}.pkl")
+                if os.path.exists(spatial_cache_fname):
+                    frames, new_questions, visible_target_objects = pickle.load(open(spatial_cache_fname, "rb"))
+                else:
+                    frames, new_questions, visible_target_objects = visual_filter(nlp, frames, questions)
                 
                 # Replace rephrased questions into prompts, but save original questions for bookkeeping
                 prompts = [prompt.replace(question, new_question) for prompt, question, new_question in zip(prompts, questions, new_questions)]
 
-                # Save prompts one more time so they can be reloaded later
+                # Save one more time so new prompts can be reloaded later
                 pickle.dump((questions, prompts, answers, frames, example_ids), open(prompt_cache_fname, "wb"))
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
-        # Then delete these pre-loaded logits
-        del logits
 
         logits = run_vqa(vlm,
                          vlm_processor,
@@ -205,7 +204,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
         outputs_by_id = defaultdict(list)
         assert len(frames) == len(questions) == len(prompts) == len(answers) == len(example_ids), f"Length issue with frames ({len(frames)}), questions ({len(questions)}), prompts ({len(prompts)}), answers ({len(answers)}), or example_ids ({len(example_ids)})!"
         for output_index, (frame, question, prompt, answer, eid) in enumerate(zip(frames, questions, prompts, answers, example_ids)):
-            outputs_by_id[eid].append((output_index, frame, question, prompt, answer))
+            outputs_by_id[eid].append((output_index, frame, question, prompt, answer, visible_target_objects[output_index] if visible_target_objects is not None else None))
 
         # Gather up VQA outputs in the correct structure for a MistakeDetectionEvaluator
         for example in tqdm(dataset_chunk, desc=f"gathering VQA outputs ({vlm.device})"):
@@ -217,9 +216,8 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             for _ in example.frames:
                 frame_vqa_outputs = []
                 for _ in range(n_prompts_per_frame):
-                    print(example.example_id, parallel_idx)
-                    print(outputs_by_id.keys())
-                    output_index, frame, question, prompt, answer = outputs_by_id[example.example_id][parallel_idx]
+                    output_index, frame, question, prompt, answer, target_object_counts = outputs_by_id[example.example_id][parallel_idx]
+
                     frame_vqa_outputs.append(
                         VQAOutputs(
                             example.task_name,
@@ -231,6 +229,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                             response_token_ids,
                             original_logits[output_index] - logits[output_index] if original_logits is not None else logits[output_index],        
                             question=question, # Save original question for NLI mistake detection evaluator
+                            target_object_counts=target_object_counts # Save count of target objects if we have it
                         )      
                     )
                     frame_vqa_outputs[-1].cache_frame(worker_cache_dir)

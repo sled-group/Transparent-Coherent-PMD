@@ -202,7 +202,51 @@ class AdaptiveVisualFilter:
     def __call__(self) -> list[Image.Image]:
         raise NotImplementedError("Subclass must implement __call__!")
 
+class TargetObjectCounterFilter(AdaptiveVisualFilter):
+    """
+    This visual filter is used to count target objects from procedures in frames.
+    """
+    def __init__(self, **kwargs: dict[str, Any]):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def parse_sentences_for_target_objects(nlp: English, sentences: list[str]) -> list[list[str]]:
+        results = []
+        for sentence in sentences:
+            doc = nlp(sentence)
+            nouns = []
+            for chunk in doc.noun_chunks:
+                nouns.append(chunk.text.replace("the ", "").replace("an ", "").replace("a ", ""))
+            results.append(nouns)
+        return results
+    
+    @staticmethod
+    def count_objects_in_detection_results(detection_results_single: list[dict[Any, Any]]):
+        """Counts the unique objects recognized in detection results."""
+        detection_results_single = [result["labels"].cpu().numpy() for result in detection_results_single]
+        object_counts = []
+        for result in detection_results_single:
+            this_object_counts = {}
+            for label_idx in np.unique(result):
+                this_object_counts[label_idx] = result[result == label_idx].shape[0]
+            object_counts.append(this_object_counts)
+        return object_counts
+
+    def __call__(self, nlp: English, frames: list[Image.Image], procedures: list[str]) -> list[int]:
+        # Parse objects from questions
+        object_parse_results = self.parse_sentences_for_target_objects(nlp, procedures)
+        detection_results, _ = self.run_detection(object_parse_results, frames)
+        
+        target_object_counts = []
+
+        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
+        for detection_results_single in detection_results:
+            target_object_counts.append(sum(list(TargetObjectCounterFilter.count_objects_in_detection_results(detection_results_single).values())))
+
+        return target_object_counts
+
 class SpatialVisualFilter(AdaptiveVisualFilter):
+
     """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
     def __init__(self, rephrase_questions: bool=True, **kwargs: dict[str, Any]):
         self.rephrase_questions = rephrase_questions
@@ -305,12 +349,17 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         return results
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE) -> tuple[list[Image.Image], list[str]]:
-        # Parse spatial dependencies from questions
+        # Parse spatial dependencies from questions and use them to detect objects
         spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions, rephrase_questions=self.rephrase_questions)
         detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], 
                                                               frames,
                                                               batch_size=batch_size)
-        # TODO: implement caching partial results?
+
+        # Also parse out all objects mentioned in questions and count them in images
+        object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
+        counting_results, _ = self.run_detection(object_parse_results, frames)
+        object_counts = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results)
+        object_counts = [{object_parse_results[object_count_idx][label_idx]: label_count for label_idx, label_count in object_count.items()} for object_count_idx, object_count in enumerate(object_counts)]
 
         new_frames = []
         new_questions = []
@@ -377,7 +426,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 new_frames.append(frame)
                 new_questions.append(old_question)
 
-        return new_frames, new_questions
+        return new_frames, new_questions, object_counts
 
 class ContrastiveRegionFilter(AdaptiveVisualFilter):
     def __init__(self, **kwargs: dict[str, Any]):
@@ -429,39 +478,6 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
 
         return new_frames
 
-class TargetObjectCounterFilter(AdaptiveVisualFilter):
-    """
-    This visual filter is used to count target objects from procedures in frames.
-    """
-    def __init__(self, **kwargs: dict[str, Any]):
-        super().__init__(**kwargs)
-
-    @staticmethod
-    def parse_procedures_for_target_objects(nlp: English, procedures: list[str]) -> list[list[str]]:
-        results = []
-        for procedure in procedures:
-            doc = nlp(procedure)
-            nouns = []
-            for chunk in doc.noun_chunks:
-                nouns.append(chunk.text.replace("the ", "").replace("an ", "").replace("a ", ""))
-            results.append(nouns)
-        return results
-    
-    def __call__(self, nlp: English, frames: list[Image.Image], procedures: list[str]) -> list[int]:
-        # Parse objects from questions
-        object_parse_results = self.parse_procedures_for_target_objects(nlp, procedures)
-        detection_results, _ = self.run_detection(object_parse_results, frames)
-        
-        target_object_counts = []
-
-        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
-        for detection_results_single in detection_results:
-            boxes = detection_results_single["boxes"]
-            bboxes = boxes.cpu().numpy() # (# boxes, 4)
-                    
-            target_object_counts.append(bboxes.shape[0])
-
-        return target_object_counts
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial"

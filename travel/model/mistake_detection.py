@@ -178,8 +178,9 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 # Check all questions for this frame to decide if there's a mistake
                 frame_mistake_probs = []
                 for output in frame_outputs:
-                    mistake_answer = VQAResponse(1-int(output.expected_answer.value))
-                    frame_mistake_probs.append(output.answer_probs[mistake_answer])
+                    if output.target_object_counts is None or len(output.target_object_counts.keys()) == 0 or min(output.target_object_counts.values()) > 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                        mistake_answer = VQAResponse(1-int(output.expected_answer.value))
+                        frame_mistake_probs.append(output.answer_probs[mistake_answer])
                 example_mistake_probs.append(frame_mistake_probs)
             mistake_probs.append(example_mistake_probs)
             
@@ -329,20 +330,21 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
 
                 # Check all questions for this frame to decide if there's a mistake
                 for question_output in frame_outputs:
-                    # Incorporate NLI model feedback
-                    if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
-                        # NLI model found this question irrelevant, so 0 mistake probability
-                        frame_mistake_probs.append(0.0)
-                    else:
-                        # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
-                        mistake_answer = VQAResponse(1-int(question_output.expected_answer.value))
-                        mistake_prob = question_output.answer_probs[mistake_answer]
-                        # Configure whether to only use NLI probs for final mistake detection, or otherwise multiply probabilities from VQA and NLI
-                        if NLI_REPLACE_PROBS:
-                            frame_mistake_probs.append(nli_mistake_probs[parallel_idx])
+                    if output.target_object_counts is None or len(output.target_object_counts.keys()) == 0 or min(output.target_object_counts.values()) > 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                        # Incorporate NLI model feedback
+                        if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
+                            # NLI model found this question irrelevant, so 0 mistake probability
+                            frame_mistake_probs.append(0.0)
                         else:
-                            frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
-                        # TODO: consider combining NLI probabilities by creating one premise based on relevant evidence and do one more inference (follow recoverr paper)
+                            # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
+                            mistake_answer = VQAResponse(1-int(question_output.expected_answer.value))
+                            mistake_prob = question_output.answer_probs[mistake_answer]
+                            # Configure whether to only use NLI probs for final mistake detection, or otherwise multiply probabilities from VQA and NLI
+                            if NLI_REPLACE_PROBS:
+                                frame_mistake_probs.append(nli_mistake_probs[parallel_idx])
+                            else:
+                                frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
+                            # TODO: consider combining NLI probabilities by creating one premise based on relevant evidence and do one more inference (follow recoverr paper)
 
                     frame_nli_mistake_probs.append(nli_mistake_probs[parallel_idx])
                     frame_nli_relevance_probs.append(nli_relevance[parallel_idx])
