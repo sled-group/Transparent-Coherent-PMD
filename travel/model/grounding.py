@@ -24,6 +24,7 @@ OWL_THRESHOLD = config["grounding"]["owl_threshold"]
 OWL_BATCH_SIZE = config["grounding"]["owl_batch_size"]
 MASK_STRENGTH = config["grounding"]["mask_strength"]
 MINIMUM_CROP_SIZE = config["grounding"]["minimum_crop_size"]
+MAXIMUM_BBOXES_PER_OBJECT = config["grounding"]["maximum_bboxes_per_object"]
 
 def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
                                     detector: Owlv2ForObjectDetection,
@@ -403,6 +404,9 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                                                               frames,
                                                               batch_size=batch_size)
 
+        pprint(detection_results)
+        print(" ")
+
         # Also parse out all objects mentioned in questions and count them in images
         object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
         counting_results, _ = self.run_detection(object_parse_results, frames)
@@ -413,10 +417,15 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         new_questions = []
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
         for old_question, (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(questions, spatial_parse_results, detection_results, frames, padded_images):
-            boxes = detection_result["boxes"]
-            bboxes = boxes.cpu().numpy() # (# boxes, 4)
+            bboxes = detection_result["boxes"]
+            bboxes = bboxes.cpu().numpy() # (# boxes, 4)
 
             if bboxes.shape[0] > 0:
+                # Select only top MAXIMUM_BBOXES_PER_OBJECT boxes
+                bboxes = zip(bboxes, detection_result['scores'].cpu().numpy())
+                bboxes = sorted(bboxes, key=lambda x: x[1], reverse=True)[:MAXIMUM_BBOXES_PER_OBJECT]
+                bboxes = np.array([bbox for bbox, _ in bboxes])
+
                 mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
 
                 # Mask out the areas for this noun
