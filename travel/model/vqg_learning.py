@@ -60,7 +60,7 @@ class FrameVQAMistakeDetectionScorer:
         else:
             self.visual_filter = None
         self.visual_filter_type = visual_filter_type
-        self.nlp = spacy.load('en_core_web_sm')
+        self.nlp = spacy.load('en_core_web_lg')
         
     def get_scores(self,
                    mistake_labels: list[bool],

@@ -38,7 +38,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     :return: Dataset with filtered frames.
     """
     if vqg_outputs is None:
-        nlp = spacy.load('en_core_web_sm')
+        nlp = spacy.load('en_core_web_lg')
 
     with torch.no_grad():
         
@@ -108,7 +108,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     print(f"Filtered out {filtered_out_frames} video frames ({frames_before} -> {frames_after}).")
     dataset.examples = filtered_examples
     return dataset
-    
+
 class AdaptiveVisualFilter:
     """Parent class for adaptive attention filters that use phrase grounding models to mask/crop images based on visual questions."""
 
@@ -202,6 +202,11 @@ class AdaptiveVisualFilter:
     def __call__(self) -> list[Image.Image]:
         raise NotImplementedError("Subclass must implement __call__!")
 
+DO_NOT_PARSE_NOUNS = [
+    "image",
+    "anyone"
+]
+
 class TargetObjectCounterFilter(AdaptiveVisualFilter):
     """
     This visual filter is used to count target objects from procedures in frames.
@@ -237,8 +242,8 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
                     if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
                         nouns.append(token.text)
 
-            # Make sure "image" not recognized as object
-            nouns = [n for n in nouns if n != "image"]
+            # Make sure "image" and other common non-object words are not recognized as objects
+            nouns = [n for n in nouns if n not in DO_NOT_PARSE_NOUNS]
 
             results.append(nouns)
         return results
@@ -279,7 +284,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         """
         Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
 
-        :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_sm", disable=["lemmatizer"])`
+        :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_lg", disable=["lemmatizer"])`
         :param questions: List of yes/no questions about an image (e.g., are there any cherry tomatoes in the bowl?).
         :return: List of tuples, each of which include a bool and object string indicating regions of interest, and a rephrased form of a question without spatial dependencies. 
         """
@@ -317,7 +322,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
             # For subjects and objects, capture the noun considering compound modifiers
             for idx, token in enumerate(doc):
-                if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN" and token.text != "image":
+                if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN" and token.text not in DO_NOT_PARSE_NOUNS:
                     target_noun = get_compound_noun(token)
                     
                     # We should never apply spatial filter on the nouns in avoid_with_on and avoid_with_in
@@ -334,7 +339,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             # If we didn't find a noun with first logic, be a bit more lenient and look for anything else labeled as a noun
             if target_noun == "":
                 for token in doc:
-                    if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"] and token.text != "image":
+                    if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"] and token.text not in DO_NOT_PARSE_NOUNS:
                         target_noun = token.text
 
             # Identify spatial relations based on specific dependencies
@@ -496,8 +501,8 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
                     if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
                         nouns.append(token.text)
 
-            # Make sure "image" is not recognized as object
-            nouns = [n for n in nouns if n != "image"]
+            # Make sure "image" and other common non-object words are not recognized as objects
+            nouns = [n for n in nouns if n not in DO_NOT_PARSE_NOUNS]
 
             results.append(nouns)
         return results

@@ -694,7 +694,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             worker_index=worker_index,
         )
 
-        nlp = spacy.load('en_core_web_sm')
+        nlp = spacy.load('en_core_web_lg')
         SIMILARITY_THRESHOLD = 0.95
 
         # Prepare list to hold examples ready for caching

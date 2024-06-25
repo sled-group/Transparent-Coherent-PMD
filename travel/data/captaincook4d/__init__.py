@@ -62,7 +62,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
         # Load OWLv2 to check for target objects in recipe steps
         print("Setting up target object counter...")
-        nlp = spacy.load('en_core_web_sm')
+        nlp = spacy.load('en_core_web_lg')
         object_counter = TargetObjectCounterFilter()
 
         for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos", total=len(all_video_ids)):            

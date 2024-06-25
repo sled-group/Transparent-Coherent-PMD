@@ -178,7 +178,7 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 # Check all questions for this frame to decide if there's a mistake
                 frame_mistake_probs = []
                 for output in frame_outputs:
-                    if output.target_object_counts is None or len(output.target_object_counts.keys()) == 0 or min(output.target_object_counts.values()) > 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                    if output.target_object_counts is None or len(output.target_object_counts) == 0 or min(output.target_object_counts.values()) > 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
                         mistake_answer = VQAResponse(1-int(output.expected_answer.value))
                         frame_mistake_probs.append(output.answer_probs[mistake_answer])
                 example_mistake_probs.append(frame_mistake_probs)

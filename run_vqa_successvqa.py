@@ -67,7 +67,7 @@ for worker_index in range(n_workers):
     if args.visual_filter_mode is not None:
         if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             visual_filter = ContrastiveRegionFilter(device=f"cuda:{worker_index}")
-            nlp = spacy.load('en_core_web_sm')
+            nlp = spacy.load('en_core_web_lg')
         else:
             raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with SuccessVQA!")
         

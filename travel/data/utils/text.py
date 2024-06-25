@@ -5,7 +5,7 @@ def simple_present_to_imperative(nlp: spacy.Language, sentence: str) -> str:
     """
     Converts a sentence input_sentence in simple present tense (e.g., "Someone eats the cookie") into imperative form (e.g., "Eat the cookie").
     
-    :param nlp: NLP object from spaCy. Example: `nlp = spacy.load('en_core_web_sm')`
+    :param nlp: NLP object from spaCy. Example: `nlp = spacy.load('en_core_web_lg')`
     :param sentence: Input sentence in simple present tense.
     :return: New sentence in imperative (command) form.
     """
