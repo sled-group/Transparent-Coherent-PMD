@@ -168,12 +168,10 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                     frames, new_questions, visible_target_objects = pickle.load(open(spatial_cache_fname, "rb"))
                 else:
                     frames, new_questions, visible_target_objects = visual_filter(nlp, frames, questions)
+                    pickle.dump((frames, new_questions, visible_target_objects), open(spatial_cache_fname, "wb"))
                 
                 # Replace rephrased questions into prompts, but save original questions for bookkeeping
                 prompts = [prompt.replace(question, new_question) for prompt, question, new_question in zip(prompts, questions, new_questions)]
-
-                # Save one more time so new prompts can be reloaded later
-                pickle.dump((questions, prompts, answers, frames, example_ids), open(prompt_cache_fname, "wb"))
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

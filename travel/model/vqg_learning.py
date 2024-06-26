@@ -135,7 +135,7 @@ class FrameVQAMistakeDetectionScorer:
                 memory_tracker.print_diff()
 
             if self.visual_filter_type == VisualFilterTypes.Spatial or self.visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
-                frames, questions = self.visual_filter(self.nlp, frames, questions)
+                frames, questions = self.visual_filter(self.nlp, frames, questions, return_visible_target_objects=False)
             elif self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
                 frames = self.visual_filter(self.nlp, frames, questions)
         
