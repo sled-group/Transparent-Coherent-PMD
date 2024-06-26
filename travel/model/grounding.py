@@ -338,6 +338,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     if not(this_target_noun in avoid_with_on \
                            or this_target_noun in avoid_with_in \
                             or this_target_noun in DO_NOT_PARSE_NOUNS \
+                            or any(n in this_target_noun for n in DO_NOT_PARSE_NOUNS) \
                             or token.dep_ == "nsubj" and idx == len(doc) - 2 and doc[idx + 1].pos_ == "PUNCT" \
                             or "of" in [t.text for t in token.rights]):
                         target_noun = this_target_noun
@@ -348,7 +349,8 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
                         if not(this_target_noun in avoid_with_on \
                             or this_target_noun in avoid_with_in \
-                                or this_target_noun in DO_NOT_PARSE_NOUNS):
+                                or this_target_noun in DO_NOT_PARSE_NOUNS \
+                                or any(n in this_target_noun for n in DO_NOT_PARSE_NOUNS)):
                             target_noun = token.text
 
             # Identify spatial relations based on specific dependencies
