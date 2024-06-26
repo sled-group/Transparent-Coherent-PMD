@@ -363,7 +363,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
                     if prep in spatial_preps:
                         spatial_object_tokens = [get_compound_noun(child) for child in token.children if child.pos_ == "NOUN"]
-                        is_avoid_on = prep == "on" # Never rephrase if the spatial preposition is "on"; sometimes an object might not be on another object despite being within its bounding box
+                        is_avoid_on = prep == "on" and any(word.lower() in spatial_object_tokens for word in avoid_with_on) # TODO: consider just never rephrasing when the preposition is "on" (that seems to slightly hurt performance on small subset of ego4d)
                         is_avoid_in = prep == "in" and any(word.lower() in spatial_object_tokens for word in avoid_with_in)
                         if not is_avoid_on and not is_avoid_in:
                             spatial_relation = True
