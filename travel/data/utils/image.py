@@ -279,10 +279,10 @@ def variance_of_laplacian(image: Image.Image):
 	return cv2.Laplacian(cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR), cv2.CV_64F).var()
 
 def resize_with_aspect(images: Union[list[Image.Image], Image.Image], dimension: int):
-    """Resizes the smallest dimension of a list of `images` to `dimension`, preserving the aspect ratio."""
-    assert len(images) > 0, "1resize_with_aspect1 received no images to resize!"
+    """Resizes the smallest dimension of a list of `images` to `dimension`, preserving the aspect ratio. Only scales down images - if an image is already smaller than `dimension`, it will not be modified."""
+    assert len(images) > 0, "`resize_with_aspect` received no images to resize!"
     if type(images) == Image.Image:
         images = [images]
-    new_sizes = [(int(dimension * (frame.width / frame.height)), dimension) if frame.width > frame.height else (dimension, int(dimension * (frame.height / frame.width))) for frame in images]
+    new_sizes = [(int(dimension * (frame.width / frame.height)), dimension) if frame.width > frame.height else (dimension, int(dimension * (frame.height / frame.width))) if min([frame.width, frame.height]) > dimension else frame for frame in images]
     images = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, images)]
     return images if len(images) > 1 else images[0]
