@@ -140,7 +140,7 @@ class AdaptiveVisualFilter:
         assert len(objects) == len(frames), "Expected same number of object lists and frames!"
         # Note the awkward hack where rare objects can be None due to failure of spatial parser
         max_n_objs = max([len(this_objects) for this_objects in objects])
-        owl_prompts = [[f"a photo of the {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
+        owl_prompts = [[f"a photo of the {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "a photo of nothing" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         pad_labels = [[1 if (i < len(input_objs) and input_objs[i] is not None) else 0 for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         # skip_indices = [all(input_obj is None for input_obj in input_objs) for input_objs, _ in zip(objects, frames)]
 
@@ -169,6 +169,16 @@ class AdaptiveVisualFilter:
                 # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
                 padded_images += this_padded_images
                 results += self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
+
+                # print("================================================")
+                # print("OWL processing:")
+                # pprint(batch_prompts)
+                # batch_pad_labels = pad_labels[i:i+batch_size]
+                # pprint(batch_pad_labels)
+                # print(max_n_objs)
+                # pprint(self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD))
+                # print("================================================")
+
                 del inputs
                 del outputs
 
@@ -206,10 +216,13 @@ class AdaptiveVisualFilter:
 
 DO_NOT_PARSE_NOUNS = [
     "image",
+    "scene",
     "anyone",
     "heat",
     "temperature",
     "someone",
+    "hand",
+    "place",
 ]
 
 class TargetObjectCounterFilter(AdaptiveVisualFilter):
@@ -308,7 +321,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                         "off", "out", "out of", "within", "across"]
         negation_preps = ["out", "out of", "outside", "outside of", "off"]
         no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every", "single"]
-        avoid_with_on = ["temperature", "heat", "low", "medium", "high"]
+        avoid_with_on = ["temperature", "heat", "low", "medium", "high", "left", "right", "top", "bottom"]
         avoid_with_in = ["hand", "left hand", "right hand", "someone's hand", "someone's left hand", "someone's right hand"]
 
         results = []
@@ -408,11 +421,11 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE, return_visible_target_objects=True) -> tuple[list[Image.Image], list[str]]:
         
         # First, parse out all "target" objects mentioned in questions and count them in images
-        object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
-        counting_results, _ = self.run_detection(object_parse_results, frames)
         if return_visible_target_objects:
-            object_counts = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results)
-            object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_counts)]
+            object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
+            counting_results, _ = self.run_detection(object_parse_results, frames)
+            object_counts_old = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results) # TODO: rename this back to object_counts
+            object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_counts_old)]
 
         # Parse spatial dependencies from questions and use them to detect objects
         spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions, rephrase_questions=self.rephrase_questions)
@@ -420,11 +433,16 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                                                               frames,
                                                               batch_size=batch_size)
 
-        for result, question, spatial in zip(detection_results, questions, spatial_parse_results):
-            print(f"{question}\n")
-            pprint(spatial)
-            pprint(result)
-            print("\n\n")
+        # for result, question, spatial, obj_parse, count_result, obj_counts, obj_counts_old in zip(detection_results, questions, spatial_parse_results, object_parse_results, counting_results, object_counts, object_counts_old):
+        #     print(f"{question}\n")
+        #     pprint(spatial)
+        #     pprint(result)
+        #     print("")
+        #     pprint(obj_parse)
+        #     pprint(count_result)
+        #     print(obj_counts_old)
+        #     pprint(obj_counts)
+        #     print("\n\n")
 
         new_frames = []
         new_questions = []
