@@ -3,19 +3,17 @@ from travel import init_travel
 init_travel()
 
 import argparse
-import concurrent.futures
 import datetime
 import json
 from memory_profiler import profile
 import os
 from pympler.tracker import SummaryTracker
 import shutil
-import torch
 from tqdm import tqdm
 
-from travel.constants import IMAGES_CHUNK_SIZE, CACHE_FREQUENCY
+from travel.constants import IMAGES_CHUNK_SIZE
 from travel.data.utils import split_list_into_partitions
-from travel.data.utils.image import resize_with_aspect
+from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAOutputs
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.model.grounding import VisualFilterTypes, MASK_STRENGTH
@@ -30,7 +28,7 @@ parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples. Can also be used to add another partition of data to existing reuslts directory.")
 parser.add_argument("--track_memory", action="store_true", help="Pass this argument to use `pympler` to print out summaries of memory usage periodically during execution.")
-parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space.")
+parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
 args = parser.parse_args()
 
 if "_debug" in args.vqg_directory:
@@ -91,7 +89,7 @@ def run_vqa_scoring_on_chunk(scorer: FrameVQAMistakeDetectionScorer,
     for outputs in this_vqa_outputs:
         for output in outputs:
             if type(output.frame) != str:
-                output.frame = resize_with_aspect(output.frame, 200) # Since this is just for inspection purposes, save a smaller copy
+                output.frame = resize_with_aspect(output.frame, CACHED_FRAME_DIMENSION) # Since this is just for inspection purposes, save a smaller copy
                 frames_to_close.append(output.frame)
                 if args.cache_vqa_frames:
                     output.cache_frame(cache_dir)

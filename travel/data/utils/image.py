@@ -14,6 +14,7 @@ with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 
 FRAME_DIMENSION = config["data"]["video_frame_dimension"]
+CACHED_FRAME_DIMENSION = config["data"]["video_frame_dimension_cache"] # dimension to save frames that will only be used for inspection (not processing by VLMs)
 
 class BoundingBox:
     """

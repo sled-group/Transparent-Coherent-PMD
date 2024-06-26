@@ -12,6 +12,7 @@ from typing import Optional, Callable
 
 from travel.constants import CACHE_FREQUENCY, IMAGES_CHUNK_SIZE
 from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
+from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAResponse, VQAOutputs, get_vqa_response_token_ids
 from travel.model.grounding import VisualFilterTypes, AdaptiveVisualFilter
 from travel.model.mistake_detection import DETECTION_FRAMES_PROPORTION
@@ -92,6 +93,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                                   n_workers: int,
                                   worker_index: int,
                                   vqa_batch_size: int,
+                                  cache_frames: bool=True,
                                   ) -> list[list[list[VQAOutputs]]]:
     """
     GPU-parallelizable method to run VQA in chunks on a MistakeDetectionDataset (with an optional AdaptiveVisualFilter).
@@ -108,6 +110,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
     :n_workers: Number of GPUs this inference is parallelized across.
     :worker_index: Worker index for this call.
     :vqa_batch_size: Batch size for VQA with VLM. This should be maximized for the type of GPU used.
+    :cache_frames: Whether to cache frames to disk after visual filters are applied (otherwise they will be discarded).
     """
     assert n_workers >= 1, "n_workers must be positive!"
     assert worker_index < n_workers and worker_index >= 0, f"Worker index should be a valid index for n_workers (n_workers)!"
@@ -232,7 +235,13 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                             target_object_counts=target_object_counts # Save count of target objects if we have it
                         )      
                     )
-                    frame_vqa_outputs[-1].cache_frame(worker_cache_dir)
+                    if cache_frames:
+                        # Resize to a smaller size before caching to conserve disk space
+                        frame_vqa_outputs[-1].frame = resize_with_aspect(frame_vqa_outputs[-1], CACHED_FRAME_DIMENSION)
+                        frame_vqa_outputs[-1].cache_frame(worker_cache_dir)
+                    else:
+                        # Just replace frame with empty string to save CPU memory and avoid saving frame to disk
+                        frame_vqa_outputs[-1].frame = ""
                     parallel_idx += 1
 
                 example_vqa_outputs.append(frame_vqa_outputs)

@@ -34,6 +34,7 @@ parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
+parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
 args = parser.parse_args()
 
 assert args.task in args.vqg_directory, f"VQG outputs should be generated from the {args.task} dataset!"
@@ -165,7 +166,8 @@ for eval_partition in args.eval_partitions:
                                            [this_results_dir] * n_workers,
                                            [n_workers] * n_workers,
                                            list(range(n_workers)),
-                                           [args.batch_size] * n_workers)
+                                           [args.batch_size] * n_workers,
+                                           [args.cache_vqa_frames] * n_workers)
                              )
         # Compile processed data from partitions
         vqa_outputs = []
@@ -184,7 +186,8 @@ for eval_partition in args.eval_partitions:
                                                     cache_dir=this_results_dir,
                                                     n_workers=1,
                                                     worker_index=0,
-                                                    vqa_batch_size=args.batch_size)
+                                                    vqa_batch_size=args.batch_size,
+                                                    cache_frames=args.cache_vqa_frames)
 
     print("Evaluating and saving results...")
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
