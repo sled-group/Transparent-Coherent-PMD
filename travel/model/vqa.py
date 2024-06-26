@@ -235,7 +235,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                     )
                     if cache_frames:
                         # Resize to a smaller size before caching to conserve disk space
-                        frame_vqa_outputs[-1].frame = resize_with_aspect(frame_vqa_outputs[-1], CACHED_FRAME_DIMENSION)
+                        frame_vqa_outputs[-1].frame = resize_with_aspect(frame_vqa_outputs[-1].frame, CACHED_FRAME_DIMENSION)
                         frame_vqa_outputs[-1].cache_frame(worker_cache_dir)
                     else:
                         # Just replace frame with empty string to save CPU memory and avoid saving frame to disk

@@ -304,8 +304,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every", "single"]
         avoid_with_on = ["temperature", "heat", "low", "medium", "high"]
         avoid_with_in = ["hand", "left hand", "right hand", "someone's hand", "someone's left hand", "someone's right hand"]
-        is_avoid_on = False
-        is_avoid_in = False
 
         results = []
         for question in questions:
@@ -317,6 +315,9 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
             no_rephrase_word_present = False
             is_negation_prep = False
+
+            is_avoid_on = False
+            is_avoid_in = False            
             
             # Detect negation of a spatial relation
             for idx, token in enumerate(doc):
@@ -404,8 +405,11 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                                                               frames,
                                                               batch_size=batch_size)
 
-        pprint(detection_results)
-        print(" ")
+        for result, question, spatial in zip(detection_results, questions, spatial_parse_results):
+            print(f"{question}\n")
+            pprint(spatial)
+            pprint(result)
+            print("\n\n")
 
         # Also parse out all objects mentioned in questions and count them in images
         object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
