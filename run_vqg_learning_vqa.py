@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from travel.constants import IMAGES_CHUNK_SIZE, CACHE_FREQUENCY
 from travel.data.utils import split_list_into_partitions
+from travel.data.utils.image import resize_with_aspect
 from travel.data.vqa import VQAOutputs
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.model.grounding import VisualFilterTypes, MASK_STRENGTH
@@ -29,6 +30,7 @@ parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples. Can also be used to add another partition of data to existing reuslts directory.")
 parser.add_argument("--track_memory", action="store_true", help="Pass this argument to use `pympler` to print out summaries of memory usage periodically during execution.")
+parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space.")
 args = parser.parse_args()
 
 if "_debug" in args.vqg_directory:
@@ -69,6 +71,7 @@ cache_dirs = [cd for cd in cache_dirs if not os.path.exists(os.path.join(cd, f"v
 # Get ready to run VQA scoring
 def run_vqa_scoring_on_chunk(scorer: FrameVQAMistakeDetectionScorer,
                              frameVQA_examples_chunk: list[FrameVQAMistakeDetectionExample],
+                             cache_dir: str,
                              cache_path: str) -> tuple[list[VQGTrainingExample], list[VQAOutputs]]:
     """Local method to run VQA scoring on a chunk of data."""
     
@@ -88,8 +91,13 @@ def run_vqa_scoring_on_chunk(scorer: FrameVQAMistakeDetectionScorer,
     for outputs in this_vqa_outputs:
         for output in outputs:
             if type(output.frame) != str:
+                output.frame = resize_with_aspect(output.frame, 200) # Since this is just for inspection purposes, save a smaller copy
                 frames_to_close.append(output.frame)
-                output.cache_frame(this_results_dir)
+                if args.cache_vqa_frames:
+                    output.cache_frame(cache_dir)
+                else:
+                    # Setting frame to a string prevents frame from being saved in memory later
+                    output.frame = ""
         
     # Close frames - have to do this afterward since some are shared between VQAOutputs
     for frame in frames_to_close:
@@ -116,6 +124,7 @@ def run_vqa_scoring_on_chunks(scorer: FrameVQAMistakeDetectionScorer,
             os.makedirs(cache_dir)
         this_vqg_training_examples, this_vqa_outputs = run_vqa_scoring_on_chunk(scorer=scorer,
                                                                                 frameVQA_examples_chunk=frameVQA_examples_chunk,
+                                                                                cache_dir=cache_dir,
                                                                                 cache_path=os.path.join(cache_dir, "VQA_cache.pt"))
         if args.track_memory:
             print("\nMemory (after chunk)")
