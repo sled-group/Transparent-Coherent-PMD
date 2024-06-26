@@ -245,14 +245,20 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
 
                     # Some common words should not be counted as objects
                     if token.text not in DO_NOT_PARSE_NOUNS:
-                        nouns.append(get_compound_noun(token))
-            
+                        compound_noun = get_compound_noun(token)
+                        if all(n not in compound_noun for n in DO_NOT_PARSE_NOUNS):
+                            # Make sure the compound noun doesn't have any "do not parse" nouns
+                            nouns.append(compound_noun)
+
             # If we didn't find a noun with first logic, be a bit more lenient and look for anything else labeled as a noun
             if len(nouns) == 0:
                 for token in doc:
                     if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
                         if token.text not in DO_NOT_PARSE_NOUNS:
-                            nouns.append(get_compound_noun(token))
+                            compound_noun = get_compound_noun(token)
+                            if all(n not in compound_noun for n in DO_NOT_PARSE_NOUNS):
+                                # Make sure the compound noun doesn't have any "do not parse" nouns
+                                nouns.append(compound_noun)
 
             results.append(nouns)
         return results
@@ -401,6 +407,13 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE, return_visible_target_objects=True) -> tuple[list[Image.Image], list[str]]:
         
+        # First, parse out all "target" objects mentioned in questions and count them in images
+        object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
+        counting_results, _ = self.run_detection(object_parse_results, frames)
+        if return_visible_target_objects:
+            object_counts = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results)
+            object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_counts)]
+
         # Parse spatial dependencies from questions and use them to detect objects
         spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions, rephrase_questions=self.rephrase_questions)
         detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], 
@@ -412,13 +425,6 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             pprint(spatial)
             pprint(result)
             print("\n\n")
-
-        # Also parse out all objects mentioned in questions and count them in images
-        object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
-        counting_results, _ = self.run_detection(object_parse_results, frames)
-        if return_visible_target_objects:
-            object_counts = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results)
-            object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_counts)]
 
         new_frames = []
         new_questions = []
