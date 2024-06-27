@@ -20,7 +20,7 @@ def generate_ego4d_partition(n_workers: int,
                              debug: bool,) -> Ego4DMistakeDetectionDataset:
     dataset_partition = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                                      mismatch_augmentation=args.mismatch_augmentation,
-                                                     debug_n_examples_per_class=100 if debug else None,
+                                                     debug_n_examples_per_class=250 if debug else None,
                                                      n_workers=n_workers,
                                                      worker_index=worker_index)
     return dataset_partition
@@ -31,7 +31,7 @@ if args.n_workers == 1:
     # Generate in one thread
     dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                            mismatch_augmentation=args.mismatch_augmentation,
-                                           debug_n_examples_per_class=100 if args.debug else None)
+                                           debug_n_examples_per_class=250 if args.debug else None)
 else:
     # Generate in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.n_workers) as executor:
@@ -40,5 +40,5 @@ else:
                                        list(range(args.n_workers)),
                                        [args.debug] * args.n_workers))
     combined_dataset = combine_ego4d_partitions(partitions,
-                                                debug_n_examples_per_class=100 if args.debug else None)
+                                                debug_n_examples_per_class=250 if args.debug else None)
 print("Done!")

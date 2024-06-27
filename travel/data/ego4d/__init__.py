@@ -679,8 +679,9 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             full_cache_dir = self.get_cache_dir(data_split, mismatch_augmentation, debug_n_examples_per_class=None)
             if os.path.exists(full_cache_dir):
                 full_example_dirs = json.load(open(os.path.join(full_cache_dir, "dataset.json"), "r"))["example_dirs"]
-                random.shuffle(full_example_dirs)
-                self.example_dirs = full_example_dirs[:2*debug_n_examples_per_class]
+                positive_dirs = [d for d in full_example_dirs if d.endswith("pos")][:debug_n_examples_per_class]
+                negative_dirs = [d for d in full_example_dirs if not d.endswith("pos")][:debug_n_examples_per_class]
+                self.example_dirs = positive_dirs + negative_dirs
                 self.n_examples += len(self.example_dirs)
                 return
 
