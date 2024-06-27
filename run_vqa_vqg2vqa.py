@@ -34,6 +34,7 @@ parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
+parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
 args = parser.parse_args()
 
@@ -96,7 +97,7 @@ if args.resume_dir is None:
     timestamp = datetime.datetime.now()
     this_results_dir = os.path.join(args.task, f"VQG2VQA_{args.task}")
     if args.debug:
-        this_results_dir += f"_debug"
+        this_results_dir += f"_debug{args.debug_n_examples}"
     this_results_dir += f"_{args.vlm_name.split('/')[-1]}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{MASK_STRENGTH}"
@@ -143,11 +144,11 @@ for eval_partition in args.eval_partitions:
 
     # Load mistake detection dataset
     if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
-        eval_datasets = [CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None) for _ in range(n_workers)]
+        eval_datasets = [CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None) for _ in range(n_workers)]
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
         eval_datasets = [Ego4DMistakeDetectionDataset(data_split=eval_partition, 
                                                       mismatch_augmentation=True,
-                                                      debug_n_examples_per_class=250 if args.debug else None) for _ in range(n_workers)]
+                                                      debug_n_examples_per_class=args.debug_n_examples if args.debug else None) for _ in range(n_workers)]
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
 
