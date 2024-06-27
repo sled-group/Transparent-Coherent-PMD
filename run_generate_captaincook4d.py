@@ -11,11 +11,12 @@ from travel.data.captaincook4d import CaptainCook4DDataset
 parser = argparse.ArgumentParser()
 parser.add_argument("--partition", type=str, default="val", help="Dataset partition name to generate from.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
+parser.add_argument("--debug_n_examples", type=int, default=20, help="Configure the number of examples per class to generate for debugging purposes.")
 args = parser.parse_args()
 
 print("Generating CaptainCook4D dataset...")
 dataset = CaptainCook4DDataset(data_split=args.partition, 
-                               debug_n_examples_per_class=20 if args.debug else None) 
+                               debug_n_examples_per_class=args.debug_n_examples if args.debug else None) 
 
 print("Done!")
 

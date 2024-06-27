@@ -23,7 +23,7 @@ def generate_ego4d_partition(n_workers: int,
     dataset_partition = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                                      mismatch_augmentation=args.mismatch_augmentation,
                                                      multi_frame=args.multi_frame,
-                                                     debug_n_examples_per_class=args.debug_n_examples if args.debug else None,
+                                                     debug_n_examples_per_class=args.debug_n_examples if debug else None,
                                                      n_workers=n_workers,
                                                      worker_index=worker_index)
     return dataset_partition
@@ -34,6 +34,7 @@ if args.n_workers == 1:
     # Generate in one thread
     dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                            mismatch_augmentation=args.mismatch_augmentation,
+                                           multi_frame=args.multi_frame,
                                            debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
 else:
     # Generate in parallel

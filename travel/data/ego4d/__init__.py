@@ -470,7 +470,7 @@ class MisalignSRL:
                 else:
                     # This follows SuccessVQA paper's approach for sampling positive example videos
                     post_start_time = max(frame_time - 4.0, 0.0)
-                    post_end_time = min(frame_time + 4.0, sample['video_duration'])
+                    post_end_time = min(frame_time + 4.0, sample['end_sec'])
                     post_frame_times = generate_float_series(post_start_time, post_end_time, 1 / FRAME_KEEP_FREQUENCY)
                     post_frames = extract_frames(video_cap, post_frame_times)
                     sample['effect_frames'] = post_frames
@@ -635,10 +635,14 @@ class Ego4dFHOMainDataset:
                         post_frames = extract_frames(video_cap, post_frame_times)
 
                         # Following SuccessVQA, sample negative example as an 8 second clip ending at the precondition frame
-                        pre_end_time = clip_info['pre_frame'] / clip_info['fps']
+                        # (but make sure it doesn't overlap with effect clip)
+                        pre_end_time = min(clip_info['pre_frame'] / clip_info['fps'], post_start_time - 1 / FRAME_KEEP_FREQUENCY)
                         pre_start_time = max(pre_end_time - 8.0, 0.0)
                         pre_frame_times = generate_float_series(pre_start_time, pre_end_time, 1 / FRAME_KEEP_FREQUENCY)
-                        pre_frames = extract_frames(video_cap, pre_frame_times)
+                        if len(pre_frame_times) > 0:
+                            pre_frames = extract_frames(video_cap, pre_frame_times)
+                        else:
+                            pre_frames = []
                         
                         yield clip_info | {"video_index": video_index,
                                           "video_uid": video_metadata["video_uid"],
@@ -713,7 +717,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         if mismatch_augmentation:
             cache_fname += "_mismatch"
         if multi_frame:
-            cache_frame += "_multiframe"
+            cache_fname += "_multiframe"
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
         if n_workers is not None:
@@ -751,7 +755,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             )
         else:
             # If we already generated mismatch-augmented data, just use the data from there rather than re-generating
-            mismatch_cache_dir = self.get_cache_dir(data_split, True, debug_n_examples_per_class=debug_n_examples_per_class)
+            mismatch_cache_dir = self.get_cache_dir(data_split, True, multi_frame=multi_frame, debug_n_examples_per_class=debug_n_examples_per_class)
             if os.path.exists(mismatch_cache_dir):
                 mismatch_example_dirs = json.load(open(os.path.join(mismatch_cache_dir, "dataset.json"), "r"))["example_dirs"]
                 self.example_dirs = [d for d in mismatch_example_dirs if "MisalignSRL" not in d]
@@ -760,7 +764,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
 
         # If we're only loading a small amount of data for debugging purpose but we've loaded the full data before, just borrow the data from the full dataset
         if debug_n_examples_per_class is not None:
-            full_cache_dir = self.get_cache_dir(data_split, mismatch_augmentation, debug_n_examples_per_class=None)
+            full_cache_dir = self.get_cache_dir(data_split, mismatch_augmentation=mismatch_augmentation, multi_frame=multi_frame, debug_n_examples_per_class=None)
             if os.path.exists(full_cache_dir):
                 full_example_dirs = json.load(open(os.path.join(full_cache_dir, "dataset.json"), "r"))["example_dirs"]
                 positive_dirs = [d for d in full_example_dirs if d.endswith("pos")][:debug_n_examples_per_class]
@@ -807,13 +811,25 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             instruction_text = self.ego4d_narration_to_instruction(clip['narration_text'], nlp)
             
             # clip['video'] shape: (C, # frames, H, W)
-            precondition_frame_arr, effect_frame_arr = clip['pre_frame'], clip['post_frame']
-            precondition_frame, effect_frame = Image.fromarray(precondition_frame_arr), Image.fromarray(effect_frame_arr)
+            if not multi_frame:
+                precondition_frame_arr, effect_frame_arr = clip['pre_frame'], clip['post_frame']
+                precondition_frame, effect_frame = Image.fromarray(precondition_frame_arr), Image.fromarray(effect_frame_arr)
 
-            # Omit examples where precondition and effect frame are overly similar
-            precondition_effect_similarity = dot(precondition_frame_arr.astype(float).flatten(), effect_frame_arr.astype(float).flatten()) / (norm(precondition_frame_arr.astype(float).flatten()) * norm(effect_frame_arr.astype(float).flatten()))
-            if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
-                continue
+                # Omit examples where precondition and effect frame are overly similar
+                precondition_effect_similarity = dot(precondition_frame_arr.astype(float).flatten(), effect_frame_arr.astype(float).flatten()) / (norm(precondition_frame_arr.astype(float).flatten()) * norm(effect_frame_arr.astype(float).flatten()))
+                if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
+                    continue
+            else:
+                precondition_frames = [frame for frame in clip['pre_frames']]
+                effect_frames = [frame for frame in clip['post_frames']]
+
+                # Omit examples where precondition and effect clips' final frames are overly similar
+                precondition_effect_similarity = dot(precondition_frames[-1].astype(float).flatten(), effect_frames[-1].astype(float).flatten()) / (norm(precondition_frames[-1].astype(float).flatten()) * norm(effect_frames[-1].astype(float).flatten()))
+                if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
+                    continue
+
+                precondition_frames = [Image.fromarray(frame) for frame in precondition_frames]
+                effect_frames = [Image.fromarray(frame) for frame in effect_frames]
             
             # Generate examples from this clip
             # NOTE: example IDs intentionally have "/"s in them to ensure there's one directory per video and per clip (enables easy resuming of incomplete runs and inspection of data)
@@ -824,7 +840,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 video_id=clip['video_uid'],
                 procedure_id=procedure_id,
                 example_id=f"{clip_id}/pos",
-                frames=[effect_frame] if not multi_frame else clip['post_frames'],
+                frames=[effect_frame] if not multi_frame else effect_frames,
                 frame_times=[clip['post_time']] if not multi_frame else clip['post_times'],
                 procedure_description=instruction_text,
                 mistake=False,
@@ -832,21 +848,23 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             )
             example_cache_buffer.append(positive_example)
             
-            # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
-            # if clip['previous_occurrences'] < 2:
-            negative_example_hard = MistakeDetectionExample(
-                task_name="ego4d",
-                video_id=clip['video_uid'],
-                procedure_id=procedure_id,
-                example_id=f"{clip_id}/hardneg",
-                frames=[precondition_frame] if not multi_frame else clip['pre_frames'],
-                frame_times=[clip['pre_time']] if not multi_frame else clip['pre_times'],
-                procedure_description=instruction_text,
-                mistake=True,
-                mistake_type="Action Incomplete",
-                verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
-            )
-            example_cache_buffer.append(negative_example_hard)
+            # Generate hard negative example from precondition frame (only do this if precondition and effect clips had enough separation)
+            if not multi_frame or len(precondition_frames) > 0:
+                negative_example_hard = MistakeDetectionExample(
+                    task_name="ego4d",
+                    video_id=clip['video_uid'],
+                    procedure_id=procedure_id,
+                    example_id=f"{clip_id}/hardneg",
+                    frames=[precondition_frame] if not multi_frame else precondition_frames,
+                    frame_times=[clip['pre_time']] if not multi_frame else clip['pre_times'],
+                    procedure_description=instruction_text,
+                    mistake=True,
+                    mistake_type="Action Incomplete",
+                    verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
+                )
+                example_cache_buffer.append(negative_example_hard)
+            else:
+                print(f"Warning: Could not generate a hard negative for clip {clip_id}!")
             
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
@@ -877,7 +895,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                         video_id=video_id,
                         procedure_id=procedure_id,
                         example_id=f"{clip_id}/easyneg_{misalignsrl_type}_{video_id}_{frame_time}",
-                        frames=[effect_frame],
+                        frames=[Image.fromarray(mismatch_examples[misalignsrl_type]['effect_frame'])] if not multi_frame else [Image.fromarray(frame) for frame in mismatch_examples[misalignsrl_type]['effect_frames']],
                         frame_times=[frame_time],
                         procedure_description=instruction_text,
                         mistake=True,
