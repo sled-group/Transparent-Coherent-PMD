@@ -488,7 +488,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     # There's only one bbox left, which takes away a dim
                     bboxes = np.expand_dims(bboxes, axis=0)
 
-            if bboxes.shape[0] > 0:
+            if bboxes.shape[0] > 0 and bboxes.shape[1] > 0:
                 # If we still have some bboxes
 
                 # Select only top MAXIMUM_BBOXES_PER_OBJECT boxes
@@ -504,6 +504,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
                 # Mask out the areas for this noun
                 for bbox_idx, bbox in enumerate(bboxes):
+
                     # If looking specifically at this noun, make sure bounding boxes are a minimum size (configured in config.yml);
                     # also make sure no bboxes cross the buondaries of the image
                     if look_at_noun:

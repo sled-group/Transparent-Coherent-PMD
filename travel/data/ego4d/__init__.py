@@ -9,6 +9,7 @@ from numpy.linalg import norm
 import os
 import pandas as pd
 from PIL import Image
+from pprint import pprint
 from pytorchvideo.data import ClipSampler
 from pytorchvideo.data.clip_sampling import ClipInfo
 import random
@@ -29,6 +30,7 @@ from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetect
 from travel.data.utils import get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler, generate_float_series
 from travel.data.utils.text import simple_present_to_imperative
 from travel.data.utils.video import get_video, extract_frames
+from travel.model.grounding import TargetObjectCounterFilter
 
 # Some verbs would not be expected in the task-oriented mistake detection setting 
 # (don't really cause a meaningful/observable state change toward a task goal), so filter them out
@@ -54,10 +56,16 @@ EGO4D_IGNORE_VERBS = [
     'cross', # People crossing over things
     'kick', # Kicking objects with foot - usually not related to any task
     "check", # Check on something, e.g., look at something - doesn't imply a state change
-    "adjust_(regulate,_increase/reduce,_change)", # Adjust something (not clear in which way, and usually requires several frames to judge)
-    "turn_(spin,_rotate,_flip,_turn_over)", # Turn something (not clear in which way, so can't judge in a single frame)
+    "adjust_(regulate,_increase/reduce,_change)", # Adjust something (slight position change)
+    "turn_(spin,_rotate,_flip,_turn_over)", # Turn something (slight position change)
+    "tilt", # Tilt something (slight position change)
     "operate_(use,_dial,_click-button)", # Pressing buttons or touch screen
     "shake", # Shake an object
+    "swing", # Swing on swings
+    "wave", # Wave hands
+    "blow", # Blowing air
+    "serve", # Serving food
+    "stand", # Standing up
 ] 
 
 # Similarly, some verb noun pairs don't involve meaningful state changes (e.g., put hand)
@@ -671,6 +679,7 @@ def filter_action_for_mistake_detection(action: dict[str, Any], previous_action:
         and (action["structured_verb"], action["structured_noun"]) not in EGO4D_IGNORE_VERB_NOUN_PAIRS
         and action['structured_noun'] is not None # need at least one target object
         and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
+        and "something" not in action['narration_text'] # Omit clips annotated with vague object reference "something"
         and (
             previous_action is None
             or not (
@@ -752,7 +761,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         if mismatch_augmentation:
             mismatch_sampler = MisalignSRL(
                 MISALIGNSRL_PATH,
-            )
+            )        
         else:
             # If we already generated mismatch-augmented data, just use the data from there rather than re-generating
             mismatch_cache_dir = self.get_cache_dir(data_split, True, multi_frame=multi_frame, debug_n_examples_per_class=debug_n_examples_per_class)
@@ -806,9 +815,16 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # Skip some actions based on conditions specified in filter_action_for_mistake_detection
             if not filter_action_for_mistake_detection(clip):
                 continue
-            
+
             # Convert narration text to imperative form to match the sentence structure of recipes and task instructions
             instruction_text = self.ego4d_narration_to_instruction(clip['narration_text'], nlp)
+
+            # For some verbs, e.g., "move", we need to have more than one object argument in order for
+            # there to be an observable state change (e.g., "move tomatoes into bowl" rather than "move tomatoes")
+            if clip['structured_verb'] in ["move_(transfer,_pass,_exchange)"]:
+                mentioned_objects = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, [instruction_text])[0]
+                if len(mentioned_objects) < 2:
+                    continue
             
             # clip['video'] shape: (C, # frames, H, W)
             if not multi_frame:
