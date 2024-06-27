@@ -32,6 +32,7 @@ class MistakeDetectionExample:
     mistake: bool
     mistake_type: Optional[str] = None
     mistake_description: Optional[str] = None
+    verb_noun_pair: Optional[tuple[str, str]] = None
     
     def __post_init__(self):
         """Resizes frames to save space in caching."""

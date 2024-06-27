@@ -420,7 +420,7 @@ class MisalignSRL:
         type_name_col_name_map = data["type_name_col_name_map"]
         return cls(misalignsrl, type_name_col_name_map)
     
-    def get_misaligned_samples(self, clip, random_seed):      
+    def get_misaligned_samples(self, clip, random_seed, split_video_info):      
         mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
         
         video_uid_narration_timestamp_sec = clip["video_uid"] + "_" + str(clip["narration_timestamp_sec"])
@@ -442,9 +442,29 @@ class MisalignSRL:
             sampled_example_list = []
             for sample_i in range(len(sampled_index_list)):
                 sampled_example_list.append(self.misalignsrl.iloc[sampled_index_list[sample_i]].squeeze().to_dict())
+
+            # Take the first sample that's within the correct data split and we can load the video for (but only try up to 5 times)
+            for sample in sampled_example_list[:5]:  
+                video_id = sample['video_uid']
+                frame_time = sample['narration_timestamp_sec']
                 
-            # NOTE: although multiple misalignsrl samples are prepared in the index file, we only sample one for now since not sure how outer code wants to organize the structure of multiple samples for one misalignsrl_type   
-            mistake_example_meta_dict[misalignsrl_type] = sampled_example_list[0]
+                # `effect_frame` contains the pixels for the misalignsrl sample. In this case, we need to read it given the `video_id` (another video) and `frame_time`. 
+                video_path = os.path.join(EGO4D_VIDEO_PATH, video_id+".mp4")
+                # mimic Ego4dFHOMainDataset.__iter__ to get the frame
+                if video_path not in [tp[1] for tp in split_video_info]:
+                    # the misalignsrl sample does not exists in this data split
+                    continue
+                try:
+                    video_cap = get_video(video_path)
+                except:
+                    print(f"Warning: could not load video at {video_path}.")
+                    continue                    
+                sample['effect_frame'] = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
+                video_cap.release()
+
+                # NOTE: although multiple misalignsrl samples are prepared in the index file, we only sample one for now since not sure how outer code wants to organize the structure of multiple samples for one misalignsrl_type   
+                mistake_example_meta_dict[misalignsrl_type] = sample
+                break
         
         return mistake_example_meta_dict
         
@@ -754,6 +774,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 frame_times=[clip['post_time']],
                 procedure_description=instruction_text,
                 mistake=False,
+                verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
             )
             example_cache_buffer.append(positive_example)
             
@@ -769,17 +790,13 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 procedure_description=instruction_text,
                 mistake=True,
                 mistake_type="Action Incomplete",
+                verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
             )
             example_cache_buffer.append(negative_example_hard)
             
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
-                # It is weird that could mismatch_sampler disappear time to time in the middle of the loop. just check and reinitialize it before we find out why.
-                # if "mismatch_sampler" not in dir(self):
-                #     mismatch_sampler = MisalignSRL(
-                #         MISALIGNSRL_PATH
-                #     )
-                mismatch_examples = mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
+                mismatch_examples = mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id, split_video_info=ego4d.video_info)
                 
                 # print(f"=======MisalignSRL samples =========")
                 # print(f"current clip narration: {clip['narration_text']} (video_uid: {clip['video_uid']}, narration_timestamp_sec: {clip['narration_timestamp_sec']})")
@@ -790,19 +807,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
                     frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']
-                    
-                    # `effect_frame` contains the pixels for the misalignsrl sample. In this case, we need to read it given the `video_id` (another video) and `frame_time`. 
-                    video_path = os.path.join(EGO4D_VIDEO_PATH, video_id+".mp4")
-                    # mimic Ego4dFHOMainDataset.__iter__ to get the frame
-                    if video_path not in [tp[1] for tp in ego4d.video_info]:
-                        # the misalignsrl sample does not exists in this data split
-                        continue
-                    try:
-                        video_cap = get_video(video_path)
-                    except:
-                        print(f"Warning: could not load video at {video_path}.")
-                        continue                    
-                    effect_frame = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
+                    effect_frame = mismatch_examples[misalignsrl_type]['effect_frames']
                     
                     # `procedure_id` is meant to be an ID for the narration.
                     procedure_id = procedure_id
@@ -818,6 +823,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                         procedure_description=instruction_text,
                         mistake=True,
                         mistake_type=misalignsrl_type,
+                        verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
                     )
                     example_cache_buffer.append(misalignsrl_example)
                     # print(f"Appended example:")
