@@ -855,8 +855,13 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 # print(f"=======MisalignSRL samples =========")
                 # print(f"current clip narration: {clip['narration_text']} (video_uid: {clip['video_uid']}, narration_timestamp_sec: {clip['narration_timestamp_sec']})")
                 for misalignsrl_type in mismatch_sampler.type_name_col_name_map.keys():
-                    # skip if no misaligned sample for this type is found
+                    # Skip if no misaligned sample for this type is found
                     if mismatch_examples[misalignsrl_type] is None:
+                        continue
+
+                    # Omit V_ARG1 examples in single frame setting, since these will be hard to use for training but
+                    # at inference time, we can hopefully catch these examples with target object filter
+                    if not multi_frame and "V_ARG1" in misalignsrl_type:
                         continue
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
