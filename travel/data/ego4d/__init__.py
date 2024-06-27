@@ -481,7 +481,6 @@ def get_structured_noun(action: dict) -> str | None:
                 return box["structured_noun"]
     return None
 
-# TODO: add an option to not load full videos - just use index files and specific frames instead? This would be much faster.
 class Ego4dFHOMainDataset:
     def __init__(
         self,
@@ -515,7 +514,7 @@ class Ego4dFHOMainDataset:
 
         # Count number of narrated actions for __len__
         if len(already_processed_videos) == 0:
-            self.num_narrated_actions = sum(split_data["videos"].values()) # TODO: adjust to account for parallelism and resuming
+            self.num_narrated_actions = sum(split_data["videos"].values())
         else:
             # If some videos were already processed, exclude them from count of narrated actions
             self.num_narrated_actions = sum([v for k, v in split_data["videos"].items() if k not in already_processed_videos])
@@ -600,12 +599,13 @@ def filter_action_for_mistake_detection(action: dict[str, Any], previous_action:
         and action["post_frame"] is not None
         and action["structured_verb"] not in EGO4D_IGNORE_VERBS # Omit clips with non-task actions
         and (action["structured_verb"], action["structured_noun"]) not in EGO4D_IGNORE_VERB_NOUN_PAIRS
+        and action['structured_noun'] is not None # need at least one target object
         and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
         and (
             previous_action is None
             or not (
                 (action['structured_verb'], action['structured_noun']) == (previous_action['structured_verb'], previous_action['structured_noun']))
-                or action['previous_occurrences'] > 1
+                or action['previous_occurrences'] > 0
             ) # Filter out clips where the same action is being performed over and over
     )
 
