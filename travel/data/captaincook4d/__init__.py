@@ -5,15 +5,20 @@ from pprint import pprint
 import spacy
 from tqdm import tqdm
 from typing import Optional
+import yaml
 
 from travel.constants import DATA_CACHE_DIR
 from travel.data.captaincook4d.constants import VIDEO_DIR, ANNOTATIONS_DIR, DATA_SPLITS
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
 from travel.data.utils import generate_float_series, get_subdirectories
 from travel.data.utils.image import variance_of_laplacian
-from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY, FRAME_KEEP_FREQUENCY
+from travel.data.utils.video import get_video, extract_frames
 from travel.model.grounding import TargetObjectCounterFilter
 
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+FRAME_SAMPLING_FREQUENCY = float(config["data"]["video_frame_sampling_frequency"])
+FRAME_KEEP_FREQUENCY = float(config["data"]["video_frame_keep_frequency"])
 
 class CaptainCook4DDataset(MistakeDetectionDataset):
     def __init__(self, 
