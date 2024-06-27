@@ -12,7 +12,7 @@ from typing import Optional, Any, Union
 import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
-from travel.data.utils.image import get_preprocessed_image
+from travel.data.utils.image import get_preprocessed_image, BoundingBoxCluster, BoundingBox
 from travel.data.utils.text import get_compound_noun
 from travel.data.vqg import VQGOutputs
 
@@ -141,6 +141,9 @@ class AdaptiveVisualFilter:
         # Note the awkward hack where rare objects can be None due to failure of spatial parser
         max_n_objs = max([len(this_objects) for this_objects in objects])
         owl_prompts = [[f"a photo of the {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "a photo of nothing" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
+        if all(len(p) == 0 for p in owl_prompts):
+            print("Warning: run_detection received no prompts.")
+            return [{"boxes": torch.tensor([]), "scores": torch.tensor([]), "labels": torch.tensor([])} for _ in frames], frames
         pad_labels = [[1 if (i < len(input_objs) and input_objs[i] is not None) else 0 for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         # skip_indices = [all(input_obj is None for input_obj in input_objs) for input_objs, _ in zip(objects, frames)]
 
@@ -367,10 +370,10 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             if target_noun == "":
                 for token in doc:
                     if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
-                        if not(this_target_noun in avoid_with_on \
-                            or this_target_noun in avoid_with_in \
-                                or this_target_noun in DO_NOT_PARSE_NOUNS \
-                                or any(n in this_target_noun for n in DO_NOT_PARSE_NOUNS)):
+                        if not(token.text in avoid_with_on \
+                            or token.text in avoid_with_in \
+                                or token.text in DO_NOT_PARSE_NOUNS \
+                                or any(n in token.text for n in DO_NOT_PARSE_NOUNS)):
                             target_noun = token.text
 
             # Identify spatial relations based on specific dependencies
@@ -457,20 +460,33 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
             # Reweight the confidence of each candidate bounding box based on how close it is to the center of the image (central objects are more likely to be important)
             if bboxes.shape[0] > 0:
+
+                # Merge together overlapping bounding boxes
+                bboxes = np.array([bbox.coords for bbox in BoundingBoxCluster([BoundingBox(*bbox, score) for bbox, score in zip(bboxes, scores)]).get_merged_boxes()])
+
                 for bbox_idx, bbox in enumerate(bboxes):
                     old_score = scores[bbox_idx]
 
                     bbox_centroid = np.array(((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0))
-                    image_centroid = np.array((frame.width / 2.0, frame.height / 2.0))
-                    bbox_dist_from_center = min(np.linalg.norm(image_centroid - bbox_centroid) / (max(frame.width, frame.height) / 2.0), 1.0) # normalize by maximum distance
+                    image_centroid = np.array((frame_padded.width / 2.0, (frame_padded.width / frame.width * frame.height) / 2.0)) # NOTE: this assumes image is horizontal (width >= height)
+                    bbox_dist_from_center = min(np.linalg.norm(image_centroid - bbox_centroid) / np.sqrt(image_centroid[0] ** 2 + image_centroid[1] ** 2), 1.0) # normalize by maximum distance
                     assert 0.0 <= bbox_dist_from_center <= 1.0, f"Bounding box distance out of range: {bbox_dist_from_center}"
-                    bbox_dist_from_center = 0.5 / (1 + np.exp(-20 * (bbox_dist_from_center - 0.5))) + 0.5 # Use a sigmoid function to re-weight the distance
-                    scores[bbox_idx] *= bbox_dist_from_center
+                    bbox_dist_from_center_reweighted = 0.5 / (1 + np.exp(-20 * (0.5 - bbox_dist_from_center))) + 0.5 # Use a sigmoid function to re-weight the distance
+                    scores[bbox_idx] *= bbox_dist_from_center_reweighted
 
-                    print(f"bbox {bbox} in {frame.width}x{frame.height} image: {old_score} -> {scores[bbox_idx]} (dist={bbox_dist_from_center})")
+                    # print(f"bbox {bbox} in {frame.width}x{frame.height} image: {old_score} -> {scores[bbox_idx]} (dist={bbox_dist_from_center}, {bbox_dist_from_center_reweighted} after reweight)")
+                    # print("padded frame size:", frame_padded.size)
+                    # print("image centroid:", image_centroid)
+                    # print("bbox centroid:", bbox_centroid)
+                    # print("")
+                    # frame_padded.save("temp.png")
 
                 # Remove any bboxes that are no longer above the threshold
                 bboxes = np.array([bbox for bbox, score in zip(bboxes, scores) if score >= OWL_THRESHOLD])
+                scores = np.array([score for score in scores if score >= OWL_THRESHOLD])
+                if len(bboxes.shape) == 1:
+                    # There's only one bbox left, which takes away a dim
+                    bboxes = np.expand_dims(bboxes, axis=0)
 
             if bboxes.shape[0] > 0:
                 # If we still have some bboxes
