@@ -680,7 +680,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
                  mismatch_augmentation: bool=False,
-                 multi_frame: bool = False,
+                 multi_frame: bool=False,
                  debug_n_examples_per_class: Optional[int]=None,
                  n_workers: Optional[int]=None,
                  worker_index: Optional[int]=None):
