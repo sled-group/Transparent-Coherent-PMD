@@ -420,7 +420,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         return results
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE, return_visible_target_objects=True) -> tuple[list[Image.Image], list[str]]:
-        
+
         # First, parse out all "target" objects mentioned in questions and count them in images
         if return_visible_target_objects:
             object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
@@ -451,12 +451,35 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         for old_question, (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(questions, spatial_parse_results, detection_results, frames, padded_images):
             bboxes = detection_result["boxes"]
             bboxes = bboxes.cpu().numpy() # (# boxes, 4)
+            scores = detection_result["scores"].cpu().numpy()
+
+            print(old_question, noun)
+
+            # Reweight the confidence of each candidate bounding box based on how close it is to the center of the image (central objects are more likely to be important)
+            if bboxes.shape[0] > 0:
+                for bbox_idx, bbox in enumerate(bboxes):
+                    old_score = scores[bbox_idx]
+
+                    bbox_centroid = np.array(((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0))
+                    image_centroid = np.array((frame.width / 2.0, frame.height / 2.0))
+                    bbox_dist_from_center = min(np.linalg.norm(image_centroid - bbox_centroid) / (max(frame.width, frame.height) / 2.0), 1.0) # normalize by maximum distance
+                    assert 0.0 <= bbox_dist_from_center <= 1.0, f"Bounding box distance out of range: {bbox_dist_from_center}"
+                    bbox_dist_from_center = 0.5 / (1 + np.exp(-20 * (bbox_dist_from_center - 0.5))) + 0.5 # Use a sigmoid function to re-weight the distance
+                    scores[bbox_idx] *= bbox_dist_from_center
+
+                    print(f"bbox {bbox} in {frame.width}x{frame.height} image: {old_score} -> {scores[bbox_idx]} (dist={bbox_dist_from_center})")
+
+                # Remove any bboxes that are no longer above the threshold
+                bboxes = np.array([bbox for bbox, score in zip(bboxes, scores) if score >= OWL_THRESHOLD])
 
             if bboxes.shape[0] > 0:
+                # If we still have some bboxes
+
                 # Select only top MAXIMUM_BBOXES_PER_OBJECT boxes
-                bboxes = zip(bboxes, detection_result['scores'].cpu().numpy())
+                bboxes = zip(bboxes, scores)
                 bboxes = sorted(bboxes, key=lambda x: x[1], reverse=True)[:MAXIMUM_BBOXES_PER_OBJECT]
                 bboxes = np.array([bbox for bbox, _ in bboxes])
+                del scores
 
                 mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
 
@@ -484,7 +507,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                             bbox[2] = mask.shape[1] - 1     
 
                         bboxes[bbox_idx] = bbox                   
-                        
+
                     # Set the area within the bounding box to 0
                     # Note the order: (ymin:ymax, xmin:xmax)                        
                     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
@@ -559,7 +582,7 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
                     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
                                     
                 # Apply mask strength to black parts of resulting mask
-                mask = (1.0 - (1 - mask) * MASK_STRENGTH)
+                mask = 1.0 - (1 - mask) * MASK_STRENGTH
                         
                 # Apply mask and undo padding of masked/cropped image to pass to VLM later
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
