@@ -30,7 +30,8 @@ from travel.data.utils import get_subdirectories, split_list_into_partitions, Re
 from travel.data.utils.text import simple_present_to_imperative
 from travel.data.utils.video import get_video, extract_frames
 
-# Some verbs would not be expected in the task-oriented mistake detection setting (don't really cause a meaningful state change toward a task goal), so we can filter them out
+# Some verbs would not be expected in the task-oriented mistake detection setting 
+# (don't really cause a meaningful/observable state change toward a task goal), so filter them out
 EGO4D_IGNORE_VERBS = [
     'scroll', # Scrolling on phone, tablet, etc.
     'touch', # Touching an object
@@ -53,9 +54,17 @@ EGO4D_IGNORE_VERBS = [
     'cross', # People crossing over things
     'kick', # Kicking objects with foot - usually not related to any task
     "check", # Check on something, e.g., look at something - doesn't imply a state change
-    # "adjust_(regulate,_increase/reduce,_change)", # Adjust something (not clear in which way, and usually requires several frames to judge)
-    # "turn_(spin,_rotate,_flip,_turn_over)" # Turn something (requires multiple frames to judge)
+    "adjust_(regulate,_increase/reduce,_change)", # Adjust something (not clear in which way, and usually requires several frames to judge)
+    "turn_(spin,_rotate,_flip,_turn_over)", # Turn something (not clear in which way, so can't judge in a single frame)
+    "operate_(use,_dial,_click-button)", # Pressing buttons or touch screen
+    "shake", # Shake an object
 ] 
+
+# Similarly, some verb noun pairs don't involve meaningful state changes (e.g., put hand)
+EGO4D_IGNORE_VERB_NOUN_PAIRS = [
+    ("put_(place,_leave,_drop)", "hand_(finger,_hand,_palm,_thumb)"), # Putting hand on something is the same as touching, which we also ignore
+    # ("cut_(trim,_slice,_chop)", "grass"), # Cutting grass 
+]
 
 C_REGEX = re.compile(r"^\#C\s+C", re.IGNORECASE)
 EOS_REGEX = re.compile(r"\<\|eos\|\>$", re.IGNORECASE)
@@ -590,6 +599,7 @@ def filter_action_for_mistake_detection(action: dict[str, Any], previous_action:
         # and action["pnr_frame"] is not None
         and action["post_frame"] is not None
         and action["structured_verb"] not in EGO4D_IGNORE_VERBS # Omit clips with non-task actions
+        and (action["structured_verb"], action["structured_noun"]) not in EGO4D_IGNORE_VERB_NOUN_PAIRS
         and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
         and (
             previous_action is None
@@ -647,8 +657,9 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                                                 ("with your left hand", "with your hand"),
                                                 ("with your right hand", "with your hand"),
                                                 ("with both hands", "with your hands")]:
-            # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove mentions of this
-            instruction_text = instruction_text.replace(original_text, replaced_text)
+            if not("left hand" in instruction_text and "right hand" in instruction_text):
+                # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove unneeded mentions of this
+                instruction_text = instruction_text.replace(original_text, replaced_text)
         return instruction_text
 
     def generate_examples(self,
