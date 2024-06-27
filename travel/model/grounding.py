@@ -456,7 +456,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             bboxes = bboxes.cpu().numpy() # (# boxes, 4)
             scores = detection_result["scores"].cpu().numpy()
 
-            print(old_question, noun)
+            # print(old_question, noun)
 
             # Reweight the confidence of each candidate bounding box based on how close it is to the center of the image (central objects are more likely to be important)
             if bboxes.shape[0] > 0:
@@ -465,7 +465,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 bboxes = np.array([bbox.coords for bbox in BoundingBoxCluster([BoundingBox(*bbox, score) for bbox, score in zip(bboxes, scores)]).get_merged_boxes()])
 
                 for bbox_idx, bbox in enumerate(bboxes):
-                    old_score = scores[bbox_idx]
+                    # old_score = scores[bbox_idx]
 
                     bbox_centroid = np.array(((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0))
                     image_centroid = np.array((frame_padded.width / 2.0, (frame_padded.width / frame.width * frame.height) / 2.0)) # NOTE: this assumes image is horizontal (width >= height)
@@ -495,6 +495,9 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 bboxes = zip(bboxes, scores)
                 bboxes = sorted(bboxes, key=lambda x: x[1], reverse=True)[:MAXIMUM_BBOXES_PER_OBJECT]
                 bboxes = np.array([bbox for bbox, _ in bboxes])
+                if len(bboxes.shape) == 1:
+                    # There's only one bbox left, which takes away a dim
+                    bboxes = np.expand_dims(bboxes, axis=0)                
                 del scores
 
                 mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
