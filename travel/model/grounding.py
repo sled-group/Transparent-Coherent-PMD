@@ -222,6 +222,7 @@ DO_NOT_PARSE_NOUNS = [
     "temperature",
     "someone",
     "hand",
+    "hands",
     "place",
 ]
 
@@ -460,26 +461,29 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
 
                 # Mask out the areas for this noun
-                for bbox in bboxes:
-                    # If looking specifically at this noun, make sure bounding boxes are a minimum size (configured in config.yml)
+                for bbox_idx, bbox in enumerate(bboxes):
+                    # If looking specifically at this noun, make sure bounding boxes are a minimum size (configured in config.yml);
+                    # also make sure no bboxes cross the buondaries of the image
                     if look_at_noun:
                         bbox_height = bbox[3] - bbox[1]
                         if bbox_height < MINIMUM_CROP_SIZE:
                             bbox[1] -= (MINIMUM_CROP_SIZE - bbox_height) / 2
                             bbox[3] += (MINIMUM_CROP_SIZE - bbox_height) / 2
-                            if bbox[1] < 0:
-                                bbox[1] = 0
-                            if bbox[3] >= mask.shape[0]:
-                                bbox[3] = mask.shape[0] - 1
+                        if bbox[1] < 0:
+                            bbox[1] = 0
+                        if bbox[3] >= mask.shape[0]:
+                            bbox[3] = mask.shape[0] - 1
 
                         bbox_width = bbox[2] - bbox[0]
                         if bbox_width < MINIMUM_CROP_SIZE:
                             bbox[0] -= (MINIMUM_CROP_SIZE - bbox_width) / 2
                             bbox[2] += (MINIMUM_CROP_SIZE - bbox_width) / 2
-                            if bbox[0] < 0:
-                                bbox[0] = 0
-                            if bbox[2] >= mask.shape[1]:
-                                bbox[2] = mask.shape[1] - 1                        
+                        if bbox[0] < 0:
+                            bbox[0] = 0
+                        if bbox[2] >= mask.shape[1]:
+                            bbox[2] = mask.shape[1] - 1     
+
+                        bboxes[bbox_idx] = bbox                   
                         
                     # Set the area within the bounding box to 0
                     # Note the order: (ymin:ymax, xmin:xmax)                        
@@ -493,7 +497,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
 
-                # Apply mask and undo padding of masked/cropped image to pass to VLM later
+                # Undo padding of masked/cropped image to pass to VLM later
                 new_frame = np.array(frame_padded) * mask
                 new_frame = Image.fromarray(new_frame.astype(np.uint8))
                 new_height = new_frame.width / frame.width * frame.height
@@ -539,6 +543,17 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
             if bboxes.shape[0] > 0:
                 # Mask out the areas for this noun
                 for bbox in bboxes:
+                    # Make sure bbox doesn't go beyond image edges
+                    if bbox[1] < 0:
+                        bbox[1] = 0
+                    if bbox[3] >= mask.shape[0]:
+                        bbox[3] = mask.shape[0] - 1
+
+                    if bbox[0] < 0:
+                        bbox[0] = 0
+                    if bbox[2] >= mask.shape[1]:
+                        bbox[2] = mask.shape[1] - 1     
+
                     # Set the area within the bounding box to 0
                     # Note the order: (ymin:ymax, xmin:xmax)
                     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
