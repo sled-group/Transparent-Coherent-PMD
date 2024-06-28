@@ -912,7 +912,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
                     frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']
-                    effect_frame = mismatch_examples[misalignsrl_type]['effect_frames']
                     
                     # `procedure_id` is meant to be an ID for the narration.
                     procedure_id = procedure_id
