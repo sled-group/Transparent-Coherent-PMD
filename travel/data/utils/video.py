@@ -32,7 +32,8 @@ def extract_frames(cap: cv2.VideoCapture, times: list[Optional[float]]) -> list[
     for t in times:
         if type(t) == float:
             frame_number = int(t * fps)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            last_frame = cap.get(cv2.CAP_PROP_FRAME_COUNT) # avoid seeking past last frame
+            cap.set(cv2.CAP_PROP_POS_FRAMES, min(frame_number, last_frame))
             ret, frame = cap.read()
 
             if ret:

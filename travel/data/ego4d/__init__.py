@@ -481,7 +481,11 @@ class MisalignSRL:
                     post_end_time = min(frame_time + 4.0, sample['end_sec'])
                     post_frame_times = generate_float_series(post_start_time, post_end_time, 1 / FRAME_KEEP_FREQUENCY)
                     post_frames = extract_frames(video_cap, post_frame_times)
-                    sample['effect_frames'] = post_frames
+                    post_frame_times = [ftime for frame, ftime in zip(post_frames, post_frame_times) if frame is not None]
+                    post_frames = [frame for frame in post_frames if frame is not None]
+
+                    sample['effect_frames'] = [Image.fromarray(frame) for frame in post_frames]
+                    sample['effect_frame_times'] = post_frame_times
                 video_cap.release()
 
                 # NOTE: although multiple misalignsrl samples are prepared in the index file, we only sample one for now since not sure how outer code wants to organize the structure of multiple samples for one misalignsrl_type   
@@ -651,7 +655,15 @@ class Ego4dFHOMainDataset:
                             pre_frames = extract_frames(video_cap, pre_frame_times)
                         else:
                             pre_frames = []
+
+                        # Remove any frames that failed to load
+                        pre_frame_times = [ftime for frame, ftime in zip(pre_frames, pre_frame_times) if frame is not None]
+                        pre_frames = [frame for frame in pre_frames if frame is not None]
                         
+                        # Remove any frames that failed to load
+                        post_frame_times = [ftime for frame, ftime in zip(post_frames, post_frame_times) if frame is not None]
+                        post_frames = [frame for frame in post_frames if frame is not None]
+
                         yield clip_info | {"video_index": video_index,
                                           "video_uid": video_metadata["video_uid"],
                                           "clip_index": clip_index,
@@ -836,8 +848,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
                     continue
             else:
-                precondition_frames = [frame for frame in clip['pre_frames']]
-                effect_frames = [frame for frame in clip['post_frames']]
+                precondition_frames = clip['pre_frames']
+                effect_frames = clip['post_frames']
 
                 # Omit examples where precondition and effect clips' final frames are overly similar
                 precondition_effect_similarity = dot(precondition_frames[-1].astype(float).flatten(), effect_frames[-1].astype(float).flatten()) / (norm(precondition_frames[-1].astype(float).flatten()) * norm(effect_frames[-1].astype(float).flatten()))
@@ -911,8 +923,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                         video_id=video_id,
                         procedure_id=procedure_id,
                         example_id=f"{clip_id}/easyneg_{misalignsrl_type}_{video_id}_{frame_time}",
-                        frames=[Image.fromarray(mismatch_examples[misalignsrl_type]['effect_frame'])] if not multi_frame else [Image.fromarray(frame) for frame in mismatch_examples[misalignsrl_type]['effect_frames']],
-                        frame_times=[frame_time],
+                        frames=mismatch_examples[misalignsrl_type]['effect_frame'] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frames'],
+                        frame_times=[frame_time] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frame_times'],
                         procedure_description=instruction_text,
                         mistake=True,
                         mistake_type=misalignsrl_type,
