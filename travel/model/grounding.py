@@ -227,6 +227,7 @@ DO_NOT_PARSE_NOUNS = [
     "hand",
     "hands",
     "place",
+    "floor" # Floor is often misrecognized as the whole image
 ]
 
 class TargetObjectCounterFilter(AdaptiveVisualFilter):
