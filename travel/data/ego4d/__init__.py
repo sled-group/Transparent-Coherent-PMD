@@ -922,7 +922,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                         video_id=video_id,
                         procedure_id=procedure_id,
                         example_id=f"{clip_id}/easyneg_{misalignsrl_type}_{video_id}_{frame_time}",
-                        frames=mismatch_examples[misalignsrl_type]['effect_frame'] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frames'],
+                        frames=[mismatch_examples[misalignsrl_type]['effect_frame']] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frames'],
                         frame_times=[frame_time] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frame_times'],
                         procedure_description=instruction_text,
                         mistake=True,
