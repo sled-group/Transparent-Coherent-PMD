@@ -91,7 +91,7 @@ for partition in args.generate_partitions:
     # Load Ego4D for mistake detection
     dataset = Ego4DMistakeDetectionDataset(data_split=partition,
                                            mismatch_augmentation=True,
-                                           debug_n_examples_per_class=100 if args.debug else None)
+                                           debug_n_examples_per_class=250 if args.debug else None)
     print(f"{len(dataset)} Ego4D mistake detection examples loaded from {partition} partition")
     
     # Generate or load prompts

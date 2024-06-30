@@ -4,19 +4,19 @@ init_travel()
 
 import argparse
 from collections import defaultdict
-from copy import deepcopy
 from datasets import Dataset
 import datetime
 import os
-from peft import LoraConfig, TaskType, prepare_model_for_kbit_training
+from peft import LoraConfig, prepare_model_for_kbit_training
 from pprint import pprint
 import random
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import DPOTrainer, DPOConfig, SFTTrainer, SFTConfig
 
+from travel.data.vqg import generate_vqg_prompt
 from travel.data.vqg_learning import load_vqg_training_examples
 
 def print_trainable_parameters(model):
@@ -47,7 +47,7 @@ def main():
     parser.add_argument("--beta", type=float, default=0.1, help="DPO beta parameter for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
-    parser.add_argument("--save_strategy", type=str, choices=["no", "epochs"], default="epochs", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
+    parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
     args = parser.parse_args()
 
     # Load local rank from torchrun if we have it (for debugging purpose)
@@ -103,8 +103,8 @@ def main():
         rejected = []
         for ex1, ex2 in tqdm(pairs, "Pairing examples"):
             if not args.debug:
-                assert ex1.prompt == ex2.prompt, f"Prompts for training pair don't match!\n\n{ex1.prompt}\n\n{ex2.prompt}"
-            prompt.append(ex1.prompt)
+                assert ex1.procedure_description == ex2.procedure_description, f"Procedures for training pair don't match!\n\n{ex1.procedure_description}\n\n{ex2.procedure_description}"
+            prompt.append(generate_vqg_prompt(ex1.procedure_description))
 
             gen1 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex1.questions)])
             gen2 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex2.questions)])
@@ -123,35 +123,6 @@ def main():
             rejected = rejected[:100]
 
         if args.training_mode == "DPO":
-            dpo_dataset_dict = {
-                "prompt": [
-                    "hello",
-                    "how are you",
-                    "What is your name?",
-                    "What is your name?",
-                    "Which is the best programming language?",
-                    "Which is the best programming language?",
-                    "Which is the best programming language?",
-                ],
-                "chosen": [
-                    "hi nice to meet you",
-                    "I am fine",
-                    "My name is Mary",
-                    "My name is Mary",
-                    "Python",
-                    "Python",
-                    "Java",
-                ],
-                "rejected": [
-                    "leave me alone",
-                    "I am not fine",
-                    "Whats it to you?",
-                    "I dont have a name",
-                    "Javascript",
-                    "C++",
-                    "C++",
-                ],
-            }
             dataset = Dataset.from_dict(
                 {
                     "prompt": prompt,
@@ -159,12 +130,11 @@ def main():
                     "rejected": rejected,
                 }
             )
-            dataset = Dataset.from_dict(dpo_dataset_dict)
         elif args.training_mode == "SFT":
             dataset = Dataset.from_dict(
                 {
-                    "prompt": prompt,
-                    "completion": chosen,
+                    "prompt": prompt + prompt,
+                    "completion": chosen + rejected,
                 }
             )
 
@@ -183,7 +153,7 @@ def main():
     )
     tokenizer = AutoTokenizer.from_pretrained(args.lm_name, add_eos_token=True, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
+    # tokenizer.padding_side = "left"
     model = AutoModelForCausalLM.from_pretrained(args.lm_name, device_map="auto",
                                                  quantization_config=bnb_config, 
                                                  trust_remote_code=True)
@@ -197,7 +167,7 @@ def main():
                             inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
                             r=64,                           # dimension of low-rank matrices
                             lora_alpha=16,                  # scaling coefficient of weight update
-                            target_modules=["q_proj", "v_proj"],
+                            target_modules="all-linear",
                             lora_dropout=0.1,               # dropout regularization on LoRA weights
                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 
@@ -221,8 +191,7 @@ def main():
                                       save_total_limit=3,
                                       save_only_model=False,
                                       remove_unused_columns=False,
-                                      evaluation_strategy="steps",
-                                      eval_steps=0.05, # TODO: adjust later once model is actually training, e.g., change back to "epoch"
+                                      evaluation_strategy="epoch",
                                       report_to="wandb",
                                       logging_strategy="steps",
                                       logging_steps=1 if args.debug else 10,
@@ -247,8 +216,8 @@ def main():
             train_dataset=datasets["train"],
             eval_dataset=datasets["val"],
             peft_config=peft_config,
+            max_seq_length=int(1.5 * max([len(p.split()) + len(g.split()) for p, g in zip(prompt + prompt, chosen + rejected)])),
             packing=True,
-            max_seq_length=None,
             tokenizer=tokenizer,
             args=training_args,         
         )        
