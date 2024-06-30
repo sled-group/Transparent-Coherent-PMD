@@ -37,6 +37,7 @@ wandb = "^0.17"
 pympler = "^1.0.1"
 memory-profiler = "^0.61.0"
 pynvml = "^11.5.0"
+optuna = "^3.6.1"
 
 [build-system]
 requires = ["poetry-core"]
