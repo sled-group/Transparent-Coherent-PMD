@@ -813,6 +813,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             worker_index=worker_index,
         )
 
+        print(f"Found {len(already_processed_videos)} processed videos, still need to process {len(ego4d)} clips.")
+
         nlp = spacy.load('en_core_web_lg')
         SIMILARITY_THRESHOLD = 0.95
 
@@ -951,7 +953,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         del example_cache_buffer
         example_cache_buffer: list[MistakeDetectionExample] = []
 
-def combine_ego4d_partitions(datasets: list[Ego4DMistakeDetectionDataset], debug_n_examples_per_class: int=None) -> Ego4DMistakeDetectionDataset:
+def combine_ego4d_partitions(datasets: list[Ego4DMistakeDetectionDataset], mismatch_augmentation: bool=False, multi_frame: bool=False, debug_n_examples_per_class: int=None) -> Ego4DMistakeDetectionDataset:
     """
     Combines Ego4DMistakeDetectionDataset partitions generated from parallelization. Make sure all data partitions have been copletely generated before calling this.
 
@@ -975,10 +977,11 @@ def combine_ego4d_partitions(datasets: list[Ego4DMistakeDetectionDataset], debug
         new_dataset_metadata["n_examples"] += dataset.n_examples
     new_cache_dir = cache_dirs[0].split("_partition")[0]
     new_dataset_metadata["cache_dir"] = new_cache_dir
-    new_dataset_metadata["mismatch_sampler"] = None
     assert not os.path.exists(new_cache_dir), "Cache dir for combined dataset already exists. Please delete."
     os.makedirs(new_cache_dir)
     json.dump(new_dataset_metadata, 
               open(os.path.join(new_cache_dir, "dataset.json"), "w"))
     return Ego4DMistakeDetectionDataset(datasets[0].data_split,
+                                        mismatch_augmentation=mismatch_augmentation,
+                                        multi_frame=multi_frame,
                                         debug_n_examples_per_class=debug_n_examples_per_class)

@@ -92,6 +92,7 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
         dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                                mismatch_augmentation=True,
+                                               multi_frame=True,
                                                debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
         indexed_procedures = dataset.get_all_procedures
 
