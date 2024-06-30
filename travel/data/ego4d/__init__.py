@@ -66,6 +66,7 @@ EGO4D_IGNORE_VERBS = [
     "blow", # Blowing air
     "serve", # Serving food
     "stand", # Standing up
+    # "count", # Counting things # TODO: uncomment for next batch of ego4d data
 ] 
 
 # Similarly, some verb noun pairs don't involve meaningful state changes (e.g., put hand)

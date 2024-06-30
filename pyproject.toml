@@ -28,11 +28,10 @@ spacy = "3.7.2"
 en_core_web_sm = {url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz"}
 en_core_web_md = {url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.7.1/en_core_web_md-3.7.1.tar.gz"}
 en_core_web_lg = {url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1.tar.gz"}
-en_core_web_trf = {url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.7.3/en_core_web_trf-3.7.3.tar.gz"}
 scikit-learn = "^1.4.0"
 dataclasses-json = "^0.6.3"
-trl = "0.8.5"
-datasets = "2.19.0"
+trl = "0.9.4"
+datasets = "2.20.0"
 protobuf = "^4.21"
 wandb = "^0.17"
 pympler = "^1.0.1"
