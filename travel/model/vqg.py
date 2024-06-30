@@ -4,7 +4,8 @@ from transformers import TextGenerationPipeline
 from transformers.pipelines.pt_utils import KeyDataset
 from typing import Optional
 
-from travel.constants import CACHE_FREQUENCY
+from travel import set_random_seed
+from travel.constants import CACHE_FREQUENCY, RANDOM_SEED
 from travel.data.vqg import VQGInputs, VQGOutputs, parse_vqg_outputs, save_vqg_outputs
 
 # TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name? - at least for CaptainCook4D
@@ -22,7 +23,6 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
     assert len(inputs) == len(input_ids), "run_vqg expected the same number of inputs and input IDs!"
     prompt_idx = 0
     with torch.no_grad():
-        # TODO: implement data parallelism over multiple GPUs?
         for inp, inp_id, out in tqdm(zip(inputs,
                                          input_ids,
                                          lm(KeyDataset([inp.to_dict() for inp in inputs], "prompt"), 
@@ -35,6 +35,9 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
 
             procedure_id = int(inp.procedure_id)
             step = inp.procedure_description
+
+            # During VQG, set random seed based on procedure ID to ensure we don't use the same random seed in other parallel processes
+            set_random_seed(RANDOM_SEED * procedure_id)
 
             text = out[0]['generated_text']
             
