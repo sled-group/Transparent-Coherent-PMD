@@ -730,8 +730,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                          n_workers=n_workers,
                          worker_index=worker_index)
 
-    def get_cache_dir(self, 
-                      data_split: str,
+    @staticmethod
+    def get_cache_dir(data_split: str,
                       mismatch_augmentation: bool=False,
                       multi_frame: bool=False,
                       debug_n_examples_per_class: Optional[int]=None,

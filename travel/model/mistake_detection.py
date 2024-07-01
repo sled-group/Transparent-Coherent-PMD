@@ -147,7 +147,7 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
 
     # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times;
     # checking that max(frame_times) > 0 is necessary because of the bug
-    mean_mistake_prob = [(p * (t / max(frame_times)) if len(frame_times) > 1 and max(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
+    mean_mistake_prob = [(p * ((t - min(frame_times)) / (max(frame_times) - min(frame_times))) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
     # mean_mistake_prob = [(p * (t / sum(frame_times)) if len(frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, frame_times)] 
 
     if verbose:
@@ -233,32 +233,24 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
         self.relevance_probs = None
         super().__post_init__()
 
-    def run_nli(self, procedure_descriptions: list[str], questions: list[str], answers: list[VQAResponse]) -> tuple[list[str], list[float], list[float]]:
+    def run_nli(self, procedure_descriptions: list[str], premises: list[str], premises_negated: Optional[list[str]]) -> tuple[list[str], list[float], list[float]]:
         # TODO: normalize entailment predictions using surface form competition methodology?
         if self.mistake_probs is None or self.relevance_probs is None:
             with torch.no_grad():
                 all_mistake_probs = torch.zeros((0, 1)).float()
-                all_relevance = torch.zeros((0, 1)).float()
+                if premises_negated:
+                    all_relevance = torch.zeros((0, 1)).float()
 
                 for i in tqdm(range(0, len(procedure_descriptions), NLI_BATCH_SIZE), desc=f"running NLI ({str(self.nli_model.device)})"):
                     # Prepare the batch
                     batch_procedure_descriptions = procedure_descriptions[i:i+NLI_BATCH_SIZE]
-                    batch_questions = questions[i:i+NLI_BATCH_SIZE]
-                    batch_answers = answers[i:i+NLI_BATCH_SIZE]
-                    batch_negated_answers = [VQAResponse(1-answer.value) for answer in batch_answers]
-
-                    batch_answers = [answer.name for answer in batch_answers]
-                    batch_negated_answers = [answer.name for answer in batch_negated_answers]
-
-                    # Generate prompt data for premise and negated premise
-                    premise = [f"{question} {answer}" for question, answer in zip(batch_questions, batch_answers)]
-                    premise_negated = [f"{question} {answer}" for question, answer in zip(batch_questions, batch_negated_answers)]
+                    batch_premises = premises[i:i+NLI_BATCH_SIZE]
                     
                     hypothesis = [f'The procedure "{procedure}" has been successfully completed.' for procedure in batch_procedure_descriptions]
 
                     # Run premise through NLI model
-                    x = self.nli_tokenizer.encode(premise[0], hypothesis[0], return_tensors="pt", padding="longest", truncation="only_first")
-                    x = self.nli_tokenizer.batch_encode_plus(list(zip(premise, hypothesis)),
+                    x = self.nli_tokenizer.encode(batch_premises[0], hypothesis[0], return_tensors="pt", padding="longest", truncation="only_first")
+                    x = self.nli_tokenizer.batch_encode_plus(list(zip(batch_premises, hypothesis)),
                                                             return_tensors='pt', 
                                                             padding="longest",
                                                             truncation='only_first')
@@ -267,33 +259,38 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                     logits = logits[:,[0,2]] # Take logits for contradiction and entailment only
                     probs = logits.softmax(dim=1)
 
-                    # Run negated premise through NLI model
-                    x = self.nli_tokenizer.batch_encode_plus(list(zip(premise_negated, hypothesis)), 
-                                                            return_tensors='pt',
-                                                            padding="longest",
-                                                            truncation='only_first')
-                    logits_negated = self.nli_model(**x.to(self.nli_model.device))[0]
-                    logits_negated = logits_negated.cpu()
-                    logits_negated = logits_negated[:,[0,2]] # Take logits for contradiction and entailment only
-                    probs_negated = logits_negated.softmax(dim=1)
-                    
-                    # If probability of contradiction doesn't change enough between answer and negated answer, 
-                    # then assume the question is irrelevant and assign 0 probability of contradiction 
-                    # (can filter these out from prediction later)
-                    relevance = probs[:, 0] - probs_negated[:, 0]
-                    # relevance[relevance < NLI_RELEVANCE_DELTA] = 0.0
-                    # relevance[relevance >= NLI_RELEVANCE_DELTA] = 1.0
-
                     # Grab contradiction probabilities weighted by relevance and add to all_mistake_probs
                     all_mistake_probs = torch.cat([all_mistake_probs, probs[:, 0].unsqueeze(1)], dim=0)
-                    all_relevance = torch.cat([all_relevance, relevance.unsqueeze(1)], dim=0)
+
+                    # Run negated premise through NLI model
+                    if premises_negated:
+                        batch_premises_negated = premises_negated[i:i+NLI_BATCH_SIZE]
+                        x = self.nli_tokenizer.batch_encode_plus(list(zip(batch_premises_negated, hypothesis)), 
+                                                                return_tensors='pt',
+                                                                padding="longest",
+                                                                truncation='only_first')
+                        logits_negated = self.nli_model(**x.to(self.nli_model.device))[0]
+                        logits_negated = logits_negated.cpu()
+                        logits_negated = logits_negated[:,[0,2]] # Take logits for contradiction and entailment only
+                        probs_negated = logits_negated.softmax(dim=1)
+                    
+                        # If probability of contradiction doesn't change enough between answer and negated answer, 
+                        # then assume the question is irrelevant and assign 0 probability of contradiction 
+                        # (can filter these out from prediction later)
+                        relevance = probs[:, 0] - probs_negated[:, 0]
+                        all_relevance = torch.cat([all_relevance, relevance.unsqueeze(1)], dim=0)
 
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
 
             self.mistake_probs = list(all_mistake_probs.squeeze(1).numpy())
-            self.relevance_probs = list(all_relevance.squeeze(1).numpy())
-        return self.mistake_probs, self.relevance_probs
+            if premises_negated:
+                self.relevance_probs = list(all_relevance.squeeze(1).numpy())
+
+        if premises_negated:
+            return self.mistake_probs, self.relevance_probs
+        else:
+            return self.mistake_probs
 
     def check_mistakes(self, detection_threshold: float=0.5) -> list[MistakeDetectionOutputs]:
         """
@@ -316,7 +313,11 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                     all_questions.append(output.question)
                     all_answers.append(output.predicted_answer)
             
-        nli_mistake_probs, nli_relevance = self.run_nli(all_procedure_descriptions, all_questions, all_answers)
+        negated_answers = [VQAResponse(1-answer.value) for answer in all_answers]
+        premises = [f"{question} {answer}" for question, answer in zip(all_questions, all_answers)]
+        premises_negated = [f"{question} {answer}" for question, answer in zip(all_questions, negated_answers)]
+
+        nli_mistake_probs, nli_relevance = self.run_nli(all_procedure_descriptions, premises, premises_negated)
         del all_procedure_descriptions
         del all_questions
         del all_answers
@@ -338,6 +339,8 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 # Check all questions for this frame to decide if there's a mistake
                 for question_output in frame_outputs:
                     if output.target_object_counts is None or len(output.target_object_counts.keys()) == 0 or not max(output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                        
+                        
                         # Incorporate NLI model feedback
                         if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
                             # NLI model found this question irrelevant, so 0 mistake probability

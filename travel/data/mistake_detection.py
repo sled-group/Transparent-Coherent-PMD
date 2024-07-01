@@ -184,7 +184,8 @@ class MistakeDetectionDataset:
     def generate_examples(self, data_split: str, **kwargs: dict[str, Any]) -> list[MistakeDetectionExample]:
         raise NotImplementedError("Subclass should implement dataset loading procedure.")
 
-    def get_cache_dir(self, **kwargs: dict[str, Any]) -> str:
+    @staticmethod
+    def get_cache_dir(**kwargs: dict[str, Any]) -> str:
         raise NotImplementedError("Subclass should implement logic for generating cached data directory.")
         
     def get_example_dir(self, example_id: str) -> str:
@@ -210,7 +211,8 @@ class MistakeDetectionDataset:
         self.example_dirs.append(example_cache_dir)
         self.n_examples += 1
         
-    def load_example_from_file(self, example_dir: str, load_frames: bool=True) -> MistakeDetectionExample:
+    @staticmethod
+    def load_example_from_file(example_dir: str, load_frames: bool=True) -> MistakeDetectionExample:
         """
         Loads an example from cache by the directory it's saved in.
 
