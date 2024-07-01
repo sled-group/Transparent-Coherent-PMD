@@ -37,6 +37,7 @@ parser.add_argument("--debug", action="store_true", help="Pass this argument to 
 args = parser.parse_args()
 
 # Split up work by srun processes; if SLURM_PROCID is not accessible, just run all the work here
+# NOTE: always run with the same number of parallel processes; we don't support changing the number of processes
 if "SLURM_PROCID" in os.environ:
     worker_index = int(os.environ["SLURM_PROCID"])
     n_workers = int(os.environ["SLURM_NPROCS"])
@@ -165,8 +166,8 @@ if n_workers > 1 and worker_index == 0:
         if other_worker_index == worker_index:
             continue
         other_worker_vqg_outputs_fname = os.path.join(this_results_dir, f"VQG_cache_{args.partition}_worker{worker_index}.json")
+        print(f"({worker_index}) Waiting for worker {other_worker_index} to finish VQG for temperature {temperature} trial {temp_trial}...")
         while True:
-            print(f"({worker_index}) Waiting for worker {other_worker_index} to finish VQG for temperature {temperature} trial {temp_trial}...")
             if os.path.exists(other_worker_vqg_outputs_fname):
                 other_vqg_outputs = load_vqg_outputs(other_worker_vqg_outputs_fname)
                 if len(other_vqg_outputs) == len(all_procedures_split[other_worker_index]) * len(args.temperatures):
@@ -174,6 +175,7 @@ if n_workers > 1 and worker_index == 0:
                     vqg_outputs |= other_vqg_outputs
                     break
             sleep(10)
+            print(f"({worker_index}) Still waiting...")
 
 # Save final combined VQG outputs
 save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, worker_vqg_outputs_fname))

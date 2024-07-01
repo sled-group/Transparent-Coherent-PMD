@@ -615,70 +615,71 @@ class Ego4dFHOMainDataset:
     def __iter__(self) -> Iterable[dict[str, Any]]:
         for video_index, video_path, video_metadata in self.video_sampler(self.video_info):
             try:
-                video_cap = get_video(video_path)
-            except:
-                print(f"Warning: could not load video at {video_path}.")
-                continue
+                try:
+                    video_cap = get_video(video_path)
+                except:
+                    print(f"Warning: could not load video at {video_path}.")
+                    continue
 
-            for clip_index, clip_info in enumerate(video_metadata['narrated_actions']):
-                if not self.multi_frame:
-                    pre_time = clip_info['pre_frame'] / clip_info['fps'] if clip_info['pre_frame'] is not None else None
-                    pnr_time = clip_info['pnr_frame'] / clip_info['fps'] if clip_info['pnr_frame'] is not None else None
-                    post_time = clip_info['post_frame'] / clip_info['fps'] if clip_info['post_frame'] is not None else None
-                
-                    pre_frame, pnr_frame, post_frame = extract_frames(video_cap, [pre_time, pnr_time, post_time])
-
-                    yield clip_info | {"video_index": video_index,
-                                       "video_uid": video_metadata["video_uid"],
-                                       "clip_index": clip_index,
-                                       "pre_time": pre_time,
-                                       "pre_frame": pre_frame, 
-                                       "pnr_time": pnr_time, 
-                                       "pnr_frame": pnr_frame,
-                                       "post_time": post_time,
-                                       "post_frame": post_frame}
-                else:
-                    # Sample a precondition and effect video clip instead (precondition clip is used to generate a negative example)
-                    if clip_info['post_frame'] is not None and clip_info['pre_frame'] is not None and clip_info['narration_timestamp_sec'] is not None:
-                        # Following SuccessVQA, sample positive example as 8 second clip centered around narration timestamp
-                        narration_time = clip_info['narration_timestamp_sec']
-                        post_start_time = max(narration_time - 4.0, 0.0)
-                        post_end_time = min(narration_time + 4.0, clip_info['video_duration'])
-                        post_frame_times = generate_float_series(post_start_time, post_end_time, 1 / FRAME_KEEP_FREQUENCY)
-                        post_frames = extract_frames(video_cap, post_frame_times)
-
-                        # Following SuccessVQA, sample negative example as an 8 second clip ending at the precondition frame
-                        # (but make sure it doesn't overlap with effect clip)
-                        pre_end_time = min(clip_info['pre_frame'] / clip_info['fps'], post_start_time - 1 / FRAME_KEEP_FREQUENCY)
-                        pre_end_time = max(pre_end_time, 0.0)
-                        pre_start_time = max(pre_end_time - 8.0, 0.0)
-                        pre_frame_times = generate_float_series(pre_start_time, pre_end_time, 1 / FRAME_KEEP_FREQUENCY)
-                        if len(pre_frame_times) > 0 and pre_start_time != pre_end_time:
-                            pre_frames = extract_frames(video_cap, pre_frame_times)
-                        else:
-                            pre_frames = []
-
-                        # Remove any frames that failed to load
-                        pre_frame_times = [ftime for frame, ftime in zip(pre_frames, pre_frame_times) if frame is not None]
-                        pre_frames = [frame for frame in pre_frames if frame is not None]
-                        
-                        # Remove any frames that failed to load
-                        post_frame_times = [ftime for frame, ftime in zip(post_frames, post_frame_times) if frame is not None]
-                        post_frames = [frame for frame in post_frames if frame is not None]
+                for clip_index, clip_info in enumerate(video_metadata['narrated_actions']):
+                    if not self.multi_frame:
+                        pre_time = clip_info['pre_frame'] / clip_info['fps'] if clip_info['pre_frame'] is not None else None
+                        pnr_time = clip_info['pnr_frame'] / clip_info['fps'] if clip_info['pnr_frame'] is not None else None
+                        post_time = clip_info['post_frame'] / clip_info['fps'] if clip_info['post_frame'] is not None else None
+                    
+                        pre_frame, pnr_frame, post_frame = extract_frames(video_cap, [pre_time, pnr_time, post_time])
 
                         yield clip_info | {"video_index": video_index,
-                                          "video_uid": video_metadata["video_uid"],
-                                          "clip_index": clip_index,
-                                          "pre_times": pre_frame_times,
-                                          "pre_frames": pre_frames, 
-                                          "post_times": post_frame_times,
-                                          "post_frames": post_frames}
-
+                                        "video_uid": video_metadata["video_uid"],
+                                        "clip_index": clip_index,
+                                        "pre_time": pre_time,
+                                        "pre_frame": pre_frame, 
+                                        "pnr_time": pnr_time, 
+                                        "pnr_frame": pnr_frame,
+                                        "post_time": post_time,
+                                        "post_frame": post_frame}
                     else:
-                        # Missing the annotations we need to select clips
-                        continue
-            
-            video_cap.release()
+                        # Sample a precondition and effect video clip instead (precondition clip is used to generate a negative example)
+                        if clip_info['post_frame'] is not None and clip_info['pre_frame'] is not None and clip_info['narration_timestamp_sec'] is not None:
+                            # Following SuccessVQA, sample positive example as 8 second clip centered around narration timestamp
+                            narration_time = clip_info['narration_timestamp_sec']
+                            post_start_time = max(narration_time - 4.0, 0.0)
+                            post_end_time = min(narration_time + 4.0, clip_info['video_duration'])
+                            post_frame_times = generate_float_series(post_start_time, post_end_time, 1 / FRAME_KEEP_FREQUENCY)
+                            post_frames = extract_frames(video_cap, post_frame_times)
+
+                            # Following SuccessVQA, sample negative example as an 8 second clip ending at the precondition frame
+                            # (but make sure it doesn't overlap with effect clip)
+                            pre_end_time = min(clip_info['pre_frame'] / clip_info['fps'], post_start_time - 1 / FRAME_KEEP_FREQUENCY)
+                            pre_end_time = max(pre_end_time, 0.0)
+                            pre_start_time = max(pre_end_time - 8.0, 0.0)
+                            pre_frame_times = generate_float_series(pre_start_time, pre_end_time, 1 / FRAME_KEEP_FREQUENCY)
+                            if len(pre_frame_times) > 0 and pre_start_time != pre_end_time:
+                                pre_frames = extract_frames(video_cap, pre_frame_times)
+                            else:
+                                pre_frames = []
+
+                            # Remove any frames that failed to load
+                            pre_frame_times = [ftime for frame, ftime in zip(pre_frames, pre_frame_times) if frame is not None]
+                            pre_frames = [frame for frame in pre_frames if frame is not None]
+                            
+                            # Remove any frames that failed to load
+                            post_frame_times = [ftime for frame, ftime in zip(post_frames, post_frame_times) if frame is not None]
+                            post_frames = [frame for frame in post_frames if frame is not None]
+
+                            yield clip_info | {"video_index": video_index,
+                                            "video_uid": video_metadata["video_uid"],
+                                            "clip_index": clip_index,
+                                            "pre_times": pre_frame_times,
+                                            "pre_frames": pre_frames, 
+                                            "post_times": post_frame_times,
+                                            "post_frames": post_frames}
+
+                        else:
+                            # Missing the annotations we need to select clips
+                            continue
+            finally:
+                video_cap.release()
     
     def __len__(self) -> int:
         return self.num_narrated_actions    
@@ -814,14 +815,14 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             worker_index=worker_index,
         )
 
-        print(f"Found {len(already_processed_videos)} processed videos, still need to process {len(ego4d)} clips.")
+        print(f"({worker_index}) Found {len(already_processed_videos)} processed videos, still need to process {len(ego4d)} clips.")
 
         nlp = spacy.load('en_core_web_lg')
         SIMILARITY_THRESHOLD = 0.95
 
         # Prepare list to hold examples ready for caching
         example_cache_buffer = []
-        for clip in tqdm(ego4d, desc="generating ego4d data"):
+        for clip in tqdm(ego4d, desc=f"({worker_index}) generating ego4d data"):
             # Cache if we're starting a new video
             if clip['clip_index'] == 0 and len(example_cache_buffer) > 0:  
                 # Cache examples in buffer
@@ -903,7 +904,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 )
                 example_cache_buffer.append(negative_example_hard)
             else:
-                print(f"Warning: Could not generate a hard negative for clip {clip_id}!")
+                print(f"({worker_index}) Warning: Could not generate a hard negative for clip {clip_id}!")
             
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
