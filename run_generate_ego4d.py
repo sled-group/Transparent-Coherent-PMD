@@ -18,17 +18,6 @@ parser.add_argument("--debug", action="store_true", help="Pass this argument to 
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 args = parser.parse_args()
 
-def generate_ego4d_partition(n_workers: int,
-                             worker_index: int,
-                             debug: bool,) -> Ego4DMistakeDetectionDataset:
-    dataset_partition = Ego4DMistakeDetectionDataset(data_split=args.partition,
-                                                     mismatch_augmentation=args.mismatch_augmentation,
-                                                     multi_frame=args.multi_frame,
-                                                     debug_n_examples_per_class=args.debug_n_examples if debug else None,
-                                                     n_workers=n_workers,
-                                                     worker_index=worker_index)
-    return dataset_partition
-
 # Split up work by srun processes; if SLURM_PROCID is not accessible, just run all the work here
 # NOTE: always run with the same number of parallel processes; we don't support changing the number of processes
 if "SLURM_PROCID" in os.environ and "SLURM_NPROCS" in os.environ:
@@ -44,8 +33,8 @@ dataset_segment = Ego4DMistakeDetectionDataset(data_split=args.partition,
                                                mismatch_augmentation=args.mismatch_augmentation,
                                                multi_frame=args.multi_frame,
                                                debug_n_examples_per_class=args.debug_n_examples if args.debug else None,
-                                               n_workers=n_workers,
-                                               worker_index=worker_index)
+                                               n_workers=n_workers if n_workers > 1 else None,
+                                               worker_index=worker_index if n_workers > 1 else None)
 
 # Combine all dataset pieces from workers (only worker 0 does this)
 if n_workers > 1 and worker_index == 0:
