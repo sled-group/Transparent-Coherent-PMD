@@ -796,7 +796,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 random.shuffle(positive_dirs)
                 positive_dirs = positive_dirs[:debug_n_examples_per_class]
 
-                negative_dirs = [d for d in full_example_dirs if not d.endswith("pos")][:debug_n_examples_per_class]
+                negative_dirs = [d for d in full_example_dirs if not d.endswith("pos")]
                 random.shuffle(negative_dirs)
                 negative_dirs = negative_dirs[:debug_n_examples_per_class]
 
@@ -864,9 +864,10 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 effect_frames = clip['post_frames']
 
                 # Omit examples where precondition and effect clips' final frames are overly similar
-                precondition_effect_similarity = dot(precondition_frames[-1].astype(float).flatten(), effect_frames[-1].astype(float).flatten()) / (norm(precondition_frames[-1].astype(float).flatten()) * norm(effect_frames[-1].astype(float).flatten()))
-                if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
-                    continue
+                if len(precondition_frames) > 0 and len(effect_frames) > 0:
+                    precondition_effect_similarity = dot(precondition_frames[-1].astype(float).flatten(), effect_frames[-1].astype(float).flatten()) / (norm(precondition_frames[-1].astype(float).flatten()) * norm(effect_frames[-1].astype(float).flatten()))
+                    if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
+                        continue
 
                 precondition_frames = [Image.fromarray(frame) for frame in precondition_frames]
                 effect_frames = [Image.fromarray(frame) for frame in effect_frames]
