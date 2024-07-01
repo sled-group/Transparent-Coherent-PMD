@@ -127,6 +127,7 @@ with open('config.yml', 'r') as file:
 DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 
 def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_times: list[float], verbose: bool=False) -> float:
+    pprint(mistake_prob)
     mistake_prob = np.array(mistake_prob)
     if verbose:
         print("Mistake probs (input):")
@@ -184,6 +185,9 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                     if output.target_object_counts is None or len(output.target_object_counts) == 0 or not max(output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
                         mistake_answer = VQAResponse(1-int(output.expected_answer.value))
                         frame_mistake_probs.append(output.answer_probs[mistake_answer])
+                    else:
+                        # Visual filter didn't see any target objects, so assume there's a mistake
+                        frame_mistake_probs.append(1.0)
                 example_mistake_probs.append(frame_mistake_probs)
             mistake_probs.append(example_mistake_probs)
             
@@ -348,6 +352,9 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                             else:
                                 frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
                             # TODO: consider combining NLI probabilities by creating one premise based on relevant evidence and do one more inference (follow recoverr paper)
+                    else:
+                        # Visual filter didn't see any target objects, so assume there's a mistake
+                        frame_mistake_probs.append(1.0)
 
                     frame_nli_mistake_probs.append(nli_mistake_probs[parallel_idx])
                     frame_nli_relevance_probs.append(nli_relevance[parallel_idx])

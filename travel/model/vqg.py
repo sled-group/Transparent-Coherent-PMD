@@ -9,7 +9,7 @@ from travel.constants import CACHE_FREQUENCY, RANDOM_SEED
 from travel.data.vqg import VQGInputs, VQGOutputs, parse_vqg_outputs, save_vqg_outputs
 
 # TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name? - at least for CaptainCook4D
-def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}) -> dict[str, VQGOutputs]:
+def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}, omit_failed_instances: bool=True) -> dict[str, Optional[VQGOutputs]]:
     """
     Runs VQG with a given LM text generation pipeline and list of VQG inputs.
 
@@ -48,17 +48,17 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
             
             # Parse reported target object and questions and answers
             try:
-                try:
-                    output = parse_vqg_outputs(text_fixed, procedure_id, step)
-                except:
-                    print("Warning: failed to parse a VQG output.")
-                    continue
+                output = parse_vqg_outputs(text_fixed, procedure_id, step)
             except:
-                print("Error parsing VQG outputs:")
+                print("Warning: failed to parse a VQG output.")
                 print(text)
                 print('======')
-                print(text_fixed)
-                raise
+                print(text_fixed)  
+
+                if not omit_failed_instances:
+                    vqg_outputs[inp_id] = None
+
+                continue
 
             vqg_outputs[inp_id] = output
 
