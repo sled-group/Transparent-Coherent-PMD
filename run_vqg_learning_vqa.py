@@ -16,7 +16,7 @@ from travel.data.utils import split_list_into_partitions
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAOutputs
 from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
-from travel.model.grounding import VisualFilterTypes, MASK_STRENGTH
+from travel.model.grounding import VisualFilterTypes
 from travel.model.vqa import save_vqa_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
@@ -25,6 +25,7 @@ parser.add_argument("--vqg_directory", type=str, required=True, help="Directory 
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--partition", type=str, choices=["train", "val", "test"], help="List of partitions to generate data for.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
+parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters.")
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples. Can also be used to add another partition of data to existing reuslts directory.")
 parser.add_argument("--track_memory", action="store_true", help="Pass this argument to use `pympler` to print out summaries of memory usage periodically during execution.")
@@ -44,7 +45,7 @@ if args.resume_dir is None:
     timestamp = datetime.datetime.now()
     this_results_dir = os.path.join(args.vqg_directory, f"VQA_data_{args.vlm_name.split('/')[-1]}")
     if args.visual_filter_mode is not None:
-        this_results_dir += f"_{args.visual_filter_mode}{MASK_STRENGTH}"
+        this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
 else:
     this_results_dir = args.resume_dir
@@ -152,6 +153,7 @@ else:
 
     scorer = FrameVQAMistakeDetectionScorer(args.vlm_name,
                                             visual_filter_type=VisualFilterTypes(args.visual_filter_mode) if args.visual_filter_mode is not None else None,
+                                            visual_filter_strength=args.visual_filter_strength,
                                             vlm_device=0,
                                             visual_filter_device=0 if args.visual_filter_mode is not None else None)
     

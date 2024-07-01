@@ -19,6 +19,7 @@ class FrameVQAMistakeDetectionScorer:
     def __init__(self, 
                  vlm_name: str,
                  visual_filter_type: Optional[VisualFilterTypes]=None,
+                 visual_filter_strength: float=1.0,
                  vlm_device: Optional[int]=None,
                  visual_filter_device: Optional[int]=None):
         """
@@ -51,12 +52,12 @@ class FrameVQAMistakeDetectionScorer:
 
         if visual_filter_type == VisualFilterTypes.Spatial:
             # Load spatial filter onto separate GPU if available
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, device=visual_filter_device)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=visual_filter_strength, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
             # Load spatial filter onto separate GPU if available
             self.visual_filter = SpatialVisualFilter(rephrase_questions=False, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Contrastive_Region:
-            self.visual_filter = ContrastiveRegionFilter(device=visual_filter_device)
+            self.visual_filter = ContrastiveRegionFilter(mask_strength=visual_filter_strength, device=visual_filter_device)
         else:
             self.visual_filter = None
         self.visual_filter_type = visual_filter_type
@@ -137,7 +138,7 @@ class FrameVQAMistakeDetectionScorer:
             if self.visual_filter_type == VisualFilterTypes.Spatial or self.visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
                 frames, questions = self.visual_filter(self.nlp, frames, questions, return_visible_target_objects=False)
             elif self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
-                frames = self.visual_filter(self.nlp, frames, questions)
+                frames = self.visual_filter(self.nlp, frames, questions, )
         
         # Then delete these pre-loaded logits
         del logits 

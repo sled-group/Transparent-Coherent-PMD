@@ -22,7 +22,6 @@ with open('config.yml', 'r') as file:
 OWLV2_PATH = config["grounding"]["owlv2_path"]
 OWL_THRESHOLD = config["grounding"]["owl_threshold"] 
 OWL_BATCH_SIZE = config["grounding"]["owl_batch_size"]
-MASK_STRENGTH = config["grounding"]["mask_strength"]
 MINIMUM_CROP_SIZE = config["grounding"]["minimum_crop_size"]
 MAXIMUM_BBOXES_PER_OBJECT = config["grounding"]["maximum_bboxes_per_object"]
 
@@ -308,8 +307,9 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
 class SpatialVisualFilter(AdaptiveVisualFilter):
 
     """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
-    def __init__(self, rephrase_questions: bool=True, **kwargs: dict[str, Any]):
+    def __init__(self, rephrase_questions: bool=True, mask_strength: float=1.0, **kwargs: dict[str, Any]):
         self.rephrase_questions = rephrase_questions
+        self.mask_strength = mask_strength
         super().__init__(**kwargs)
 
     @staticmethod
@@ -423,7 +423,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             results.append((look_at_noun, target_noun if (target_noun != "" and not is_avoid_on and not is_avoid_in) else None, question))
         return results
 
-    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE, return_visible_target_objects=True) -> tuple[list[Image.Image], list[str]]:
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE, return_visible_target_objects: bool=True) -> tuple[list[Image.Image], list[str]]:
 
         # First, parse out all "target" objects mentioned in questions and count them in images
         if return_visible_target_objects:
@@ -537,7 +537,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     mask = 1 - mask
                                 
                 # Apply mask strength to black parts of resulting mask
-                mask = (1.0 - (1 - mask) * MASK_STRENGTH)
+                mask = (1.0 - (1 - mask) * self.mask_strength)
                 
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
 
@@ -547,7 +547,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 new_height = new_frame.width / frame.width * frame.height
                 new_frame = new_frame.crop((0, 0, new_frame.width - 1, new_height))
 
-                if look_at_noun and MASK_STRENGTH == 1.0:
+                if look_at_noun and self.mask_strength == 1.0:
                     # If we're blocking out everything but some bboxes, crop the image to only look at them
                     min_x = np.min(bboxes[:, 0])
                     min_y = np.min(bboxes[:, 1])
@@ -568,7 +568,8 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             return new_frames, new_questions
 
 class ContrastiveRegionFilter(AdaptiveVisualFilter):
-    def __init__(self, **kwargs: dict[str, Any]):
+    def __init__(self, mask_strength: float=1.0, **kwargs: dict[str, Any]):
+        self.mask_strength = mask_strength
         super().__init__(**kwargs)
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> list[Image.Image]:
@@ -603,7 +604,7 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
                     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
                                     
                 # Apply mask strength to black parts of resulting mask
-                mask = 1.0 - (1 - mask) * MASK_STRENGTH
+                mask = 1.0 - (1 - mask) * self.mask_strength
                         
                 # Apply mask and undo padding of masked/cropped image to pass to VLM later
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)

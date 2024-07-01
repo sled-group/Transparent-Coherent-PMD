@@ -14,13 +14,13 @@ import spacy
 import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
 
-from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
+from travel.constants import RESULTS_DIR
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, SUCCESSVQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, MASK_STRENGTH
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds
 from travel.model.vqa import run_vqa_for_mistake_detection
 
@@ -31,6 +31,7 @@ parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "t
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
+parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters.")
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -71,13 +72,13 @@ for worker_index in range(n_workers):
 
     if args.visual_filter_mode is not None:
         if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
-            visual_filter = SpatialVisualFilter(rephrase_questions=True, device=f"cuda:{worker_index}")
+            visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
-            visual_filter = SpatialVisualFilter(rephrase_questions=False, device=f"cuda:{worker_index}")
+            visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-            visual_filter = ContrastiveRegionFilter(device=f"cuda:{worker_index}")
+            visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
         else:
             raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with VQG2VQA!")
@@ -100,7 +101,7 @@ if args.resume_dir is None:
         this_results_dir += f"_debug{args.debug_n_examples}"
     this_results_dir += f"_{args.vlm_name.split('/')[-1]}"
     if args.visual_filter_mode is not None:
-        this_results_dir += f"_{args.visual_filter_mode}{MASK_STRENGTH}"
+        this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     os.makedirs(this_results_dir)

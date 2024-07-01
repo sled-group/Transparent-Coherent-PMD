@@ -650,9 +650,10 @@ class Ego4dFHOMainDataset:
                         # Following SuccessVQA, sample negative example as an 8 second clip ending at the precondition frame
                         # (but make sure it doesn't overlap with effect clip)
                         pre_end_time = min(clip_info['pre_frame'] / clip_info['fps'], post_start_time - 1 / FRAME_KEEP_FREQUENCY)
+                        pre_end_time = max(pre_end_time, 0.0)
                         pre_start_time = max(pre_end_time - 8.0, 0.0)
                         pre_frame_times = generate_float_series(pre_start_time, pre_end_time, 1 / FRAME_KEEP_FREQUENCY)
-                        if len(pre_frame_times) > 0:
+                        if len(pre_frame_times) > 0 and pre_start_time != pre_end_time:
                             pre_frames = extract_frames(video_cap, pre_frame_times)
                         else:
                             pre_frames = []

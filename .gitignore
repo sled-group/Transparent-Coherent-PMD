@@ -1,7 +1,7 @@
 .DS_Store
 attention_graphs
 cache_dir
-saved_results
+saved_results*
 .ipynb_checkpoints
 *.pyc
 dpo_outputs

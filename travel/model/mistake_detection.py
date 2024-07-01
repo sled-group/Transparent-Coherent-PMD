@@ -143,7 +143,10 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
         pprint(mean_mistake_prob)
 
     # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
-    mean_mistake_prob = [(p * (t / max(frame_times)) if len(frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, frame_times)] 
+
+    # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times;
+    # checking that max(frame_times) > 0 is necessary because of the bug
+    mean_mistake_prob = [(p * (t / max(frame_times)) if len(frame_times) > 1 and max(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
     # mean_mistake_prob = [(p * (t / sum(frame_times)) if len(frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, frame_times)] 
 
     if verbose:
