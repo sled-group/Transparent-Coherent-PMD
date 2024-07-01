@@ -21,10 +21,14 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
+parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
+parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 args = parser.parse_args()
 
 timestamp = datetime.datetime.now()
 this_results_dir = os.path.join(args.task, f"simple_baselines_{args.task}")
+if args.debug:
+    this_results_dir += f"_debug{args.debug_n_examples}"
 this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
 this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
 os.makedirs(this_results_dir)
@@ -32,9 +36,12 @@ os.makedirs(this_results_dir)
 for eval_partition in args.eval_partitions:
     # Load mistake detection dataset
     if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
-        eval_dataset = CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=20 if args.debug else None)
+        eval_dataset = CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
-        eval_dataset = Ego4DMistakeDetectionDataset(data_split=eval_partition, debug_n_examples_per_class=100 if args.debug else None)
+        eval_dataset = Ego4DMistakeDetectionDataset(data_split=eval_partition, 
+                                                    mismatch_augmentation=True,
+                                                    multi_frame=True,
+                                                    debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
     labels = [example.mistake for example in eval_dataset]

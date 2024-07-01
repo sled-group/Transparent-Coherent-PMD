@@ -134,23 +134,27 @@ def save_vqg_training_examples(examples: list[VQGTrainingExample], path: str, pa
               open(os.path.join(path, fname), "w"),
               indent=4)    
     
-def load_vqg_training_examples(path: str, partition: str) -> list[VQGTrainingExample]:
+def load_vqg_training_examples(path: str, partition: Optional[str]=None) -> list[VQGTrainingExample]:
     """
     Loads list of VQGTrainingExample created by `run_vqg_learning_vqa.py`.
     
-    :param path: Path to directory to load json file from (a directory that includes a vqg_outputs.json in it).
+    :param path: Path to directory to load json file from (a directory that includes a vqg_outputs.json in it) - or a direct path to a json file containing VQG training examples.
     :param partition: Partition of dataset, e.g., 'train'.
     """
-    fname = f"vqg_training_examples_{partition}.json"
-    if os.path.exists(os.path.join(path, fname)):
-        # All examples are directly in this folder
-        vqg_training_examples = json.load(open(os.path.join(path, fname), "r"))
+    if path.endswith(".json"):
+        vqg_training_examples = json.load(open(path, "r"))
         vqg_training_examples = [VQGTrainingExample(**v) for v in vqg_training_examples]
     else:
-        # Examples have been saved in subdirectories
-        assert os.path.exists(os.path.join(path, f"VQA_scoring_cache_{partition}")), f"Could not find VQG training examples in directory {path}!"
-        vqg_training_examples = []
-        for chunk_dir in os.listdir(os.path.join(path, f"VQA_scoring_cache_{partition}")):
-            vqg_training_examples += load_vqg_training_examples(os.path.join(path, f"VQA_scoring_cache_{partition}", chunk_dir))
+        fname = f"vqg_training_examples_{partition}.json"
+        if os.path.exists(os.path.join(path, fname)):
+            # All examples are directly in this folder
+            vqg_training_examples = json.load(open(os.path.join(path, fname), "r"))
+            vqg_training_examples = [VQGTrainingExample(**v) for v in vqg_training_examples]
+        else:
+            # Examples have been saved in subdirectories
+            assert os.path.exists(os.path.join(path, f"VQA_scoring_cache_{partition}")), f"Could not find VQG training examples in directory {path}!"
+            vqg_training_examples = []
+            for chunk_dir in os.listdir(os.path.join(path, f"VQA_scoring_cache_{partition}")):
+                vqg_training_examples += load_vqg_training_examples(os.path.join(path, f"VQA_scoring_cache_{partition}", chunk_dir))
     return vqg_training_examples
 

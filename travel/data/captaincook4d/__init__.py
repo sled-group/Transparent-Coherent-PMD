@@ -5,15 +5,20 @@ from pprint import pprint
 import spacy
 from tqdm import tqdm
 from typing import Optional
+import yaml
 
 from travel.constants import DATA_CACHE_DIR
 from travel.data.captaincook4d.constants import VIDEO_DIR, ANNOTATIONS_DIR, DATA_SPLITS
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset, MistakeDetectionTasks
 from travel.data.utils import generate_float_series, get_subdirectories
 from travel.data.utils.image import variance_of_laplacian
-from travel.data.utils.video import get_video, extract_frames, FRAME_SAMPLING_FREQUENCY, FRAME_KEEP_FREQUENCY
+from travel.data.utils.video import get_video, extract_frames
 from travel.model.grounding import TargetObjectCounterFilter
 
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+FRAME_SAMPLING_FREQUENCY = float(config["data"]["captaincook4d"]["video_frame_sampling_frequency"])
+FRAME_KEEP_FREQUENCY = float(config["data"]["captaincook4d"]["video_frame_keep_frequency"])
 
 class CaptainCook4DDataset(MistakeDetectionDataset):
     def __init__(self, 
@@ -62,7 +67,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
         # Load OWLv2 to check for target objects in recipe steps
         print("Setting up target object counter...")
-        nlp = spacy.load('en_core_web_sm')
+        nlp = spacy.load('en_core_web_lg')
         object_counter = TargetObjectCounterFilter()
 
         for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos", total=len(all_video_ids)):            
@@ -131,7 +136,7 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                     if "errors" in step and len(step["errors"]) > 0:               
 
                         # Filter out error types that aren't perceivable from individual images
-                        mistake_types_descriptions = [m for m in step['errors'] if m['tag'] not in ["Order Error", "Timing Error", "Temperature Error"]]
+                        mistake_types_descriptions = [m for m in step['errors'] if m['tag'] not in ["Order Error", "Timing Error", "Temperature Error", "Measurement Error"]]
                         if len(mistake_types_descriptions) > 0:
                             mistake_type, mistake_description = mistake_types_descriptions[0]['tag'], mistake_types_descriptions[0]['description']
                         else:

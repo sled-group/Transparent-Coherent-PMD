@@ -29,6 +29,7 @@ parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language
 parser.add_argument("--batch_size", type=int, default=12, help="Batch size for VQG.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating visual questions.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
+parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 args = parser.parse_args()
 
 assert not (args.partition is None and args.task == "ego4d"), f"Need to provide --partition for task {args.task}!"
@@ -73,7 +74,7 @@ if args.resume_dir is None:
     timestamp = datetime.datetime.now()
     this_results_dir = f"VQG_{args.task}"
     if args.debug:
-        this_results_dir += f"_debug"
+        this_results_dir += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
     this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqg", this_results_dir)
     os.makedirs(this_results_dir)
@@ -90,8 +91,9 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
         indexed_procedures = RECIPE_STEPS.items
     elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
         dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
-                                               mismatch_augmentation=False,
-                                               debug_n_examples_per_class=20 if args.debug else None)
+                                               mismatch_augmentation=True,
+                                               multi_frame=True,
+                                               debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
         indexed_procedures = dataset.get_all_procedures
 
     # Generate prompts - one per example

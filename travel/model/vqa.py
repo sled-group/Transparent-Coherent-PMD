@@ -12,6 +12,7 @@ from typing import Optional, Callable
 
 from travel.constants import CACHE_FREQUENCY, IMAGES_CHUNK_SIZE
 from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
+from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAResponse, VQAOutputs, get_vqa_response_token_ids
 from travel.model.grounding import VisualFilterTypes, AdaptiveVisualFilter
 from travel.model.mistake_detection import DETECTION_FRAMES_PROPORTION
@@ -92,6 +93,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                                   n_workers: int,
                                   worker_index: int,
                                   vqa_batch_size: int,
+                                  cache_frames: bool=True,
                                   ) -> list[list[list[VQAOutputs]]]:
     """
     GPU-parallelizable method to run VQA in chunks on a MistakeDetectionDataset (with an optional AdaptiveVisualFilter).
@@ -108,6 +110,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
     :n_workers: Number of GPUs this inference is parallelized across.
     :worker_index: Worker index for this call.
     :vqa_batch_size: Batch size for VQA with VLM. This should be maximized for the type of GPU used.
+    :cache_frames: Whether to cache frames to disk after visual filters are applied (otherwise they will be discarded).
     """
     assert n_workers >= 1, "n_workers must be positive!"
     assert worker_index < n_workers and worker_index >= 0, f"Worker index should be a valid index for n_workers (n_workers)!"
@@ -145,29 +148,33 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             pickle.dump((questions, prompts, answers, frames, example_ids), open(prompt_cache_fname, "wb"))
         else:
             questions, prompts, answers, frames, example_ids = pickle.load(open(prompt_cache_fname, "rb"))
+            # Still clip the example frames
+            for example in dataset_chunk:
+                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
         
         vqa_cache_path = os.path.join(worker_cache_dir, f"chunk{chunk_idx}.pt")
 
         # Intermediate results of detection aren't saved, so this is just a temporary hack just to check if we really need to run detection again
-        logits = torch.zeros((0, vlm.vocab_size)).float()
-        if os.path.exists(vqa_cache_path):
-            logits = torch.load(vqa_cache_path)
+        visible_target_objects = None
 
         # Run visual filter if we have one, and we haven't already previously run it in full
         original_frames = frames
-        if visual_filter_mode is not None and visual_filter is not None and logits.shape[0] < len(frames):
+        if visual_filter_mode is not None and visual_filter is not None:
             if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
                 frames = visual_filter(nlp, frames, questions)
             elif visual_filter_mode in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase]:
-                frames, new_questions = visual_filter(nlp, frames, questions)
+                spatial_cache_fname = os.path.join(worker_cache_dir, f"spatial_filter_outputs_chunk{chunk_idx}.pkl")
+                if os.path.exists(spatial_cache_fname):
+                    frames, new_questions, visible_target_objects = pickle.load(open(spatial_cache_fname, "rb"))
+                else:
+                    frames, new_questions, visible_target_objects = visual_filter(nlp, frames, questions)
+                    pickle.dump((frames, new_questions, visible_target_objects), open(spatial_cache_fname, "wb"))
+                
                 # Replace rephrased questions into prompts, but save original questions for bookkeeping
                 prompts = [prompt.replace(question, new_question) for prompt, question, new_question in zip(prompts, questions, new_questions)]
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
-        # Then delete these pre-loaded logits
-        del logits
 
         logits = run_vqa(vlm,
                          vlm_processor,
@@ -196,14 +203,13 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
 
         # Gather up important information from VQA outputs, organized by example ID
         outputs_by_id = defaultdict(list)
+        assert len(frames) == len(questions) == len(prompts) == len(answers) == len(example_ids), f"Length issue with frames ({len(frames)}), questions ({len(questions)}), prompts ({len(prompts)}), answers ({len(answers)}), or example_ids ({len(example_ids)})!"
         for output_index, (frame, question, prompt, answer, eid) in enumerate(zip(frames, questions, prompts, answers, example_ids)):
-            outputs_by_id[eid].append((output_index, frame, question, prompt, answer))
+            outputs_by_id[eid].append((output_index, frame, question, prompt, answer, visible_target_objects[output_index] if visible_target_objects is not None else None))
 
         # Gather up VQA outputs in the correct structure for a MistakeDetectionEvaluator
         for example in tqdm(dataset_chunk, desc=f"gathering VQA outputs ({vlm.device})"):
             
-            # Cutoff again since the example will be reloaded from disk when we access it
-            # example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
             step_id = example.procedure_id
             example_vqa_outputs = []
 
@@ -211,7 +217,8 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             for _ in example.frames:
                 frame_vqa_outputs = []
                 for _ in range(n_prompts_per_frame):
-                    output_index, frame, question, prompt, answer = outputs_by_id[example.example_id][parallel_idx]
+                    output_index, frame, question, prompt, answer, target_object_counts = outputs_by_id[example.example_id][parallel_idx]
+
                     frame_vqa_outputs.append(
                         VQAOutputs(
                             example.task_name,
@@ -223,9 +230,16 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                             response_token_ids,
                             original_logits[output_index] - logits[output_index] if original_logits is not None else logits[output_index],        
                             question=question, # Save original question for NLI mistake detection evaluator
+                            target_object_counts=target_object_counts # Save count of target objects if we have it
                         )      
                     )
-                    frame_vqa_outputs[-1].cache_frame(worker_cache_dir)
+                    if cache_frames:
+                        # Resize to a smaller size before caching to conserve disk space
+                        frame_vqa_outputs[-1].frame = resize_with_aspect(frame_vqa_outputs[-1].frame, CACHED_FRAME_DIMENSION)
+                        frame_vqa_outputs[-1].cache_frame(worker_cache_dir)
+                    else:
+                        # Just replace frame with empty string to save CPU memory and avoid saving frame to disk
+                        frame_vqa_outputs[-1].frame = ""
                     parallel_idx += 1
 
                 example_vqa_outputs.append(frame_vqa_outputs)

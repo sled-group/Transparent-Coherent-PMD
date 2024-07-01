@@ -1,13 +1,6 @@
 import cv2
 import numpy as np
 from typing import Optional
-import yaml
-
-with open('config.yml', 'r') as file:
-    config = yaml.safe_load(file)
-
-FRAME_SAMPLING_FREQUENCY = float(config["data"]["video_frame_sampling_frequency"])
-FRAME_KEEP_FREQUENCY = float(config["data"]["video_frame_keep_frequency"])
 
 def get_video(video_path: str) -> cv2.VideoCapture:
     """
@@ -34,22 +27,28 @@ def extract_frames(cap: cv2.VideoCapture, times: list[Optional[float]]) -> list[
     :return: List of frames as NumPy arrays.
     """
     fps = cap.get(cv2.CAP_PROP_FPS)  # Frames per second
+    last_frame = cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1
     frames = []
 
     for t in times:
-        if type(t) == float:
-            frame_number = int(t * fps)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-            ret, frame = cap.read()
+        try:
+            if type(t) == float:
+                frame_number = int(t * fps)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, max(min(frame_number, last_frame), 0.0)) # Avoid seeking before first frame and past last frame
+                ret, frame = cap.read()
 
-            if ret:
-                # Convert to RGB
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)            
-                frames.append(frame)
+                if ret:
+                    # Convert to RGB
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)            
+                    frames.append(frame)
+                else:
+                    print(f"Warning: Frame at time {t} seconds could not be read.")
+                    frames.append(None)
             else:
-                print(f"Warning: Frame at time {t} seconds could not be read.")
                 frames.append(None)
-        else:
+        except:
+            print(f"Warning: Failed while trying to read frame at time {t} seconds.")
             frames.append(None)
+            continue
 
     return frames

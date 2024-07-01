@@ -8,11 +8,12 @@ from spacy.lang.en import English
 import torch
 from tqdm import tqdm
 from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesConfig, BatchEncoding
-from typing import Optional, Any
+from typing import Optional, Any, Union
 import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
-from travel.data.utils.image import get_preprocessed_image
+from travel.data.utils.image import get_preprocessed_image, BoundingBoxCluster, BoundingBox
+from travel.data.utils.text import get_compound_noun
 from travel.data.vqg import VQGOutputs
 
 with open('config.yml', 'r') as file:
@@ -21,8 +22,8 @@ with open('config.yml', 'r') as file:
 OWLV2_PATH = config["grounding"]["owlv2_path"]
 OWL_THRESHOLD = config["grounding"]["owl_threshold"] 
 OWL_BATCH_SIZE = config["grounding"]["owl_batch_size"]
-MASK_STRENGTH = config["grounding"]["mask_strength"]
 MINIMUM_CROP_SIZE = config["grounding"]["minimum_crop_size"]
+MAXIMUM_BBOXES_PER_OBJECT = config["grounding"]["maximum_bboxes_per_object"]
 
 def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
                                     detector: Owlv2ForObjectDetection,
@@ -38,7 +39,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     :return: Dataset with filtered frames.
     """
     if vqg_outputs is None:
-        nlp = spacy.load('en_core_web_sm')
+        nlp = spacy.load('en_core_web_lg')
 
     with torch.no_grad():
         
@@ -108,7 +109,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     print(f"Filtered out {filtered_out_frames} video frames ({frames_before} -> {frames_after}).")
     dataset.examples = filtered_examples
     return dataset
-    
+
 class AdaptiveVisualFilter:
     """Parent class for adaptive attention filters that use phrase grounding models to mask/crop images based on visual questions."""
 
@@ -138,7 +139,10 @@ class AdaptiveVisualFilter:
         assert len(objects) == len(frames), "Expected same number of object lists and frames!"
         # Note the awkward hack where rare objects can be None due to failure of spatial parser
         max_n_objs = max([len(this_objects) for this_objects in objects])
-        owl_prompts = [[f"a photo of the {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
+        owl_prompts = [[f"a photo of the {input_objs[i]}" if (i < len(input_objs) and input_objs[i] is not None) else "a photo of nothing" for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
+        if all(len(p) == 0 for p in owl_prompts):
+            print("Warning: run_detection received no prompts.")
+            return [{"boxes": torch.tensor([]), "scores": torch.tensor([]), "labels": torch.tensor([])} for _ in frames], frames
         pad_labels = [[1 if (i < len(input_objs) and input_objs[i] is not None) else 0 for i in range(max_n_objs)] for input_objs, _ in zip(objects, frames)]
         # skip_indices = [all(input_obj is None for input_obj in input_objs) for input_objs, _ in zip(objects, frames)]
 
@@ -167,7 +171,16 @@ class AdaptiveVisualFilter:
                 # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
                 padded_images += this_padded_images
                 results += self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD)
-                
+
+                # print("================================================")
+                # print("OWL processing:")
+                # pprint(batch_prompts)
+                # batch_pad_labels = pad_labels[i:i+batch_size]
+                # pprint(batch_pad_labels)
+                # print(max_n_objs)
+                # pprint(self.detector_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=OWL_THRESHOLD))
+                # print("================================================")
+
                 del inputs
                 del outputs
 
@@ -203,10 +216,100 @@ class AdaptiveVisualFilter:
     def __call__(self) -> list[Image.Image]:
         raise NotImplementedError("Subclass must implement __call__!")
 
+DO_NOT_PARSE_NOUNS = [
+    "image",
+    "scene",
+    "anyone",
+    "heat",
+    "temperature",
+    "someone",
+    "hand",
+    "hands",
+    "place",
+    "floor" # Floor is often misrecognized as the whole image
+]
+
+class TargetObjectCounterFilter(AdaptiveVisualFilter):
+    """
+    This visual filter is used to count target objects from procedures in frames.
+    """
+    def __init__(self, **kwargs: dict[str, Any]):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def parse_sentences_for_target_objects(nlp: English, sentences: list[str]) -> list[list[str]]:
+        results = []
+        for sentence in sentences:
+            doc = nlp(sentence)
+            nouns = []
+            
+            # for token in doc:
+            #     print(token.text, token.dep_, token.pos_)
+            # print("\n\n")
+
+            # Grab nouns from sentence
+            for token_idx, token in enumerate(doc):
+                if token.dep_ in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
+                    
+                    # Sometimes adjectives near the end of a sentence are mistakenly labeled as nsubj; 
+                    # nsubj should never be at the end of the sentence in questions, so ignore if this happens
+                    if token.dep_ == "nsubj" and token_idx == len(doc) - 2 and doc[token_idx + 1].pos_ == "PUNCT":
+                        continue
+                    
+                    # If this noun is followed by "of", skip since we'll add the full noun phrase later
+                    if "of" in [t.text for t in token.rights]:
+                        continue
+
+                    # Some common words should not be counted as objects
+                    if token.text not in DO_NOT_PARSE_NOUNS:
+                        compound_noun = get_compound_noun(token)
+                        if all(n not in compound_noun for n in DO_NOT_PARSE_NOUNS):
+                            # Make sure the compound noun doesn't have any "do not parse" nouns
+                            nouns.append(compound_noun)
+
+            # If we didn't find a noun with first logic, be a bit more lenient and look for anything else labeled as a noun
+            if len(nouns) == 0:
+                for token in doc:
+                    if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
+                        if token.text not in DO_NOT_PARSE_NOUNS:
+                            compound_noun = get_compound_noun(token)
+                            if all(n not in compound_noun for n in DO_NOT_PARSE_NOUNS):
+                                # Make sure the compound noun doesn't have any "do not parse" nouns
+                                nouns.append(compound_noun)
+
+            results.append(nouns)
+        return results
+        
+    @staticmethod
+    def count_objects_in_detection_results(detection_results_single: Union[list[dict[Any, Any]], dict[Any, Any]]):
+        """Counts the unique objects recognized in detection results."""
+        if type(detection_results_single) == dict:
+            detection_results_single = [detection_results_single]
+        detection_results_single = [result["labels"].cpu().numpy() for result in detection_results_single]
+        object_counts = []
+        for result in detection_results_single:
+            this_object_counts = {}
+            for label_idx in np.unique(result):
+                this_object_counts[label_idx] = result[result == label_idx].shape[0]
+            object_counts.append(this_object_counts)
+        return object_counts
+
+    def __call__(self, nlp: English, frames: list[Image.Image], procedures: list[str]) -> list[int]:
+        # Parse objects from questions
+        object_parse_results = self.parse_sentences_for_target_objects(nlp, procedures)
+        detection_results, _ = self.run_detection(object_parse_results, frames)
+        
+        # Get target object counts
+        target_object_counts = [sum(list(result.values())) for result in TargetObjectCounterFilter.count_objects_in_detection_results(detection_results)]
+
+        return target_object_counts
+
 class SpatialVisualFilter(AdaptiveVisualFilter):
+
     """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
-    def __init__(self, rephrase_questions: bool=True, **kwargs: dict[str, Any]):
+    def __init__(self, rephrase_questions: bool=True, mask_strength: float=1.0, **kwargs: dict[str, Any]):
         self.rephrase_questions = rephrase_questions
+        self.mask_strength = mask_strength
         super().__init__(**kwargs)
 
     @staticmethod
@@ -214,7 +317,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         """
         Parses a question for spatial relations that can be visually abstracted with the spatial attention filter.
 
-        :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_sm", disable=["lemmatizer"])`
+        :param nlp: spaCy pipeline. Initialize with `spacy.load("en_core_web_lg", disable=["lemmatizer"])`
         :param questions: List of yes/no questions about an image (e.g., are there any cherry tomatoes in the bowl?).
         :return: List of tuples, each of which include a bool and object string indicating regions of interest, and a rephrased form of a question without spatial dependencies. 
         """
@@ -222,8 +325,9 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         spatial_preps = ["in", "on", "inside", "outside", "inside of", "outside of",
                         "off", "out", "out of", "within", "across"]
         negation_preps = ["out", "out of", "outside", "outside of", "off"]
-        no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every"]
-        avoid_with_on = ["temperature", "heat", "low", "medium", "high"]
+        no_rephrase_words = ["top", "bottom", "left", "right", "each", "all", "every", "single"]
+        avoid_with_on = ["temperature", "heat", "low", "medium", "high", "left", "right", "top", "bottom"]
+        avoid_with_in = ["hand", "left hand", "right hand", "someone's hand", "someone's left hand", "someone's right hand"]
 
         results = []
         for question in questions:
@@ -235,34 +339,59 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
             no_rephrase_word_present = False
             is_negation_prep = False
-            is_avoid_on = "on" in question and any(word in question for word in avoid_with_on)
 
-            # Function to extract the compound noun if it exists
-            def get_compound_noun(token):
-                compound = " ".join([child.text for child in token.lefts if child.dep_ == "compound"])
-                return compound + " " + token.text if compound else token.text
-
+            is_avoid_on = False
+            is_avoid_in = False            
+            
+            # Detect negation of a spatial relation
             for idx, token in enumerate(doc):
-                # Detect negation
-                if token.dep_ == "neg":
+                if token.dep_ == "neg" and doc[idx+1].dep_ == "prep" and doc[idx+1].text in spatial_preps:
                     negation_present = True
                     negation_token = token.text
 
-                # For subjects and objects, capture the noun considering compound modifiers
-                if token.dep_ in ["nsubj", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
-                    target_noun = get_compound_noun(token)
-                
-                # Identify spatial relations based on specific dependencies
+            # For subjects and objects, capture the noun considering compound modifiers
+            for idx, token in enumerate(doc):
+                if token.dep_ in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"] and token.pos_ == "NOUN":
+                    this_target_noun = get_compound_noun(token)
+                    
+                    # Check the following conditions:
+                    # - We should never apply spatial filter on the nouns in avoid_with_on and avoid_with_in and DO_NOT_PARSE_NOUNS
+                    # - Some common words are never objects, e.g., "anyone", "image"
+                    # - Also, sometimes adjectives near the end of a sentence are mistakenly labeled as nsubj; nsubj should never be at the end of the sentence in questions, so ignore if this happens
+                    # - Noun must not be followed by "of", e.g., "piece of wood"; for these noun phrases with "of", we gather them from the tail noun (e.g., "wood", not "piece")
+                    if not(this_target_noun in avoid_with_on \
+                           or this_target_noun in avoid_with_in \
+                            or this_target_noun in DO_NOT_PARSE_NOUNS \
+                            or any(n in this_target_noun for n in DO_NOT_PARSE_NOUNS) \
+                            or token.dep_ == "nsubj" and idx == len(doc) - 2 and doc[idx + 1].pos_ == "PUNCT" \
+                            or "of" in [t.text for t in token.rights]):
+                        target_noun = this_target_noun
+            
+            # If we didn't find a noun with first logic, be a bit more lenient and look for anything else labeled as a noun
+            if target_noun == "":
+                for token in doc:
+                    if token.pos_ == "NOUN" and token.dep_ not in ["nsubj", "nsubjpass", "attr", "dobj", "pobj"]:
+                        if not(token.text in avoid_with_on \
+                            or token.text in avoid_with_in \
+                                or token.text in DO_NOT_PARSE_NOUNS \
+                                or any(n in token.text for n in DO_NOT_PARSE_NOUNS)):
+                            target_noun = token.text
+
+            # Identify spatial relations based on specific dependencies
+            for idx, token in enumerate(doc):
                 if token.dep_ == "prep":
                     # Get preposition, for prep="of" we add the previous word
                     prep = token.text
                     if idx != 0 and prep == "of":
                         prep = doc[idx - 1].text + " of"
 
-                    if prep in spatial_preps and not is_avoid_on:
-                        spatial_relation = True
-                        spatial_object_tokens = [get_compound_noun(child) for child in token.children]
-                        is_negation_prep = prep in negation_preps
+                    if prep in spatial_preps:
+                        spatial_object_tokens = [get_compound_noun(child) for child in token.children if child.pos_ == "NOUN"]
+                        is_avoid_on = prep == "on" and any(word.lower() in spatial_object_tokens for word in avoid_with_on) # TODO: consider just never rephrasing when the preposition is "on" (that seems to slightly hurt performance on small subset of ego4d)
+                        is_avoid_in = prep == "in" and any(word.lower() in spatial_object_tokens for word in avoid_with_in)
+                        if not is_avoid_on and not is_avoid_in:
+                            spatial_relation = True
+                            is_negation_prep = prep in negation_preps
 
                 if token.text in no_rephrase_words:
                     no_rephrase_word_present = True
@@ -275,8 +404,9 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # Rephrase question if needed
                 if rephrase_questions and not no_rephrase_word_present:
                     for token in spatial_object_tokens:
-                        question = question.replace(token, "image")
-                    question = question.replace(prep, "in")
+                        question = question.replace(f"{token}?", "image?")
+                        question = question.replace(f" {token} ", " image ")
+                    question = question.replace(" " + prep + " ", " in ")
 
                     # Replace articles and possessives that don't play well with "image"
                     for determiner_phrase in [" someone's image", " an image", " a image"]:
@@ -290,49 +420,115 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             else:
                 look_at_noun = True
 
-            results.append((look_at_noun, target_noun if target_noun != "" and target_noun not in avoid_with_on else None, question))
+            results.append((look_at_noun, target_noun if (target_noun != "" and not is_avoid_on and not is_avoid_in) else None, question))
         return results
 
-    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE) -> tuple[list[Image.Image], list[str]]:
-        # Parse spatial dependencies from questions
+    def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str], batch_size: int=OWL_BATCH_SIZE, return_visible_target_objects: bool=True) -> tuple[list[Image.Image], list[str]]:
+
+        # First, parse out all "target" objects mentioned in questions and count them in images
+        if return_visible_target_objects:
+            object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
+            counting_results, _ = self.run_detection(object_parse_results, frames)
+            object_counts_old = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results) # TODO: rename this back to object_counts
+            object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_counts_old)]
+
+        # Parse spatial dependencies from questions and use them to detect objects
         spatial_parse_results = self.parse_questions_for_spatial_attention_filter(nlp, questions, rephrase_questions=self.rephrase_questions)
         detection_results, padded_images = self.run_detection([[noun] for _, noun, _ in spatial_parse_results], 
                                                               frames,
                                                               batch_size=batch_size)
-        # TODO: implement caching partial results?
+
+        # for result, question, spatial, obj_parse, count_result, obj_counts, obj_counts_old in zip(detection_results, questions, spatial_parse_results, object_parse_results, counting_results, object_counts, object_counts_old):
+        #     print(f"{question}\n")
+        #     pprint(spatial)
+        #     pprint(result)
+        #     print("")
+        #     pprint(obj_parse)
+        #     pprint(count_result)
+        #     print(obj_counts_old)
+        #     pprint(obj_counts)
+        #     print("\n\n")
 
         new_frames = []
         new_questions = []
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
-        for (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(spatial_parse_results, detection_results, frames, padded_images):
-            boxes = detection_result["boxes"]
-            bboxes = boxes.cpu().numpy() # (# boxes, 4)
+        for old_question, (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(questions, spatial_parse_results, detection_results, frames, padded_images):
+            bboxes = detection_result["boxes"]
+            bboxes = bboxes.cpu().numpy() # (# boxes, 4)
+            scores = detection_result["scores"].cpu().numpy()
 
+            # print(old_question, noun)
+
+            # Reweight the confidence of each candidate bounding box based on how close it is to the center of the image (central objects are more likely to be important)
             if bboxes.shape[0] > 0:
+
+                # Merge together overlapping bounding boxes
+                bboxes = np.array([bbox.coords for bbox in BoundingBoxCluster([BoundingBox(*bbox, score) for bbox, score in zip(bboxes, scores)]).get_merged_boxes()])
+
+                for bbox_idx, bbox in enumerate(bboxes):
+                    # old_score = scores[bbox_idx]
+
+                    bbox_centroid = np.array(((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0))
+                    image_centroid = np.array((frame_padded.width / 2.0, (frame_padded.width / frame.width * frame.height) / 2.0)) # NOTE: this assumes image is horizontal (width >= height)
+                    bbox_dist_from_center = min(np.linalg.norm(image_centroid - bbox_centroid) / np.sqrt(image_centroid[0] ** 2 + image_centroid[1] ** 2), 1.0) # normalize by maximum distance
+                    assert 0.0 <= bbox_dist_from_center <= 1.0, f"Bounding box distance out of range: {bbox_dist_from_center}"
+                    bbox_dist_from_center_reweighted = 0.5 / (1 + np.exp(-20 * (0.5 - bbox_dist_from_center))) + 0.5 # Use a sigmoid function to re-weight the distance
+                    scores[bbox_idx] *= bbox_dist_from_center_reweighted
+
+                    # print(f"bbox {bbox} in {frame.width}x{frame.height} image: {old_score} -> {scores[bbox_idx]} (dist={bbox_dist_from_center}, {bbox_dist_from_center_reweighted} after reweight)")
+                    # print("padded frame size:", frame_padded.size)
+                    # print("image centroid:", image_centroid)
+                    # print("bbox centroid:", bbox_centroid)
+                    # print("")
+                    # frame_padded.save("temp.png")
+
+                # Remove any bboxes that are no longer above the threshold
+                bboxes = np.array([bbox for bbox, score in zip(bboxes, scores) if score >= OWL_THRESHOLD])
+                scores = np.array([score for score in scores if score >= OWL_THRESHOLD])
+                if len(bboxes.shape) == 1:
+                    # There's only one bbox left, which takes away a dim
+                    bboxes = np.expand_dims(bboxes, axis=0)
+
+            if bboxes.shape[0] > 0 and bboxes.shape[1] > 0:
+                # If we still have some bboxes
+
+                # Select only top MAXIMUM_BBOXES_PER_OBJECT boxes
+                bboxes = zip(bboxes, scores)
+                bboxes = sorted(bboxes, key=lambda x: x[1], reverse=True)[:MAXIMUM_BBOXES_PER_OBJECT]
+                bboxes = np.array([bbox for bbox, _ in bboxes])
+                if len(bboxes.shape) == 1:
+                    # There's only one bbox left, which takes away a dim
+                    bboxes = np.expand_dims(bboxes, axis=0)                
+                del scores
+
                 mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
 
                 # Mask out the areas for this noun
-                for bbox in bboxes:
-                    # If looking specifically at this noun, make sure bounding boxes are a minimum size (configured in config.yml)
+                for bbox_idx, bbox in enumerate(bboxes):
+
+                    # If looking specifically at this noun, make sure bounding boxes are a minimum size (configured in config.yml);
+                    # also make sure no bboxes cross the buondaries of the image
                     if look_at_noun:
                         bbox_height = bbox[3] - bbox[1]
                         if bbox_height < MINIMUM_CROP_SIZE:
                             bbox[1] -= (MINIMUM_CROP_SIZE - bbox_height) / 2
                             bbox[3] += (MINIMUM_CROP_SIZE - bbox_height) / 2
-                            if bbox[1] < 0:
-                                bbox[1] = 0
-                            if bbox[3] >= mask.shape[0]:
-                                bbox[3] = mask.shape[0] - 1
+                        if bbox[1] < 0:
+                            bbox[1] = 0
+                        if bbox[3] >= mask.shape[0]:
+                            bbox[3] = mask.shape[0] - 1
 
                         bbox_width = bbox[2] - bbox[0]
                         if bbox_width < MINIMUM_CROP_SIZE:
                             bbox[0] -= (MINIMUM_CROP_SIZE - bbox_width) / 2
                             bbox[2] += (MINIMUM_CROP_SIZE - bbox_width) / 2
-                            if bbox[0] < 0:
-                                bbox[0] = 0
-                            if bbox[2] >= mask.shape[1]:
-                                bbox[2] = mask.shape[1] - 1                        
-                        
+                        if bbox[0] < 0:
+                            bbox[0] = 0
+                        if bbox[2] >= mask.shape[1]:
+                            bbox[2] = mask.shape[1] - 1     
+
+                        bboxes[bbox_idx] = bbox                   
+
                     # Set the area within the bounding box to 0
                     # Note the order: (ymin:ymax, xmin:xmax)                        
                     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
@@ -341,18 +537,18 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     mask = 1 - mask
                                 
                 # Apply mask strength to black parts of resulting mask
-                mask = (1.0 - (1 - mask) * MASK_STRENGTH)
+                mask = (1.0 - (1 - mask) * self.mask_strength)
                 
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
 
-                # Apply mask and undo padding of masked/cropped image to pass to VLM later
+                # Undo padding of masked/cropped image to pass to VLM later
                 new_frame = np.array(frame_padded) * mask
                 new_frame = Image.fromarray(new_frame.astype(np.uint8))
                 new_height = new_frame.width / frame.width * frame.height
                 new_frame = new_frame.crop((0, 0, new_frame.width - 1, new_height))
 
-                if look_at_noun:
-                    # If we're blocking out everything but some bboxes
+                if look_at_noun and self.mask_strength == 1.0:
+                    # If we're blocking out everything but some bboxes, crop the image to only look at them
                     min_x = np.min(bboxes[:, 0])
                     min_y = np.min(bboxes[:, 1])
                     max_x = np.max(bboxes[:, 2])
@@ -360,34 +556,28 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     new_frame = new_frame.crop((min_x, min_y, max_x, max_y))
                 
                 new_frames.append(new_frame)
+                new_questions.append(new_question)
             else:
-                # No detection - don't modify the image
+                # No detection - don't modify the image or question
                 new_frames.append(frame)
+                new_questions.append(old_question)
 
-            new_questions.append(new_question)
-
-        return new_frames, new_questions
+        if return_visible_target_objects:
+            return new_frames, new_questions, object_counts
+        else:
+            return new_frames, new_questions
 
 class ContrastiveRegionFilter(AdaptiveVisualFilter):
-    def __init__(self, **kwargs: dict[str, Any]):
+    def __init__(self, mask_strength: float=1.0, **kwargs: dict[str, Any]):
+        self.mask_strength = mask_strength
         super().__init__(**kwargs)
 
-    @staticmethod
-    def parse_questions_for_contrastive_region_filter(nlp: English, questions: list[str]) -> list[list[str]]:
-        results = []
-        for question in questions:
-            doc = nlp(question)
-            nouns = []
-            for chunk in doc.noun_chunks:
-                nouns.append(chunk.text.replace("the ", "").replace("an ", "").replace("a ", ""))
-            results.append(nouns)
-        return results
-
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> list[Image.Image]:
-        # Parse objects from questions
-        object_parse_results = self.parse_questions_for_contrastive_region_filter(nlp, questions)
+        # Parse objects from questions - reuse parsing method from TargetObjectCounterFilter
+        object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
         detection_results, padded_images = self.run_detection(object_parse_results, frames)
         new_frames = []
+
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
         for detection_results_single, frame, frame_padded in zip(detection_results, frames, padded_images):
             mask = np.ones((frame_padded.height, frame_padded.width), dtype=np.float64)
@@ -398,12 +588,23 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
             if bboxes.shape[0] > 0:
                 # Mask out the areas for this noun
                 for bbox in bboxes:
+                    # Make sure bbox doesn't go beyond image edges
+                    if bbox[1] < 0:
+                        bbox[1] = 0
+                    if bbox[3] >= mask.shape[0]:
+                        bbox[3] = mask.shape[0] - 1
+
+                    if bbox[0] < 0:
+                        bbox[0] = 0
+                    if bbox[2] >= mask.shape[1]:
+                        bbox[2] = mask.shape[1] - 1     
+
                     # Set the area within the bounding box to 0
                     # Note the order: (ymin:ymax, xmin:xmax)
                     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
                                     
                 # Apply mask strength to black parts of resulting mask
-                mask = (1.0 - (1 - mask) * MASK_STRENGTH)
+                mask = 1.0 - (1 - mask) * self.mask_strength
                         
                 # Apply mask and undo padding of masked/cropped image to pass to VLM later
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
@@ -418,39 +619,6 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
 
         return new_frames
 
-class TargetObjectCounterFilter(AdaptiveVisualFilter):
-    """
-    This visual filter is used to count target objects from procedures in frames.
-    """
-    def __init__(self, **kwargs: dict[str, Any]):
-        super().__init__(**kwargs)
-
-    @staticmethod
-    def parse_procedures_for_target_objects(nlp: English, procedures: list[str]) -> list[list[str]]:
-        results = []
-        for procedure in procedures:
-            doc = nlp(procedure)
-            nouns = []
-            for chunk in doc.noun_chunks:
-                nouns.append(chunk.text.replace("the ", "").replace("an ", "").replace("a ", ""))
-            results.append(nouns)
-        return results
-    
-    def __call__(self, nlp: English, frames: list[Image.Image], procedures: list[str]) -> list[int]:
-        # Parse objects from questions
-        object_parse_results = self.parse_procedures_for_target_objects(nlp, procedures)
-        detection_results, _ = self.run_detection(object_parse_results, frames)
-        
-        target_object_counts = []
-
-        # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
-        for detection_results_single in detection_results:
-            boxes = detection_results_single["boxes"]
-            bboxes = boxes.cpu().numpy() # (# boxes, 4)
-                    
-            target_object_counts.append(bboxes.shape[0])
-
-        return target_object_counts
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial"

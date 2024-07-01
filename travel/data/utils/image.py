@@ -14,6 +14,7 @@ with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 
 FRAME_DIMENSION = config["data"]["video_frame_dimension"]
+CACHED_FRAME_DIMENSION = config["data"]["video_frame_dimension_cache"] # dimension to save frames that will only be used for inspection (not processing by VLMs)
 
 class BoundingBox:
     """
@@ -276,3 +277,48 @@ def save_images(images: list[Image.Image], save_paths: list[str]):
 def variance_of_laplacian(image: Image.Image):
 	"""Return variance of Laplacian as estimate of blur (lower is more blurry)."""
 	return cv2.Laplacian(cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR), cv2.CV_64F).var()
+
+# def resize_with_aspect(images: Union[list[Image.Image], Image.Image], dimension: int):
+#     """Resizes the smallest dimension of a list of `images` to `dimension`, preserving the aspect ratio. Only scales down images - if an image is already smaller than `dimension`, it will not be modified."""
+#     return_single_image = False
+#     print(type(images))
+#     print(images)
+#     print("\n\n\n")
+#     if type(images) != list:
+#         images = [images]
+#         print("converted to list")
+#         return_single_image = True
+#     else:
+#         assert len(images) > 0, "`resize_with_aspect` received no images to resize!"
+    #  new_sizes = [(int(dimension * (frame.width / frame.height)), dimension) if frame.width > frame.height else (dimension, int(dimension * (frame.height / frame.width))) if min([frame.width, frame.height]) > dimension else frame for frame in images]
+#     images = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, images)]
+#     return images if not return_single_image else images[0]
+
+def resize_with_aspect(images: Union[list[Image.Image], Image.Image], dimension: int):
+    """Resizes the smallest dimension of a list of `images` to `dimension`, preserving the aspect ratio. Only scales down images - if an image is already smaller than `dimension`, it will not be modified."""
+    return_single_image = False
+    # print(f"Initial type of images: {type(images)}")
+    
+    if not isinstance(images, list):
+        images = [images]  # Convert single Image to a list
+        return_single_image = True
+    
+    # print(f"Images converted to list: {isinstance(images, list)}")
+    assert len(images) > 0, "`resize_with_aspect` received no images to resize!"
+    
+    new_sizes = []
+    for frame in images:
+        if min(frame.width, frame.height) > dimension:
+            if frame.width > frame.height:
+                scale = dimension / frame.height
+                new_size = (int(frame.width * scale), dimension)
+            else:
+                scale = dimension / frame.width
+                new_size = (dimension, int(frame.height * scale))
+        else:
+            new_size = frame.size
+        new_sizes.append(new_size)
+    
+    resized_images = [img.resize(size) for img, size in zip(images, new_sizes)]
+    
+    return resized_images[0] if return_single_image else resized_images

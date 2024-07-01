@@ -126,16 +126,42 @@ with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 
-def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], example: MistakeDetectionExample) -> float:
+def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_times: list[float], verbose: bool=False) -> float:
+    pprint(mistake_prob)
     mistake_prob = np.array(mistake_prob)
+    if verbose:
+        print("Mistake probs (input):")
+        pprint(mistake_prob)
 
-    example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
-    assert len(example.frame_times) == len(mistake_prob), "Compilation of mistake detections for example has a shape issue!"
+    assert len(frame_times) == len(mistake_prob), f"Compilation of mistake detections for example has a shape issue! Frame times length = {len(frame_times)}; Mistake probs length = {len(mistake_prob)}"
     assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
 
-    mean_mistake_prob = np.max(mistake_prob, axis=1) # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-    mean_mistake_prob = [(p * (t / max(example.frame_times)) if len(example.frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, example.frame_times)] # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
-    mean_mistake_prob = np.mean(mistake_prob) # Get mean mistakeprobability over all frames
+    # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
+    mean_mistake_prob = np.max(mistake_prob, axis=-1)
+
+    if verbose:
+        print("Mistake probs (after max):")
+        pprint(mean_mistake_prob)
+
+    # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
+
+    # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times;
+    # checking that max(frame_times) > 0 is necessary because of the bug
+    mean_mistake_prob = [(p * (t / max(frame_times)) if len(frame_times) > 1 and max(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
+    # mean_mistake_prob = [(p * (t / sum(frame_times)) if len(frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, frame_times)] 
+
+    if verbose:
+        print("Mistake probs (after time-weighting)")
+        pprint(mean_mistake_prob)
+
+    # Get mean mistake probability over all frames
+    mean_mistake_prob = np.mean(mean_mistake_prob) 
+    # mean_mistake_prob = np.sum(mean_mistake_prob) 
+
+    if verbose:
+        print("Mistake prob (final mean):")
+        print(mean_mistake_prob)
+
     return mean_mistake_prob
 
 class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
@@ -156,17 +182,22 @@ class HeuristicMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 # Check all questions for this frame to decide if there's a mistake
                 frame_mistake_probs = []
                 for output in frame_outputs:
-                    mistake_answer = VQAResponse(1-int(output.expected_answer.value))
-                    frame_mistake_probs.append(output.answer_probs[mistake_answer])
+                    if output.target_object_counts is None or len(output.target_object_counts) == 0 or not max(output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                        mistake_answer = VQAResponse(1-int(output.expected_answer.value))
+                        frame_mistake_probs.append(output.answer_probs[mistake_answer])
+                    else:
+                        # Visual filter didn't see any target objects, so assume there's a mistake
+                        frame_mistake_probs.append(1.0)
                 example_mistake_probs.append(frame_mistake_probs)
             mistake_probs.append(example_mistake_probs)
             
         # Heuristic: average likelihood of mistake then use a threshold to decide if there's a mistake
         agg_preds = []
         for mistake_prob, example in tqdm(zip(mistake_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
-            if len(mistake_prob) > 0:
-                mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example)                                
-                mistake_pred_final = True if mean_mistake_prob > detection_threshold else False
+            if len(mistake_prob) > 0 and len(mistake_prob[0]) > 0:
+                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache                
+                mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example.frame_times)
+                mistake_pred_final = True if mean_mistake_prob >= detection_threshold else False
             else:
                 # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;
                 # in this case, the target object is likely not present at all in the video, suggesting an incorrect object is used instead
@@ -306,20 +337,24 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
 
                 # Check all questions for this frame to decide if there's a mistake
                 for question_output in frame_outputs:
-                    # Incorporate NLI model feedback
-                    if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
-                        # NLI model found this question irrelevant, so 0 mistake probability
-                        frame_mistake_probs.append(0.0)
-                    else:
-                        # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
-                        mistake_answer = VQAResponse(1-int(question_output.expected_answer.value))
-                        mistake_prob = question_output.answer_probs[mistake_answer]
-                        # Configure whether to only use NLI probs for final mistake detection, or otherwise multiply probabilities from VQA and NLI
-                        if NLI_REPLACE_PROBS:
-                            frame_mistake_probs.append(nli_mistake_probs[parallel_idx])
+                    if output.target_object_counts is None or len(output.target_object_counts.keys()) == 0 or not max(output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                        # Incorporate NLI model feedback
+                        if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
+                            # NLI model found this question irrelevant, so 0 mistake probability
+                            frame_mistake_probs.append(0.0)
                         else:
-                            frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
-                        # TODO: consider combining NLI probabilities by creating one premise based on relevant evidence and do one more inference (follow recoverr paper)
+                            # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
+                            mistake_answer = VQAResponse(1-int(question_output.expected_answer.value))
+                            mistake_prob = question_output.answer_probs[mistake_answer]
+                            # Configure whether to only use NLI probs for final mistake detection, or otherwise multiply probabilities from VQA and NLI
+                            if NLI_REPLACE_PROBS:
+                                frame_mistake_probs.append(nli_mistake_probs[parallel_idx])
+                            else:
+                                frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
+                            # TODO: consider combining NLI probabilities by creating one premise based on relevant evidence and do one more inference (follow recoverr paper)
+                    else:
+                        # Visual filter didn't see any target objects, so assume there's a mistake
+                        frame_mistake_probs.append(1.0)
 
                     frame_nli_mistake_probs.append(nli_mistake_probs[parallel_idx])
                     frame_nli_relevance_probs.append(nli_relevance[parallel_idx])
@@ -338,7 +373,8 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
         agg_preds = []
         for mistake_prob, nli_mistake_prob, nli_relevance_prob, example in tqdm(zip(mistake_probs, compiled_nli_mistake_probs, compiled_nli_relevance_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
             if len(mistake_prob) > 0:
-                mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example)                                
+                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
+                mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example.frame_times)                                
                 mistake_pred_final = True if mean_mistake_prob >= detection_threshold else False
             else:
                 # If there are no frames to predict over, this is probably because some filter was applied to remove images that don't have a target object;

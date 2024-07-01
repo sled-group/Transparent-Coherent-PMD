@@ -2,11 +2,12 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 import json
 import os
+from pprint import pprint
 from PIL import Image
 from typing import Optional, Any, Union, Iterable, Generator
 
 from travel.data.utils import split_list_into_partitions
-from travel.data.utils.image import FRAME_DIMENSION
+from travel.data.utils.image import FRAME_DIMENSION, resize_with_aspect
 
 def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
     """Returns a cutoff time for the last N% of frames to support MistakeDetectionEvaluator classes."""
@@ -15,7 +16,7 @@ def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
     Ego4D = "ego4d" # Ego4D following SuccessVQA format
-    Ego4D_Augmented = "ego4d_augmented" # Ego4D augmented with more negative examples from mismatched verb/noun
+    # Ego4D_Augmented = "ego4d_augmented" # Ego4D augmented with more negative examples from mismatched verb/noun
     # EpicKitchens = "epickitchens" # Can consider adding EK later if need more training data for VQG
 
 @dataclass
@@ -31,13 +32,13 @@ class MistakeDetectionExample:
     mistake: bool
     mistake_type: Optional[str] = None
     mistake_description: Optional[str] = None
+    verb_noun_pair: Optional[tuple[str, str]] = None
     
     def __post_init__(self):
         """Resizes frames to save space in caching."""
         if type(self.frames[0]) != str:
-            new_sizes = [(int(FRAME_DIMENSION * (frame.width / frame.height)), FRAME_DIMENSION) if frame.width > frame.height else (FRAME_DIMENSION, int(FRAME_DIMENSION * (frame.height / frame.width))) for frame in self.frames]
-            # Frames have been cached before and not yet uncached - they should already be resized
-            self.frames = [frame.resize(frame_size) for frame_size, frame in zip(new_sizes, self.frames)]
+            # It is not the case that frames have been cached before and not yet uncached - they should already be resized
+            self.frames = resize_with_aspect(self.frames, FRAME_DIMENSION)
 
     @staticmethod
     def from_dict(data: dict, load_frames: bool=True):

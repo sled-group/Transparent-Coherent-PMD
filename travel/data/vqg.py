@@ -66,7 +66,7 @@ VQG_DEMONSTRATIONS = [
         procedure_id=540088,
         procedure_description="Soak the sponge in a soapy water with your hands",
         questions=[
-            "Is the sponge in water?",
+            "Is the sponge in the water?",
             "Is the water soapy?",
         ],
         answers_str=[
@@ -95,6 +95,18 @@ VQG_DEMONSTRATIONS = [
         ],
         answers_str=[
             "No",
+            "Yes"
+        ]
+    ),
+    VQGOutputs(
+        procedure_id=357010,
+        procedure_description="Turn on a torch light",
+        questions=[
+            "Is the torch light powered on?",
+            "Is the torch light lit up?"
+        ],
+        answers_str=[
+            "Yes",
             "Yes"
         ]
     ),
@@ -230,18 +242,18 @@ VQG_DEMONSTRATIONS = [
             "Yes"
         ]
     ),   
-    VQGOutputs(
-        procedure_id=168002,
-        procedure_description="Drop the brush in your hand on the oven",
-        questions=[
-            "Is the brush on the oven?",
-            "Is the brush in a hand?"
-        ],
-        answers_str=[
-            "Yes",
-            "No"
-        ]
-    ),
+    # VQGOutputs(
+    #     procedure_id=168002,
+    #     procedure_description="Drop the brush in your hand on the oven",
+    #     questions=[
+    #         "Is the brush on the oven?",
+    #         "Is the brush in a hand?"
+    #     ],
+    #     answers_str=[
+    #         "Yes",
+    #         "No"
+    #     ]
+    # ),
     VQGOutputs(
         procedure_id=188064,
         procedure_description="Turn off the tap",

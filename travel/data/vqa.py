@@ -55,6 +55,7 @@ class VQAOutputs:
     response_token_ids: dict[VQAResponse, int]
     logits: Optional[torch.FloatTensor] # (vocab size) 
     question: Optional[str] = None
+    target_object_counts: Optional[dict[str, int]] = None
     answer_probs: dict[VQAResponse, float] = field(default_factory=dict)
     predicted_answer: VQAResponse = VQAResponse["No"]
 

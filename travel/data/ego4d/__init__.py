@@ -1,5 +1,4 @@
 # Most code in this file was adapted from EILEV: https://github.com/yukw777/EILEV
-import ast
 from collections.abc import Callable, Iterable
 from fractions import Fraction
 from functools import partial
@@ -10,6 +9,7 @@ from numpy.linalg import norm
 import os
 import pandas as pd
 from PIL import Image
+from pprint import pprint
 from pytorchvideo.data import ClipSampler
 from pytorchvideo.data.clip_sampling import ClipInfo
 import random
@@ -21,16 +21,19 @@ import torch
 from transformers import BatchEncoding, DataCollatorForSeq2Seq, PreTrainedTokenizer
 from typing import Any, TypeVar, Optional
 from tqdm import tqdm
+import yaml
 
 from travel.constants import DATA_CACHE_DIR, RANDOM_SEED
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
                                         MISALIGNSRL_PATH
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
-from travel.data.utils import get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler
+from travel.data.utils import get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler, generate_float_series
 from travel.data.utils.text import simple_present_to_imperative
 from travel.data.utils.video import get_video, extract_frames
+from travel.model.grounding import TargetObjectCounterFilter
 
-# Some verbs would not be expected in the task-oriented mistake detection setting (don't really cause a meaningful state change toward a task goal), so we can filter them out
+# Some verbs would not be expected in the task-oriented mistake detection setting 
+# (don't really cause a meaningful/observable state change toward a task goal), so filter them out
 EGO4D_IGNORE_VERBS = [
     'scroll', # Scrolling on phone, tablet, etc.
     'touch', # Touching an object
@@ -53,12 +56,33 @@ EGO4D_IGNORE_VERBS = [
     'cross', # People crossing over things
     'kick', # Kicking objects with foot - usually not related to any task
     "check", # Check on something, e.g., look at something - doesn't imply a state change
+    "adjust_(regulate,_increase/reduce,_change)", # Adjust something (slight position change)
+    "turn_(spin,_rotate,_flip,_turn_over)", # Turn something (slight position change)
+    "tilt", # Tilt something (slight position change)
+    "operate_(use,_dial,_click-button)", # Pressing buttons or touch screen
+    "shake", # Shake an object
+    "swing", # Swing on swings
+    "wave", # Wave hands
+    "blow", # Blowing air
+    "serve", # Serving food
+    "stand", # Standing up
+    # "count", # Counting things # TODO: uncomment for next batch of ego4d data
 ] 
+
+# Similarly, some verb noun pairs don't involve meaningful state changes (e.g., put hand)
+EGO4D_IGNORE_VERB_NOUN_PAIRS = [
+    ("put_(place,_leave,_drop)", "hand_(finger,_hand,_palm,_thumb)"), # Putting hand on something is the same as touching, which we also ignore
+    # ("cut_(trim,_slice,_chop)", "grass"), # Cutting grass 
+]
 
 C_REGEX = re.compile(r"^\#C\s+C", re.IGNORECASE)
 EOS_REGEX = re.compile(r"\<\|eos\|\>$", re.IGNORECASE)
 UNSURE_END_REGEX = re.compile(r"#unsure\.?$", re.IGNORECASE)
 UNSURE_MIDDLE_REGEX = re.compile(r"#unsure", re.IGNORECASE)
+
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+FRAME_KEEP_FREQUENCY = float(config["data"]["ego4d"]["video_frame_keep_frequency"])
 
 
 class DataCollatorForVideoSeq2Seq(DataCollatorForSeq2Seq):
@@ -409,7 +433,7 @@ class MisalignSRL:
         type_name_col_name_map = data["type_name_col_name_map"]
         return cls(misalignsrl, type_name_col_name_map)
     
-    def get_misaligned_samples(self, clip, random_seed):      
+    def get_misaligned_samples(self, clip, random_seed, split_video_info, multi_frame=False):      
         mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
         
         video_uid_narration_timestamp_sec = clip["video_uid"] + "_" + str(clip["narration_timestamp_sec"])
@@ -431,9 +455,43 @@ class MisalignSRL:
             sampled_example_list = []
             for sample_i in range(len(sampled_index_list)):
                 sampled_example_list.append(self.misalignsrl.iloc[sampled_index_list[sample_i]].squeeze().to_dict())
+
+            # Take the first sample that's within the correct data split and we can load the video for (but only try up to 5 times)
+            for sample in sampled_example_list[:5]:  
+                video_id = sample['video_uid']
+                frame_time = sample['narration_timestamp_sec']
                 
-            # NOTE: although multiple misalignsrl samples are prepared in the index file, we only sample one for now since not sure how outer code wants to organize the structure of multiple samples for one misalignsrl_type   
-            mistake_example_meta_dict[misalignsrl_type] = sampled_example_list[0]
+                # `effect_frame` contains the pixels for the misalignsrl sample. In this case, we need to read it given the `video_id` (another video) and `frame_time`. 
+                video_path = os.path.join(EGO4D_VIDEO_PATH, video_id+".mp4")
+                # mimic Ego4dFHOMainDataset.__iter__ to get the frame
+                if video_path not in [tp[1] for tp in split_video_info]:
+                    # the misalignsrl sample does not exists in this data split
+                    continue
+                try:
+                    video_cap = get_video(video_path)
+                except:
+                    print(f"Warning: could not load video at {video_path}.")
+                    continue
+
+                # Sample single narration frame or 8 second clip around narration frame
+                if not multi_frame:
+                    sample['effect_frame'] = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
+                else:
+                    # This follows SuccessVQA paper's approach for sampling positive example videos
+                    post_start_time = max(frame_time - 4.0, 0.0)
+                    post_end_time = min(frame_time + 4.0, sample['end_sec'])
+                    post_frame_times = generate_float_series(post_start_time, post_end_time, 1 / FRAME_KEEP_FREQUENCY)
+                    post_frames = extract_frames(video_cap, post_frame_times)
+                    post_frame_times = [ftime for frame, ftime in zip(post_frames, post_frame_times) if frame is not None]
+                    post_frames = [frame for frame in post_frames if frame is not None]
+
+                    sample['effect_frames'] = [Image.fromarray(frame) for frame in post_frames]
+                    sample['effect_frame_times'] = post_frame_times
+                video_cap.release()
+
+                # NOTE: although multiple misalignsrl samples are prepared in the index file, we only sample one for now since not sure how outer code wants to organize the structure of multiple samples for one misalignsrl_type   
+                mistake_example_meta_dict[misalignsrl_type] = sample
+                break
         
         return mistake_example_meta_dict
         
@@ -470,7 +528,6 @@ def get_structured_noun(action: dict) -> str | None:
                 return box["structured_noun"]
     return None
 
-# TODO: add an option to not load full videos - just use index files and specific frames instead? This would be much faster.
 class Ego4dFHOMainDataset:
     def __init__(
         self,
@@ -479,6 +536,7 @@ class Ego4dFHOMainDataset:
         video_dir_path: str,
         transform: Callable[[dict], Any] | None = None,
         random_clip: bool = False,
+        multi_frame: bool = False,
         already_processed_videos: Optional[list[str]] = [],
         n_workers: Optional[int] = None,
         worker_index: Optional[int] = None,
@@ -491,6 +549,8 @@ class Ego4dFHOMainDataset:
         :param transform: optional transform function
         :param random_clip: whether to sample clips randomly
         """
+        self.multi_frame = multi_frame
+
         with open(annotation_path) as f:
             annotations = json.load(f)
 
@@ -504,7 +564,7 @@ class Ego4dFHOMainDataset:
 
         # Count number of narrated actions for __len__
         if len(already_processed_videos) == 0:
-            self.num_narrated_actions = sum(split_data["videos"].values()) # TODO: adjust to account for parallelism and resuming
+            self.num_narrated_actions = sum(split_data["videos"].values())
         else:
             # If some videos were already processed, exclude them from count of narrated actions
             self.num_narrated_actions = sum([v for k, v in split_data["videos"].items() if k not in already_processed_videos])
@@ -524,6 +584,7 @@ class Ego4dFHOMainDataset:
                                 "pnr_frame": action["critical_frames"]["pnr_frame"] if action["critical_frames"] is not None else None,
                                 "post_frame": action["critical_frames"]["post_frame"] if action["critical_frames"] is not None else None,
                                 "fps": video_dict[video_uid]["video_metadata"]["fps"],
+                                "video_duration": video_dict[video_uid]["video_metadata"]["duration_sec"],
                                 "narration_text": action["narration_text"],
                                 "structured_verb": action["structured_verb"],
                                 "structured_noun": action["structured_noun"],
@@ -554,29 +615,71 @@ class Ego4dFHOMainDataset:
     def __iter__(self) -> Iterable[dict[str, Any]]:
         for video_index, video_path, video_metadata in self.video_sampler(self.video_info):
             try:
-                video_cap = get_video(video_path)
-            except:
-                print(f"Warning: could not load video at {video_path}.")
-                continue
+                try:
+                    video_cap = get_video(video_path)
+                except:
+                    print(f"Warning: could not load video at {video_path}.")
+                    continue
 
-            for clip_index, clip_info in enumerate(video_metadata['narrated_actions']):
-                pre_time = clip_info['pre_frame'] / clip_info['fps'] if clip_info['pre_frame'] is not None else None
-                pnr_time = clip_info['pnr_frame'] / clip_info['fps'] if clip_info['pnr_frame'] is not None else None
-                post_time = clip_info['post_frame'] / clip_info['fps'] if clip_info['post_frame'] is not None else None
-                
-                pre_frame, pnr_frame, post_frame = extract_frames(video_cap, [pre_time, pnr_time, post_time])
+                for clip_index, clip_info in enumerate(video_metadata['narrated_actions']):
+                    if not self.multi_frame:
+                        pre_time = clip_info['pre_frame'] / clip_info['fps'] if clip_info['pre_frame'] is not None else None
+                        pnr_time = clip_info['pnr_frame'] / clip_info['fps'] if clip_info['pnr_frame'] is not None else None
+                        post_time = clip_info['post_frame'] / clip_info['fps'] if clip_info['post_frame'] is not None else None
+                    
+                        pre_frame, pnr_frame, post_frame = extract_frames(video_cap, [pre_time, pnr_time, post_time])
 
-                yield clip_info | {"video_index": video_index,
-                                   "video_uid": video_metadata["video_uid"],
-                                   "clip_index": clip_index,
-                                   "pre_time": pre_time,
-                                   "pre_frame": pre_frame, 
-                                   "pnr_time": pnr_time, 
-                                   "pnr_frame": pnr_frame,
-                                   "post_time": post_time,
-                                   "post_frame": post_frame}
+                        yield clip_info | {"video_index": video_index,
+                                        "video_uid": video_metadata["video_uid"],
+                                        "clip_index": clip_index,
+                                        "pre_time": pre_time,
+                                        "pre_frame": pre_frame, 
+                                        "pnr_time": pnr_time, 
+                                        "pnr_frame": pnr_frame,
+                                        "post_time": post_time,
+                                        "post_frame": post_frame}
+                    else:
+                        # Sample a precondition and effect video clip instead (precondition clip is used to generate a negative example)
+                        if clip_info['post_frame'] is not None and clip_info['pre_frame'] is not None and clip_info['narration_timestamp_sec'] is not None:
+                            # Following SuccessVQA, sample positive example as 8 second clip centered around narration timestamp
+                            narration_time = clip_info['narration_timestamp_sec']
+                            post_start_time = max(narration_time - 4.0, 0.0)
+                            post_end_time = min(narration_time + 4.0, clip_info['video_duration'])
+                            post_frame_times = generate_float_series(post_start_time, post_end_time, 1 / FRAME_KEEP_FREQUENCY)
+                            post_frames = extract_frames(video_cap, post_frame_times)
 
-            video_cap.release()
+                            # Following SuccessVQA, sample negative example as an 8 second clip ending at the precondition frame
+                            # (but make sure it doesn't overlap with effect clip)
+                            pre_end_time = min(clip_info['pre_frame'] / clip_info['fps'], post_start_time - 1 / FRAME_KEEP_FREQUENCY)
+                            pre_end_time = max(pre_end_time, 0.0)
+                            pre_start_time = max(pre_end_time - 8.0, 0.0)
+                            pre_frame_times = generate_float_series(pre_start_time, pre_end_time, 1 / FRAME_KEEP_FREQUENCY)
+                            if len(pre_frame_times) > 0 and pre_start_time != pre_end_time:
+                                pre_frames = extract_frames(video_cap, pre_frame_times)
+                            else:
+                                pre_frames = []
+
+                            # Remove any frames that failed to load
+                            pre_frame_times = [ftime for frame, ftime in zip(pre_frames, pre_frame_times) if frame is not None]
+                            pre_frames = [frame for frame in pre_frames if frame is not None]
+                            
+                            # Remove any frames that failed to load
+                            post_frame_times = [ftime for frame, ftime in zip(post_frames, post_frame_times) if frame is not None]
+                            post_frames = [frame for frame in post_frames if frame is not None]
+
+                            yield clip_info | {"video_index": video_index,
+                                            "video_uid": video_metadata["video_uid"],
+                                            "clip_index": clip_index,
+                                            "pre_times": pre_frame_times,
+                                            "pre_frames": pre_frames, 
+                                            "post_times": post_frame_times,
+                                            "post_frames": post_frames}
+
+                        else:
+                            # Missing the annotations we need to select clips
+                            continue
+            finally:
+                video_cap.release()
     
     def __len__(self) -> int:
         return self.num_narrated_actions    
@@ -588,12 +691,15 @@ def filter_action_for_mistake_detection(action: dict[str, Any], previous_action:
         # and action["pnr_frame"] is not None
         and action["post_frame"] is not None
         and action["structured_verb"] not in EGO4D_IGNORE_VERBS # Omit clips with non-task actions
+        and (action["structured_verb"], action["structured_noun"]) not in EGO4D_IGNORE_VERB_NOUN_PAIRS
+        and action['structured_noun'] is not None # need at least one target object
         and "#O" not in action["narration_text"] # Omit clips involving interacting with other people
+        and "something" not in action['narration_text'] # Omit clips annotated with vague object reference "something"
         and (
             previous_action is None
             or not (
                 (action['structured_verb'], action['structured_noun']) == (previous_action['structured_verb'], previous_action['structured_noun']))
-                or action['previous_occurrences'] > 1
+                or action['previous_occurrences'] > 0
             ) # Filter out clips where the same action is being performed over and over
     )
 
@@ -602,6 +708,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
                  mismatch_augmentation: bool=False,
+                 multi_frame: bool=False,
                  debug_n_examples_per_class: Optional[int]=None,
                  n_workers: Optional[int]=None,
                  worker_index: Optional[int]=None):
@@ -615,8 +722,10 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         """
         # Handle Ego4D-specific initialization logic
         self.mismatch_augmentation = mismatch_augmentation
+        self.multi_frame = multi_frame
         super().__init__(data_split,
                          mismatch_augmentation=mismatch_augmentation,
+                         multi_frame=multi_frame,
                          debug_n_examples_per_class=debug_n_examples_per_class,
                          n_workers=n_workers,
                          worker_index=worker_index)
@@ -624,12 +733,15 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     def get_cache_dir(self, 
                       data_split: str,
                       mismatch_augmentation: bool=False,
+                      multi_frame: bool=False,
                       debug_n_examples_per_class: Optional[int]=None,
                       n_workers: Optional[int]=None,
                       worker_index: Optional[int]=None) -> str:
         cache_fname = f"ego4d_{data_split}_seed{RANDOM_SEED}"
         if mismatch_augmentation:
-            cache_fname += f"_mismatch"
+            cache_fname += "_mismatch"
+        if multi_frame:
+            cache_fname += "_multiframe"
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
         if n_workers is not None:
@@ -645,14 +757,15 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                                                 ("with your left hand", "with your hand"),
                                                 ("with your right hand", "with your hand"),
                                                 ("with both hands", "with your hands")]:
-            # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove mentions of this
-            instruction_text = instruction_text.replace(original_text, replaced_text)
+            if not("left hand" in instruction_text and "right hand" in instruction_text):
+                # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove unneeded mentions of this
+                instruction_text = instruction_text.replace(original_text, replaced_text)
         return instruction_text
 
-    # TODO: when generating non-augmented dataset, make it possible to borrow from augmented dataset if it exists
     def generate_examples(self,
                           data_split: str,
                           mismatch_augmentation: bool=False,
+                          multi_frame: bool=False,
                           debug_n_examples_per_class: Optional[int]=None,
                           n_workers: Optional[int]=None,
                           worker_index: Optional[int]=None) -> list[MistakeDetectionExample]:
@@ -663,32 +776,53 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         if mismatch_augmentation:
             mismatch_sampler = MisalignSRL(
                 MISALIGNSRL_PATH,
-            )
+            )        
         else:
             # If we already generated mismatch-augmented data, just use the data from there rather than re-generating
-            mismatch_cache_dir = self.get_cache_dir(data_split, True, debug_n_examples_per_class=debug_n_examples_per_class)
+            mismatch_cache_dir = self.get_cache_dir(data_split, True, multi_frame=multi_frame, debug_n_examples_per_class=debug_n_examples_per_class)
             if os.path.exists(mismatch_cache_dir):
                 mismatch_example_dirs = json.load(open(os.path.join(mismatch_cache_dir, "dataset.json"), "r"))["example_dirs"]
                 self.example_dirs = [d for d in mismatch_example_dirs if "MisalignSRL" not in d]
                 self.n_examples += len(self.example_dirs)
-                return                
+                return
+
+        # If we're only loading a small amount of data for debugging purpose but we've loaded the full data before, just borrow the data from the full dataset
+        if debug_n_examples_per_class is not None:
+            full_cache_dir = self.get_cache_dir(data_split, mismatch_augmentation=mismatch_augmentation, multi_frame=multi_frame, debug_n_examples_per_class=None)
+            if os.path.exists(full_cache_dir):
+                full_example_dirs = json.load(open(os.path.join(full_cache_dir, "dataset.json"), "r"))["example_dirs"]
+                
+                positive_dirs = [d for d in full_example_dirs if d.endswith("pos")]
+                random.shuffle(positive_dirs)
+                positive_dirs = positive_dirs[:debug_n_examples_per_class]
+
+                negative_dirs = [d for d in full_example_dirs if not d.endswith("pos")][:debug_n_examples_per_class]
+                random.shuffle(negative_dirs)
+                negative_dirs = negative_dirs[:debug_n_examples_per_class]
+
+                self.example_dirs = positive_dirs + negative_dirs
+                self.n_examples += len(self.example_dirs)
+                return
 
         ego4d = Ego4dFHOMainDataset(
             EGO4D_ANNOTATION_PATH,
             EGO4D_SPLIT_PATHS[data_split],
             EGO4D_VIDEO_PATH,
             random_clip=True if debug_n_examples_per_class is not None else False,
+            multi_frame=multi_frame,
             already_processed_videos=already_processed_videos,
             n_workers=n_workers,
             worker_index=worker_index,
         )
 
-        nlp = spacy.load('en_core_web_sm')
+        print(f"({worker_index}) Found {len(already_processed_videos)} processed videos, still need to process {len(ego4d)} clips.")
+
+        nlp = spacy.load('en_core_web_lg')
         SIMILARITY_THRESHOLD = 0.95
 
         # Prepare list to hold examples ready for caching
         example_cache_buffer = []
-        for clip in tqdm(ego4d, desc="generating ego4d data"):
+        for clip in tqdm(ego4d, desc=f"({worker_index}) generating ego4d data"):
             # Cache if we're starting a new video
             if clip['clip_index'] == 0 and len(example_cache_buffer) > 0:  
                 # Cache examples in buffer
@@ -705,18 +839,37 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # Skip some actions based on conditions specified in filter_action_for_mistake_detection
             if not filter_action_for_mistake_detection(clip):
                 continue
-            
+
             # Convert narration text to imperative form to match the sentence structure of recipes and task instructions
             instruction_text = self.ego4d_narration_to_instruction(clip['narration_text'], nlp)
+
+            # For some verbs, e.g., "move", we need to have more than one object argument in order for
+            # there to be an observable state change (e.g., "move tomatoes into bowl" rather than "move tomatoes")
+            if clip['structured_verb'] in ["move_(transfer,_pass,_exchange)"]:
+                mentioned_objects = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, [instruction_text])[0]
+                if len(mentioned_objects) < 2:
+                    continue
             
             # clip['video'] shape: (C, # frames, H, W)
-            precondition_frame_arr, effect_frame_arr = clip['pre_frame'], clip['post_frame']
-            precondition_frame, effect_frame = Image.fromarray(precondition_frame_arr), Image.fromarray(effect_frame_arr)
+            if not multi_frame:
+                precondition_frame_arr, effect_frame_arr = clip['pre_frame'], clip['post_frame']
+                precondition_frame, effect_frame = Image.fromarray(precondition_frame_arr), Image.fromarray(effect_frame_arr)
 
-            # Omit examples where precondition and effect frame are overly similar
-            precondition_effect_similarity = dot(precondition_frame_arr.astype(float).flatten(), effect_frame_arr.astype(float).flatten()) / (norm(precondition_frame_arr.astype(float).flatten()) * norm(effect_frame_arr.astype(float).flatten()))
-            if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
-                continue
+                # Omit examples where precondition and effect frame are overly similar
+                precondition_effect_similarity = dot(precondition_frame_arr.astype(float).flatten(), effect_frame_arr.astype(float).flatten()) / (norm(precondition_frame_arr.astype(float).flatten()) * norm(effect_frame_arr.astype(float).flatten()))
+                if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
+                    continue
+            else:
+                precondition_frames = clip['pre_frames']
+                effect_frames = clip['post_frames']
+
+                # Omit examples where precondition and effect clips' final frames are overly similar
+                precondition_effect_similarity = dot(precondition_frames[-1].astype(float).flatten(), effect_frames[-1].astype(float).flatten()) / (norm(precondition_frames[-1].astype(float).flatten()) * norm(effect_frames[-1].astype(float).flatten()))
+                if precondition_effect_similarity >= SIMILARITY_THRESHOLD:
+                    continue
+
+                precondition_frames = [Image.fromarray(frame) for frame in precondition_frames]
+                effect_frames = [Image.fromarray(frame) for frame in effect_frames]
             
             # Generate examples from this clip
             # NOTE: example IDs intentionally have "/"s in them to ensure there's one directory per video and per clip (enables easy resuming of incomplete runs and inspection of data)
@@ -727,59 +880,50 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 video_id=clip['video_uid'],
                 procedure_id=procedure_id,
                 example_id=f"{clip_id}/pos",
-                frames=[effect_frame],
-                frame_times=[clip['post_time']],
+                frames=[effect_frame] if not multi_frame else effect_frames,
+                frame_times=[clip['post_time']] if not multi_frame else clip['post_times'],
                 procedure_description=instruction_text,
                 mistake=False,
+                verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
             )
             example_cache_buffer.append(positive_example)
             
-            # Generate hard negative example from precondition frame (only if this action didn't previously occur too many times)
-            # if clip['previous_occurrences'] < 2:
-            negative_example_hard = MistakeDetectionExample(
-                task_name="ego4d",
-                video_id=clip['video_uid'],
-                procedure_id=procedure_id,
-                example_id=f"{clip_id}/hardneg",
-                frames=[precondition_frame],
-                frame_times=[clip['pre_time']],
-                procedure_description=instruction_text,
-                mistake=True,
-                mistake_type="Action Incomplete",
-            )
-            example_cache_buffer.append(negative_example_hard)
+            # Generate hard negative example from precondition frame (only do this if precondition and effect clips had enough separation)
+            if not multi_frame or len(precondition_frames) > 0:
+                negative_example_hard = MistakeDetectionExample(
+                    task_name="ego4d",
+                    video_id=clip['video_uid'],
+                    procedure_id=procedure_id,
+                    example_id=f"{clip_id}/hardneg",
+                    frames=[precondition_frame] if not multi_frame else precondition_frames,
+                    frame_times=[clip['pre_time']] if not multi_frame else clip['pre_times'],
+                    procedure_description=instruction_text,
+                    mistake=True,
+                    mistake_type="Action Incomplete",
+                    verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
+                )
+                example_cache_buffer.append(negative_example_hard)
+            else:
+                print(f"({worker_index}) Warning: Could not generate a hard negative for clip {clip_id}!")
             
             # Generate extra negative examples by finding video clips with the same verb but not noun and vice-versa
             if mismatch_augmentation:
-                # It is weird that could mismatch_sampler disappear time to time in the middle of the loop. just check and reinitialize it before we find out why.
-                # if "mismatch_sampler" not in dir(self):
-                #     mismatch_sampler = MisalignSRL(
-                #         MISALIGNSRL_PATH
-                #     )
-                mismatch_examples = mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id)
+                mismatch_examples = mismatch_sampler.get_misaligned_samples(clip=clip, random_seed=RANDOM_SEED * procedure_id, split_video_info=ego4d.video_info, multi_frame=multi_frame)
                 
                 # print(f"=======MisalignSRL samples =========")
                 # print(f"current clip narration: {clip['narration_text']} (video_uid: {clip['video_uid']}, narration_timestamp_sec: {clip['narration_timestamp_sec']})")
                 for misalignsrl_type in mismatch_sampler.type_name_col_name_map.keys():
-                    # skip if no misaligned sample for this type is found
+                    # Skip if no misaligned sample for this type is found
                     if mismatch_examples[misalignsrl_type] is None:
+                        continue
+
+                    # Omit V_ARG1 examples in single frame setting, since these will be hard to use for training but
+                    # at inference time, we can hopefully catch these examples with target object filter
+                    if not multi_frame and "V_ARG1" in misalignsrl_type:
                         continue
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
                     frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']
-                    
-                    # `effect_frame` contains the pixels for the misalignsrl sample. In this case, we need to read it given the `video_id` (another video) and `frame_time`. 
-                    video_path = os.path.join(EGO4D_VIDEO_PATH, video_id+".mp4")
-                    # mimic Ego4dFHOMainDataset.__iter__ to get the frame
-                    if video_path not in [tp[1] for tp in ego4d.video_info]:
-                        # the misalignsrl sample does not exists in this data split
-                        continue
-                    try:
-                        video_cap = get_video(video_path)
-                    except:
-                        print(f"Warning: could not load video at {video_path}.")
-                        continue                    
-                    effect_frame = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
                     
                     # `procedure_id` is meant to be an ID for the narration.
                     procedure_id = procedure_id
@@ -790,11 +934,12 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                         video_id=video_id,
                         procedure_id=procedure_id,
                         example_id=f"{clip_id}/easyneg_{misalignsrl_type}_{video_id}_{frame_time}",
-                        frames=[effect_frame],
-                        frame_times=[frame_time],
+                        frames=[mismatch_examples[misalignsrl_type]['effect_frame']] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frames'],
+                        frame_times=[frame_time] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frame_times'],
                         procedure_description=instruction_text,
                         mistake=True,
                         mistake_type=misalignsrl_type,
+                        verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
                     )
                     example_cache_buffer.append(misalignsrl_example)
                     # print(f"Appended example:")
@@ -810,7 +955,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
         del example_cache_buffer
         example_cache_buffer: list[MistakeDetectionExample] = []
 
-def combine_ego4d_partitions(datasets: list[Ego4DMistakeDetectionDataset], debug_n_examples_per_class: int=None) -> Ego4DMistakeDetectionDataset:
+def combine_ego4d_partitions(datasets: list[Ego4DMistakeDetectionDataset], mismatch_augmentation: bool=False, multi_frame: bool=False, debug_n_examples_per_class: int=None) -> Ego4DMistakeDetectionDataset:
     """
     Combines Ego4DMistakeDetectionDataset partitions generated from parallelization. Make sure all data partitions have been copletely generated before calling this.
 
@@ -834,10 +979,11 @@ def combine_ego4d_partitions(datasets: list[Ego4DMistakeDetectionDataset], debug
         new_dataset_metadata["n_examples"] += dataset.n_examples
     new_cache_dir = cache_dirs[0].split("_partition")[0]
     new_dataset_metadata["cache_dir"] = new_cache_dir
-    new_dataset_metadata["mismatch_sampler"] = None
     assert not os.path.exists(new_cache_dir), "Cache dir for combined dataset already exists. Please delete."
     os.makedirs(new_cache_dir)
     json.dump(new_dataset_metadata, 
               open(os.path.join(new_cache_dir, "dataset.json"), "w"))
     return Ego4DMistakeDetectionDataset(datasets[0].data_split,
+                                        mismatch_augmentation=mismatch_augmentation,
+                                        multi_frame=multi_frame,
                                         debug_n_examples_per_class=debug_n_examples_per_class)

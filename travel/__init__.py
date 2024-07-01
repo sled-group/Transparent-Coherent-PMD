@@ -7,13 +7,13 @@ import torch
 from travel.constants import RANDOM_SEED, MODEL_CACHE_DIR
 
 # Set random seed
-def set_random_seed():
+def set_random_seed(random_seed=RANDOM_SEED):
     """Sets random seed in random, numpy, and torch from the one specified in config.yml file."""
-    random.seed(RANDOM_SEED)
-    np.random.seed(RANDOM_SEED)
-    torch.manual_seed(RANDOM_SEED)
+    random.seed(random_seed)
+    np.random.seed(random_seed)
+    torch.manual_seed(random_seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(RANDOM_SEED)
+        torch.cuda.manual_seed_all(random_seed)
 
 def set_hf_cache():
     """Sets Hugging Face cache directory as configured in config.yml. This must be called before importing transformers anywhere else."""
