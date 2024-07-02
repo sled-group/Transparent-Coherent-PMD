@@ -1,4 +1,5 @@
 import ast
+import numpy as np
 import os
 import pandas as pd
 from pathlib import Path
@@ -231,3 +232,17 @@ class ResumableParallelSequentialSampler(torch.utils.data.Sampler):
         if self.element_id_fn is not None:
             data = self.element_id_fn(data)
         return data in self.completed_elements
+    
+def time_based_exponential_moving_average(probabilities, timestamps, tau):
+    smoothed_probabilities = [probabilities[0]]
+    ema = probabilities[0]
+    last_timestamp = timestamps[0]
+    
+    for prob, timestamp in zip(probabilities[1:], timestamps[1:]):
+        time_diff = timestamp - last_timestamp
+        alpha = 1 - np.exp(-time_diff / tau)
+        ema += alpha * (prob - ema)
+        smoothed_probabilities.append(ema)
+        last_timestamp = timestamp
+    
+    return smoothed_probabilities

@@ -11,12 +11,14 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, Bits
 from typing import Union, Any, Optional
 import yaml
 
-from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
-from travel.data.utils import generate_float_series
+from travel.data.mistake_detection import MistakeDetectionDataset
+from travel.data.utils import generate_float_series, time_based_exponential_moving_average
 from travel.data.vqa import VQAOutputs, VQAResponse
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
+EMA_TAU = float(config["mistake_detection_strategies"]["ema_tau"])
+DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 NLI_MODEL_PATH = config["mistake_detection_strategies"]["nli_model_path"]
 NLI_BATCH_SIZE = int(config["mistake_detection_strategies"]["nli_batch_size"])
 NLI_RELEVANCE_DELTA = float(config["mistake_detection_strategies"]["nli_relevance_delta"]) # Minimum difference of entailment probabilities between VQA answer and negated answer to judge question and answer as relevant for mistake detection
@@ -127,10 +129,6 @@ class MistakeDetectionEvaluator:
         metrics['best_threshold'] = best_threshold
         return combined_preds, metrics
 
-with open('config.yml', 'r') as file:
-    config = yaml.safe_load(file)
-DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
-
 def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_times: list[float], verbose: bool=False) -> float:
     mistake_prob = np.array(mistake_prob)
     if verbose:
@@ -149,22 +147,38 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
 
     # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
 
-    # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times;
-    # checking that max(frame_times) > 0 is necessary because of the bug
-    mean_mistake_prob = [(p * ((t - min(frame_times)) / (max(frame_times) - min(frame_times))) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
-    mistake_prob_weights = [((t - min(frame_times)) / (max(frame_times) - min(frame_times)) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else 1.0) for p, t in zip(mean_mistake_prob, frame_times)]
-    mistake_prob_weights = softmax(mistake_prob_weights)
-    mean_mistake_prob = [p * w for p, w in zip(mean_mistake_prob, mistake_prob_weights)]
+    # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times
+    frame_times = [max(t, 0.0) for t in frame_times]
+    if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0:
+        mean_mistake_prob = time_based_exponential_moving_average(mean_mistake_prob, frame_times, tau=EMA_TAU) # set tau to be equal to the avg. sampling interval (2 seconds for both ego4d and captaincook4d)
+        if verbose:
+            print("Mistake probs (after smoothing):")
+            print(mean_mistake_prob)
+
+        mean_mistake_prob = mean_mistake_prob[-1]
+    else:
+        # Just do normal average if we have corrupted time info (or only one frame)
+        mean_mistake_prob = np.mean(mistake_prob)
+
+    # mean_mistake_prob = exponential_moving_average(mean_mistake_prob, alpha=0.1)
+    
+    # mean_mistake_prob = [(p * ((t - min(frame_times)) / (max(frame_times) - min(frame_times))) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
+    # mistake_prob_weights = [(((t - min(frame_times)) / (max(frame_times) - min(frame_times))) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else 1.0) for p, t in zip(mean_mistake_prob, frame_times)]
+    # mistake_prob_weights = softmax(mistake_prob_weights)
+    # if verbose:
+    #     print("Mistake prob time weights:")
+    #     pprint(mistake_prob_weights)
+    # mean_mistake_prob = [p * w for p, w in zip(mean_mistake_prob, mistake_prob_weights)]
+
+    # if verbose:
+    #     print("Mistake probs (after time-weighting)")
+    #     pprint(mean_mistake_prob)
+
+    # # Get mean mistake probability over all frames
+    # mean_mistake_prob = np.sum(mean_mistake_prob) 
 
     if verbose:
-        print("Mistake probs (after time-weighting)")
-        pprint(mean_mistake_prob)
-
-    # Get mean mistake probability over all frames
-    mean_mistake_prob = np.sum(mean_mistake_prob) 
-
-    if verbose:
-        print("Mistake prob (final mean):")
+        print("Mistake prob (final moving average for last time)")
         print(mean_mistake_prob)
 
     return mean_mistake_prob
