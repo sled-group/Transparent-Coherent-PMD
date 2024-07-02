@@ -624,4 +624,5 @@ class VisualFilterTypes(Enum):
     Spatial = "spatial"
     Spatial_NoRephrase = "spatial_norephrase"
     Contrastive_Region = "contrastive_region"
+    Target_Object_Counter = "target_object_counter"
     # Don't include target object counter here because it won't be used in the same way as other filters

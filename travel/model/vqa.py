@@ -172,6 +172,8 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                 
                 # Replace rephrased questions into prompts, but save original questions for bookkeeping
                 prompts = [prompt.replace(question, new_question) for prompt, question, new_question in zip(prompts, questions, new_questions)]
+            elif visual_filter_mode == VisualFilterTypes.Target_Object_Counter:
+                visible_target_objects = visual_filter(nlp, frames, questions)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
