@@ -126,6 +126,11 @@ for eval_partition in args.eval_partitions:
                                                       mismatch_augmentation=True,
                                                       multi_frame=True,
                                                       debug_n_examples_per_class=args.debug_n_examples if args.debug else None) for _ in range(n_workers)]
+    elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D.Single:
+        eval_datasets = [Ego4DMistakeDetectionDataset(data_split=eval_partition, 
+                                                      mismatch_augmentation=True,
+                                                      multi_frame=False,
+                                                      debug_n_examples_per_class=args.debug_n_examples if args.debug else None) for _ in range(n_workers)]
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
         
