@@ -351,7 +351,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
 
                     # Determine if there's a mistake for each frame
                     for question_output in frame_outputs:
-                        if output.target_object_counts is None or len(output.target_object_counts.keys()) == 0 or not max(output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                        if question_output.target_object_counts is None or len(question_output.target_object_counts.keys()) == 0 or not max(question_output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
                             # Incorporate NLI model feedback
                             if abs(nli_relevance[parallel_idx]) >= NLI_RELEVANCE_DELTA:
                                 # NLI model found this question relevant
@@ -386,7 +386,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
 
                 # Determine if there's a mistake for each frame
                 for question_output in frame_outputs:
-                    if output.target_object_counts is None or len(output.target_object_counts.keys()) == 0 or not max(output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                    if question_output.target_object_counts is None or len(question_output.target_object_counts) == 0 or not max(question_output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
                         # Incorporate NLI model feedback
                         if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
                             # NLI model found this question irrelevant, so 0 mistake probability
@@ -486,8 +486,8 @@ def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_
     metrics = {k: v for k, v in metrics.items() if type(k) == float}
 
     # Gather FPR and FNR from metrics
-    false_positive_rates = [round(1.0 - metrics[threshold]['false_positive_rate'], 3) for threshold in metrics]
-    false_negative_rates = [round(1.0 - metrics[threshold]['false_negative_rate'], 3) for threshold in metrics]
+    false_positive_rates = [round(metrics[threshold]['false_positive_rate'], 3) for threshold in metrics]
+    false_negative_rates = [round(metrics[threshold]['false_negative_rate'], 3) for threshold in metrics]
 
     # # Ensure input rates are within the valid range for norm.ppf
     # false_positive_rates = np.clip(false_positive_rates, 0.0001, 0.9999)
