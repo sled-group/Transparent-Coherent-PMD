@@ -847,6 +847,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # there to be an observable state change (e.g., "move tomatoes into bowl" rather than "move tomatoes")
             if clip['structured_verb'] in ["move_(transfer,_pass,_exchange)"]:
                 mentioned_objects = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, [instruction_text])[0]
+                # TODO: this still may not be enough, e.g., "reposition the water color on the table with your hand" has enough mentioned objects but not in the right places
                 if len(mentioned_objects) < 2:
                     continue
             

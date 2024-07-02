@@ -2,6 +2,7 @@ from dataclasses import dataclass, asdict
 import matplotlib.pyplot as plt
 import numpy as np
 from pprint import pprint
+from scipy.special import softmax
 from scipy.stats import norm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 import torch
@@ -151,15 +152,16 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
     # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times;
     # checking that max(frame_times) > 0 is necessary because of the bug
     mean_mistake_prob = [(p * ((t - min(frame_times)) / (max(frame_times) - min(frame_times))) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
-    # mean_mistake_prob = [(p * (t / sum(frame_times)) if len(frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, frame_times)] 
+    mistake_prob_weights = [((t - min(frame_times)) / (max(frame_times) - min(frame_times)) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else 1.0) for p, t in zip(mean_mistake_prob, frame_times)]
+    mistake_prob_weights = softmax(mistake_prob_weights)
+    mean_mistake_prob = [p * w for p, w in zip(mean_mistake_prob, mistake_prob_weights)]
 
     if verbose:
         print("Mistake probs (after time-weighting)")
         pprint(mean_mistake_prob)
 
     # Get mean mistake probability over all frames
-    mean_mistake_prob = np.mean(mean_mistake_prob) 
-    # mean_mistake_prob = np.sum(mean_mistake_prob) 
+    mean_mistake_prob = np.sum(mean_mistake_prob) 
 
     if verbose:
         print("Mistake prob (final mean):")
