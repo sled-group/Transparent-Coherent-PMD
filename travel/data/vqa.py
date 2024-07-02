@@ -61,16 +61,17 @@ class VQAOutputs:
 
     def __post_init__(self):
         """Processes logits output from VLM into answer probabilities and final answer."""
-        for response_type in VQAResponse:
-            assert response_type in self.response_token_ids, f"VLM token ID for {response_type} not provided in VQAOutputs.answer_token_ids."
+        if len(self.answer_probs) == 0:
+            for response_type in VQAResponse:
+                assert response_type in self.response_token_ids, f"VLM token ID for {response_type} not provided in VQAOutputs.answer_token_ids."
 
-        this_probs = torch.stack([self.logits[self.response_token_ids[response_type]] for response_type in VQAResponse], dim=0)
-        this_probs = torch.softmax(this_probs, dim=0)
-        
-        self.predicted_answer = VQAResponse(torch.argmax(this_probs, dim=0).numpy())
-        
-        this_probs = this_probs.numpy()
-        self.answer_probs = {response_type: this_probs[response_type.value] for response_type in VQAResponse}
+            this_probs = torch.stack([self.logits[self.response_token_ids[response_type]] for response_type in VQAResponse], dim=0)
+            this_probs = torch.softmax(this_probs, dim=0)
+            
+            self.predicted_answer = VQAResponse(torch.argmax(this_probs, dim=0).numpy())
+            
+            this_probs = this_probs.numpy()
+            self.answer_probs = {response_type: this_probs[response_type.value] for response_type in VQAResponse}
 
     def to_dict(self, image_base_path: Optional[str]=None):
         """Helper method to create a JSON-serializable version of the class instance (excluding some information)."""
@@ -86,7 +87,7 @@ class VQAOutputs:
         return_dict["frame"] = self.frame
 
         return return_dict
-    
+        
     def cache_frame(self, image_base_path: str):
         assert type(self.frame) != str, "Can only cache PIL images!"
 

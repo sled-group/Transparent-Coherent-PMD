@@ -30,4 +30,5 @@ mistake_detection_strategies:
   nli_model_path: "facebook/bart-large-mnli"
   nli_batch_size: 128
   nli_relevance_delta: 0.2
+  nli_rerun_on_relevant_evidence: true
   nli_replace_probs: false

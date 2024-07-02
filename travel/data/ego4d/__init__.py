@@ -55,7 +55,7 @@ EGO4D_IGNORE_VERBS = [
     'feed', # Feeding animals
     'cross', # People crossing over things
     'kick', # Kicking objects with foot - usually not related to any task
-    "check", # Check on something, e.g., look at something - doesn't imply a state change
+    # "inspect_(check,_look,_examine,_view)", # Check on or look at something, e.g., look at something - doesn't imply a state change
     "adjust_(regulate,_increase/reduce,_change)", # Adjust something (slight position change)
     "turn_(spin,_rotate,_flip,_turn_over)", # Turn something (slight position change)
     "tilt", # Tilt something (slight position change)

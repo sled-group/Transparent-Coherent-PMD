@@ -11,7 +11,7 @@ from travel.model.mistake_detection import generate_det_curves
 # Configure arguments here
 results_fnames = [
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/metrics_heuristic_val.json",
-    # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug_llava-1.5-7b-hf_20240624115023/metrics_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/metrics_nli_val.json",
     # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug_llava-1.5-7b-hf_spatial1.0_20240624193456/metrics_nli_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/metrics_heuristic_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/metrics_heuristic_val.json",
@@ -26,7 +26,7 @@ results_fnames = [
 # ]
 results_names = [
     "SuccessVQA",
-    # "VQG2VQA + NLI",
+    "VQG2VQA + NLI",
     # "VQG2VQA + NLI + Spatial",
     "VQG2VQA",
     "VQG2VQA + Spatial",
