@@ -15,7 +15,8 @@ results_fnames = [
     # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/metrics_nli_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/metrics_heuristic_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/metrics_heuristic_val.json",
-    # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase0.75_20240630222902/metrics_heuristic_val.json"
+    # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/metrics_heuristic_val.json",
+    # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase0.5_20240701161456/metrics_heuristic_val.json"
 ]
 # results_fnames = [
 #     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results/vqa_mistake_detection/captaincook4d/SuccessVQA_captaincook4d_llava-1.5-7b-hf_20240621093854/metrics_heuristic_val.json",
@@ -30,7 +31,8 @@ results_names = [
     # "VQG2VQA + NLI + Spatial",
     "VQG2VQA",
     "VQG2VQA + Spatial",
-    # "VQG2VQA + Spatial (0.75 strength, no rephrase)"
+    # "VQG2VQA + Spatial (no rephrase)",
+    # "VQG2VQA + Spatial (0.5 strength, no rephrase)"
 ]
 output_fname_prefix = "det_comparison_val"
 

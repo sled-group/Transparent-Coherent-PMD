@@ -129,7 +129,7 @@ class MistakeDetectionEvaluator:
         metrics['best_threshold'] = best_threshold
         return combined_preds, metrics
 
-def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_times: list[float], verbose: bool=False) -> float:
+def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_times: list[float], confidence_threshold: Optional[float]=None, verbose: bool=False) -> float:
     mistake_prob = np.array(mistake_prob)
     if verbose:
         print("Mistake probs (input):")
@@ -138,8 +138,24 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
     assert len(frame_times) == len(mistake_prob), f"Compilation of mistake detections for example has a shape issue! Frame times length = {len(frame_times)}; Mistake probs length = {len(mistake_prob)}"
     assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
 
-    # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-    mean_mistake_prob = np.max(mistake_prob, axis=-1)
+    mean_mistake_prob = mistake_prob
+    if confidence_threshold is not None:
+        # (this isn't in use, doesn't really help performance much)
+        # Omit any responses that aren't confident enough
+        mean_mistake_prob = [[p for p in frame_p if abs(p - 0.50) / 0.50 > confidence_threshold] for frame_p in mean_mistake_prob]
+        if verbose:
+            print("Mistake probs (after confidence thresholding):")
+            pprint(mean_mistake_prob)
+
+    # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake);
+    # if there are no answers that are confident enough, omit the frame
+    keep_times = [t for frame_p, t in zip(mean_mistake_prob, frame_times) if len(frame_p) > 0]
+    mean_mistake_prob = [max(frame_p) for frame_p in mean_mistake_prob if len(frame_p) > 0]
+    frame_times = keep_times
+    
+    # For each frame, select the most confident answer to represent the 
+    # select_frame = [np.argmax([abs(p - 0.50) / 0.50 for p in frame_p]) for frame_p in mean_mistake_prob]
+    # mean_mistake_prob = [p[sf] for p, sf in zip(mean_mistake_prob, select_frame)]
 
     if verbose:
         print("Mistake probs (after max):")
@@ -148,17 +164,28 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
     # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
 
     # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times
-    frame_times = [max(t, 0.0) for t in frame_times]
-    if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0:
-        mean_mistake_prob = time_based_exponential_moving_average(mean_mistake_prob, frame_times, tau=EMA_TAU) # set tau to be equal to the avg. sampling interval (2 seconds for both ego4d and captaincook4d)
-        if verbose:
-            print("Mistake probs (after smoothing):")
-            print(mean_mistake_prob)
+    if len(mean_mistake_prob) > 0:
+        frame_times = [max(t, 0.0) for t in frame_times]
+        if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0:
+            mean_mistake_prob = time_based_exponential_moving_average(mean_mistake_prob, frame_times, tau=EMA_TAU) # set tau to be equal to the avg. sampling interval (2 seconds for both ego4d and captaincook4d)
+            if verbose:
+                print("Mistake probs (after smoothing):")
+                print(mean_mistake_prob)
 
-        mean_mistake_prob = mean_mistake_prob[-1]
+            # # Select last frame because it's most recent
+            # mean_mistake_prob = mean_mistake_prob[-1]
+
+            # Select the frame that has the maximum confidence * recency
+            confidence = [abs(p - 0.50) / 0.50 for p in mean_mistake_prob] # Scores confidence based on distance from 50/50 probability
+            time_into_clip = [(t - min(frame_times)) / (max(frame_times) - min(frame_times)) for t in frame_times]
+            select_frame = int(np.argmax([p * t for p, t in zip(confidence, time_into_clip)]))
+            mean_mistake_prob = mean_mistake_prob[select_frame]
+        else:
+            # Just do normal average if we have corrupted time info (or only one frame)
+            mean_mistake_prob = np.mean(mean_mistake_prob)
     else:
-        # Just do normal average if we have corrupted time info (or only one frame)
-        mean_mistake_prob = np.mean(mistake_prob)
+        # Previous operations removed all predictions, so just say there's not a mistake
+        mean_mistake_prob = 0.0 # (use a number that represents distribution of classes?)
 
     # mean_mistake_prob = exponential_moving_average(mean_mistake_prob, alpha=0.1)
     
@@ -178,7 +205,7 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
     # mean_mistake_prob = np.sum(mean_mistake_prob) 
 
     if verbose:
-        print("Mistake prob (final moving average for last time)")
+        print("Mistake prob (final moving average for best time)")
         print(mean_mistake_prob)
 
     return mean_mistake_prob
