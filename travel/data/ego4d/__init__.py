@@ -55,7 +55,7 @@ EGO4D_IGNORE_VERBS = [
     'feed', # Feeding animals
     'cross', # People crossing over things
     'kick', # Kicking objects with foot - usually not related to any task
-    "check", # Check on something, e.g., look at something - doesn't imply a state change
+    # "inspect_(check,_look,_examine,_view)", # Check on or look at something, e.g., look at something - doesn't imply a state change
     "adjust_(regulate,_increase/reduce,_change)", # Adjust something (slight position change)
     "turn_(spin,_rotate,_flip,_turn_over)", # Turn something (slight position change)
     "tilt", # Tilt something (slight position change)
@@ -730,8 +730,8 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                          n_workers=n_workers,
                          worker_index=worker_index)
 
-    def get_cache_dir(self, 
-                      data_split: str,
+    @staticmethod
+    def get_cache_dir(data_split: str,
                       mismatch_augmentation: bool=False,
                       multi_frame: bool=False,
                       debug_n_examples_per_class: Optional[int]=None,
@@ -847,6 +847,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # there to be an observable state change (e.g., "move tomatoes into bowl" rather than "move tomatoes")
             if clip['structured_verb'] in ["move_(transfer,_pass,_exchange)"]:
                 mentioned_objects = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, [instruction_text])[0]
+                # TODO: this still may not be enough, e.g., "reposition the water color on the table with your hand" has enough mentioned objects but not in the right places
                 if len(mentioned_objects) < 2:
                     continue
             

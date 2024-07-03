@@ -20,8 +20,8 @@ from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, SUCCESSVQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
@@ -80,6 +80,9 @@ for worker_index in range(n_workers):
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
+        elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Target_Object_Counter:
+            visual_filter = TargetObjectCounterFilter(device=f"cuda:{worker_index}")
+            nlp = spacy.load('en_core_web_lg')      
         else:
             raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with VQG2VQA!")
             
@@ -151,6 +154,11 @@ for eval_partition in args.eval_partitions:
                                                       mismatch_augmentation=True,
                                                       multi_frame=True,
                                                       debug_n_examples_per_class=args.debug_n_examples if args.debug else None) for _ in range(n_workers)]
+    elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
+        eval_datasets = [Ego4DMistakeDetectionDataset(data_split=eval_partition, 
+                                                      mismatch_augmentation=True,
+                                                      multi_frame=False,
+                                                      debug_n_examples_per_class=args.debug_n_examples if args.debug else None) for _ in range(n_workers)]    
     else:
         raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")                                        
 
@@ -202,13 +210,13 @@ for eval_partition in args.eval_partitions:
     preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
 
     # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
-    metrics_filename = f"metrics_{args.mistake_detection_strategy}_{eval_partition}.json"
+    metrics_filename = f"metrics_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
     json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
-    preds_filename = f"preds_{args.mistake_detection_strategy}_{eval_partition}.json"
+    preds_filename = f"preds_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
     json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
 
-    det_filename = f"det_{args.mistake_detection_strategy}_{eval_partition}.pdf"
+    det_filename = f"det_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
     generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))

@@ -226,7 +226,8 @@ DO_NOT_PARSE_NOUNS = [
     "hand",
     "hands",
     "place",
-    "floor" # Floor is often misrecognized as the whole image
+    "floor", # Floor is often misrecognized as the whole image
+    "position",
 ]
 
 class TargetObjectCounterFilter(AdaptiveVisualFilter):
@@ -294,13 +295,17 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
             object_counts.append(this_object_counts)
         return object_counts
 
-    def __call__(self, nlp: English, frames: list[Image.Image], procedures: list[str]) -> list[int]:
+    def __call__(self, nlp: English, frames: list[Image.Image], procedures: list[str], return_dict=False) -> list[int]:
         # Parse objects from questions
         object_parse_results = self.parse_sentences_for_target_objects(nlp, procedures)
         detection_results, _ = self.run_detection(object_parse_results, frames)
         
         # Get target object counts
-        target_object_counts = [sum(list(result.values())) for result in TargetObjectCounterFilter.count_objects_in_detection_results(detection_results)]
+        object_count_results = TargetObjectCounterFilter.count_objects_in_detection_results(detection_results)
+        if return_dict:
+            target_object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_count_results)]
+        else:
+            target_object_counts = [sum(list(result.values())) for result in object_count_results]
 
         return target_object_counts
 
@@ -624,4 +629,5 @@ class VisualFilterTypes(Enum):
     Spatial = "spatial"
     Spatial_NoRephrase = "spatial_norephrase"
     Contrastive_Region = "contrastive_region"
+    Target_Object_Counter = "target_object_counter"
     # Don't include target object counter here because it won't be used in the same way as other filters

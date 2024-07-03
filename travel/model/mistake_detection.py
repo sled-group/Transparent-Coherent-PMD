@@ -2,6 +2,7 @@ from dataclasses import dataclass, asdict
 import matplotlib.pyplot as plt
 import numpy as np
 from pprint import pprint
+from scipy.special import softmax
 from scipy.stats import norm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 import torch
@@ -10,16 +11,19 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, Bits
 from typing import Union, Any, Optional
 import yaml
 
-from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
-from travel.data.utils import generate_float_series
+from travel.data.mistake_detection import MistakeDetectionDataset
+from travel.data.utils import generate_float_series, time_based_exponential_moving_average
 from travel.data.vqa import VQAOutputs, VQAResponse
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
+EMA_TAU = float(config["mistake_detection_strategies"]["ema_tau"])
+DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 NLI_MODEL_PATH = config["mistake_detection_strategies"]["nli_model_path"]
 NLI_BATCH_SIZE = int(config["mistake_detection_strategies"]["nli_batch_size"])
 NLI_RELEVANCE_DELTA = float(config["mistake_detection_strategies"]["nli_relevance_delta"]) # Minimum difference of entailment probabilities between VQA answer and negated answer to judge question and answer as relevant for mistake detection
 NLI_REPLACE_PROBS = bool(config["mistake_detection_strategies"]["nli_replace_probs"])
+NLI_RERUN_ON_RELEVANT_EVIDENCE = bool(config["mistake_detection_strategies"]["nli_rerun_on_relevant_evidence"])
 
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
 
@@ -49,6 +53,7 @@ class MistakeDetectionOutputs:
     final_mistake_prediction: bool
     nli_mistake_probs: Optional[list[list[float]]] = None # (# frames, # questions per frame)
     nli_relevance_probs: Optional[list[list[float]]] = None # (# frames, # questions per frame)
+    nli_final_mistake_probs: Optional[list[float]] = None # (# frames); this is the NLI probability for each frame based on all relevant evidences combined into one prompt
 
     def __post_init__(self):
         assert len(self.frame_times) == len(self.mistake_probs), "`MistakeDetectionOutputs` expects `frame_times` and `mistake_probs` to be the same length, i.e., the number of frames used to detect the mistake."
@@ -63,6 +68,8 @@ class MistakeDetectionOutputs:
             return_dict['nli_mistake_probs'] = [[float(round(v, 3)) for v in l] for l in return_dict['nli_mistake_probs']]
         if return_dict['nli_relevance_probs'] is not None:
             return_dict['nli_relevance_probs'] = [[float(round(v, 3)) for v in l] for l in return_dict['nli_relevance_probs']]
+        if return_dict['nli_final_mistake_probs'] is not None:
+            return_dict['nli_final_mistake_probs'] = [float(round(v, 3)) for v in return_dict['nli_final_mistake_probs']]            
         return return_dict
 
 @dataclass
@@ -122,12 +129,7 @@ class MistakeDetectionEvaluator:
         metrics['best_threshold'] = best_threshold
         return combined_preds, metrics
 
-with open('config.yml', 'r') as file:
-    config = yaml.safe_load(file)
-DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
-
-def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_times: list[float], verbose: bool=False) -> float:
-    pprint(mistake_prob)
+def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_times: list[float], confidence_threshold: Optional[float]=None, verbose: bool=False) -> float:
     mistake_prob = np.array(mistake_prob)
     if verbose:
         print("Mistake probs (input):")
@@ -136,8 +138,24 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
     assert len(frame_times) == len(mistake_prob), f"Compilation of mistake detections for example has a shape issue! Frame times length = {len(frame_times)}; Mistake probs length = {len(mistake_prob)}"
     assert len(mistake_prob.shape) == 2, "mistake_prob passed into aggregate_mistake_probs_over_frames should only have two dimensions: (frames, questions)"
 
-    # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake)
-    mean_mistake_prob = np.max(mistake_prob, axis=-1)
+    mean_mistake_prob = mistake_prob
+    if confidence_threshold is not None:
+        # (this isn't in use, doesn't really help performance much)
+        # Omit any responses that aren't confident enough
+        mean_mistake_prob = [[p for p in frame_p if abs(p - 0.50) / 0.50 > confidence_threshold] for frame_p in mean_mistake_prob]
+        if verbose:
+            print("Mistake probs (after confidence thresholding):")
+            pprint(mean_mistake_prob)
+
+    # Get maximum probability of a mistake for each frame (since we only need one question to indicate a mistake);
+    # if there are no answers that are confident enough, omit the frame
+    keep_times = [t for frame_p, t in zip(mean_mistake_prob, frame_times) if len(frame_p) > 0]
+    mean_mistake_prob = [max(frame_p) for frame_p in mean_mistake_prob if len(frame_p) > 0]
+    frame_times = keep_times
+    
+    # For each frame, select the most confident answer to represent the 
+    # select_frame = [np.argmax([abs(p - 0.50) / 0.50 for p in frame_p]) for frame_p in mean_mistake_prob]
+    # mean_mistake_prob = [p[sf] for p, sf in zip(mean_mistake_prob, select_frame)]
 
     if verbose:
         print("Mistake probs (after max):")
@@ -145,21 +163,49 @@ def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_t
 
     # Normalize each frame probability by relative time in video clip - if only one frame (e.g., in ego4d), this normalization coefficient would be 1
 
-    # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times;
-    # checking that max(frame_times) > 0 is necessary because of the bug
-    mean_mistake_prob = [(p * (t / max(frame_times)) if len(frame_times) > 1 and max(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
-    # mean_mistake_prob = [(p * (t / sum(frame_times)) if len(frame_times) > 1 else p) for p, t in zip(mean_mistake_prob, frame_times)] 
+    # NOTE: due to a processing bug in some versions of Ego4D, there are rare cases with negative frame times
+    if len(mean_mistake_prob) > 0:
+        frame_times = [max(t, 0.0) for t in frame_times]
+        if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0:
+            mean_mistake_prob = time_based_exponential_moving_average(mean_mistake_prob, frame_times, tau=EMA_TAU) # set tau to be equal to the avg. sampling interval (2 seconds for both ego4d and captaincook4d)
+            if verbose:
+                print("Mistake probs (after smoothing):")
+                print(mean_mistake_prob)
 
-    if verbose:
-        print("Mistake probs (after time-weighting)")
-        pprint(mean_mistake_prob)
+            # # Select last frame because it's most recent
+            # mean_mistake_prob = mean_mistake_prob[-1]
 
-    # Get mean mistake probability over all frames
-    mean_mistake_prob = np.mean(mean_mistake_prob) 
+            # Select the frame that has the maximum confidence * recency
+            confidence = [abs(p - 0.50) / 0.50 for p in mean_mistake_prob] # Scores confidence based on distance from 50/50 probability
+            time_into_clip = [(t - min(frame_times)) / (max(frame_times) - min(frame_times)) for t in frame_times]
+            select_frame = int(np.argmax([p * t for p, t in zip(confidence, time_into_clip)]))
+            mean_mistake_prob = mean_mistake_prob[select_frame]
+        else:
+            # Just do normal average if we have corrupted time info (or only one frame)
+            mean_mistake_prob = np.mean(mean_mistake_prob)
+    else:
+        # Previous operations removed all predictions, so just say there's not a mistake
+        mean_mistake_prob = 0.0 # (use a number that represents distribution of classes?)
+
+    # mean_mistake_prob = exponential_moving_average(mean_mistake_prob, alpha=0.1)
+    
+    # mean_mistake_prob = [(p * ((t - min(frame_times)) / (max(frame_times) - min(frame_times))) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else p) for p, t in zip(mean_mistake_prob, frame_times)]  
+    # mistake_prob_weights = [(((t - min(frame_times)) / (max(frame_times) - min(frame_times))) if len(frame_times) > 1 and max(frame_times) - min(frame_times) > 0.0 else 1.0) for p, t in zip(mean_mistake_prob, frame_times)]
+    # mistake_prob_weights = softmax(mistake_prob_weights)
+    # if verbose:
+    #     print("Mistake prob time weights:")
+    #     pprint(mistake_prob_weights)
+    # mean_mistake_prob = [p * w for p, w in zip(mean_mistake_prob, mistake_prob_weights)]
+
+    # if verbose:
+    #     print("Mistake probs (after time-weighting)")
+    #     pprint(mean_mistake_prob)
+
+    # # Get mean mistake probability over all frames
     # mean_mistake_prob = np.sum(mean_mistake_prob) 
 
     if verbose:
-        print("Mistake prob (final mean):")
+        print("Mistake prob (final moving average for best time)")
         print(mean_mistake_prob)
 
     return mean_mistake_prob
@@ -229,36 +275,28 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
         )
         self.nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
         self.nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
-        self.mistake_probs = None
         self.relevance_probs = None
+        self.mistake_probs = None
+        self.final_mistake_probs = None
         super().__post_init__()
 
-    def run_nli(self, procedure_descriptions: list[str], questions: list[str], answers: list[VQAResponse]) -> tuple[list[str], list[float], list[float]]:
+    def run_nli(self, procedure_descriptions: list[str], premises: list[str], premises_negated: Optional[list[str]]=None) -> tuple[list[str], list[float], list[float]]:
         # TODO: normalize entailment predictions using surface form competition methodology?
-        if self.mistake_probs is None or self.relevance_probs is None:
+        if (premises_negated and self.mistake_probs is None or self.relevance_probs is None) or (not premises_negated and self.final_mistake_probs is None):
             with torch.no_grad():
                 all_mistake_probs = torch.zeros((0, 1)).float()
-                all_relevance = torch.zeros((0, 1)).float()
+                if premises_negated:
+                    all_relevance = torch.zeros((0, 1)).float()
 
                 for i in tqdm(range(0, len(procedure_descriptions), NLI_BATCH_SIZE), desc=f"running NLI ({str(self.nli_model.device)})"):
                     # Prepare the batch
                     batch_procedure_descriptions = procedure_descriptions[i:i+NLI_BATCH_SIZE]
-                    batch_questions = questions[i:i+NLI_BATCH_SIZE]
-                    batch_answers = answers[i:i+NLI_BATCH_SIZE]
-                    batch_negated_answers = [VQAResponse(1-answer.value) for answer in batch_answers]
-
-                    batch_answers = [answer.name for answer in batch_answers]
-                    batch_negated_answers = [answer.name for answer in batch_negated_answers]
-
-                    # Generate prompt data for premise and negated premise
-                    premise = [f"{question} {answer}" for question, answer in zip(batch_questions, batch_answers)]
-                    premise_negated = [f"{question} {answer}" for question, answer in zip(batch_questions, batch_negated_answers)]
+                    batch_premises = premises[i:i+NLI_BATCH_SIZE]
                     
                     hypothesis = [f'The procedure "{procedure}" has been successfully completed.' for procedure in batch_procedure_descriptions]
 
                     # Run premise through NLI model
-                    x = self.nli_tokenizer.encode(premise[0], hypothesis[0], return_tensors="pt", padding="longest", truncation="only_first")
-                    x = self.nli_tokenizer.batch_encode_plus(list(zip(premise, hypothesis)),
+                    x = self.nli_tokenizer.batch_encode_plus(list(zip(batch_premises, hypothesis)),
                                                             return_tensors='pt', 
                                                             padding="longest",
                                                             truncation='only_first')
@@ -267,33 +305,51 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                     logits = logits[:,[0,2]] # Take logits for contradiction and entailment only
                     probs = logits.softmax(dim=1)
 
-                    # Run negated premise through NLI model
-                    x = self.nli_tokenizer.batch_encode_plus(list(zip(premise_negated, hypothesis)), 
-                                                            return_tensors='pt',
-                                                            padding="longest",
-                                                            truncation='only_first')
-                    logits_negated = self.nli_model(**x.to(self.nli_model.device))[0]
-                    logits_negated = logits_negated.cpu()
-                    logits_negated = logits_negated[:,[0,2]] # Take logits for contradiction and entailment only
-                    probs_negated = logits_negated.softmax(dim=1)
-                    
-                    # If probability of contradiction doesn't change enough between answer and negated answer, 
-                    # then assume the question is irrelevant and assign 0 probability of contradiction 
-                    # (can filter these out from prediction later)
-                    relevance = probs[:, 0] - probs_negated[:, 0]
-                    # relevance[relevance < NLI_RELEVANCE_DELTA] = 0.0
-                    # relevance[relevance >= NLI_RELEVANCE_DELTA] = 1.0
-
                     # Grab contradiction probabilities weighted by relevance and add to all_mistake_probs
                     all_mistake_probs = torch.cat([all_mistake_probs, probs[:, 0].unsqueeze(1)], dim=0)
-                    all_relevance = torch.cat([all_relevance, relevance.unsqueeze(1)], dim=0)
+
+                    # Run negated premise through NLI model
+                    if premises_negated:
+                        batch_premises_negated = premises_negated[i:i+NLI_BATCH_SIZE]
+                        # pprint(hypothesis[:10])
+                        # pprint(batch_premises[:10])
+                        # pprint(batch_premises_negated[:10])
+                        # print("=============")
+                        x = self.nli_tokenizer.batch_encode_plus(list(zip(batch_premises_negated, hypothesis)), 
+                                                                return_tensors='pt',
+                                                                padding="longest",
+                                                                truncation='only_first')
+                        logits_negated = self.nli_model(**x.to(self.nli_model.device))[0]
+                        logits_negated = logits_negated.cpu()
+                        logits_negated = logits_negated[:,[0,2]] # Take logits for contradiction and entailment only
+                        probs_negated = logits_negated.softmax(dim=1)
+                    
+                        # If probability of contradiction doesn't change enough between answer and negated answer, 
+                        # then assume the question is irrelevant and assign 0 probability of contradiction 
+                        # (can filter these out from prediction later)
+                        relevance = probs[:, 0] - probs_negated[:, 0]
+                        all_relevance = torch.cat([all_relevance, relevance.unsqueeze(1)], dim=0)
 
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
 
-            self.mistake_probs = list(all_mistake_probs.squeeze(1).numpy())
-            self.relevance_probs = list(all_relevance.squeeze(1).numpy())
-        return self.mistake_probs, self.relevance_probs
+            # Save any probs for later runs with different thresholds
+            if premises_negated:
+                self.relevance_probs = list(all_relevance.squeeze(1).numpy())
+                self.mistake_probs = list(all_mistake_probs.squeeze(1).numpy())
+            else:
+                self.final_mistake_probs = list(all_mistake_probs.squeeze(1).numpy())
+
+        if premises_negated:
+            # print("==========================================")
+            # pprint(self.mistake_probs[:10])
+            # print('\n\n')
+            # pprint(self.relevance_probs[:10])
+            return self.mistake_probs, self.relevance_probs
+        else:
+            # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            # pprint(self.final_mistake_probs[:10])
+            return self.final_mistake_probs
 
     def check_mistakes(self, detection_threshold: float=0.5) -> list[MistakeDetectionOutputs]:
         """
@@ -316,62 +372,123 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                     all_questions.append(output.question)
                     all_answers.append(output.predicted_answer)
             
-        nli_mistake_probs, nli_relevance = self.run_nli(all_procedure_descriptions, all_questions, all_answers)
+        negated_answers = [VQAResponse(1-answer.value) for answer in all_answers]
+        premises = [f"{question} {answer.name}" for question, answer in zip(all_questions, all_answers)]
+        premises_negated = [f"{question} {answer.name}" for question, answer in zip(all_questions, negated_answers)]
+
+        nli_mistake_probs, nli_relevance = self.run_nli(all_procedure_descriptions, premises, premises_negated)
         del all_procedure_descriptions
         del all_questions
         del all_answers
 
+        # Identify relevant evidence from each frame
+        if NLI_RERUN_ON_RELEVANT_EVIDENCE:
+            parallel_idx = 0
+            frame_idx = 0
+            all_frame_premises = []
+            all_frame_premises_idxs = []
+            all_frame_procedure_descriptions = []
+            for example, outputs in zip(self.examples, self.vqa_outputs):
+                for frame_outputs in outputs:
+                    frame_relevant_premises = []
+
+                    # Determine if there's a mistake for each frame
+                    for question_output in frame_outputs:
+                        if question_output.target_object_counts is None or len(question_output.target_object_counts.keys()) == 0 or not max(question_output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
+                            # Incorporate NLI model feedback
+                            if abs(nli_relevance[parallel_idx]) >= NLI_RELEVANCE_DELTA:
+                                # NLI model found this question relevant
+                                frame_relevant_premises.append(f"{question_output.question} {question_output.predicted_answer}")
+
+                        parallel_idx += 1
+
+                    all_frame_premises.append("/n".join(frame_relevant_premises))
+                    all_frame_premises_idxs.append(frame_idx)
+                    all_frame_procedure_descriptions.append(example.procedure_description)
+                    frame_idx += 1
+
+            nli_final_mistake_probs_by_frame = self.run_nli(all_frame_procedure_descriptions, all_frame_premises)
+
         # Incorporate NLI mistake probs into mistake probs
         parallel_idx = 0
+        frame_idx = 0
         mistake_probs = []
         compiled_nli_mistake_probs = []
         compiled_nli_relevance_probs = []
+        compiled_nli_final_mistake_probs = []
         for example, outputs in zip(self.examples, self.vqa_outputs):
             example_mistake_probs = []
             example_nli_mistake_probs = []
             example_nli_relevance_probs = []
+            example_nli_final_mistake_probs = []
             for frame_outputs in outputs:
                 frame_mistake_probs = []
                 frame_nli_mistake_probs = []
                 frame_nli_relevance_probs = []
+                frame_nli_final_mistake_probs = []
 
-                # Check all questions for this frame to decide if there's a mistake
+                # Determine if there's a mistake for each frame
                 for question_output in frame_outputs:
-                    if output.target_object_counts is None or len(output.target_object_counts.keys()) == 0 or not max(output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
-                        # Incorporate NLI model feedback
-                        if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
-                            # NLI model found this question irrelevant, so 0 mistake probability
-                            frame_mistake_probs.append(0.0)
-                        else:
+                    # Incorporate NLI model feedback
+                    if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
+                        # NLI model found this question irrelevant, so 0 mistake probability
+                        frame_mistake_probs.append(0.0)
+                    else:
+                        if question_output.target_object_counts is None or len(question_output.target_object_counts) == 0 or not max(question_output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
                             # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
                             mistake_answer = VQAResponse(1-int(question_output.expected_answer.value))
                             mistake_prob = question_output.answer_probs[mistake_answer]
-                            # Configure whether to only use NLI probs for final mistake detection, or otherwise multiply probabilities from VQA and NLI
-                            if NLI_REPLACE_PROBS:
-                                frame_mistake_probs.append(nli_mistake_probs[parallel_idx])
+                            if not NLI_RERUN_ON_RELEVANT_EVIDENCE:
+                                # Configure whether to only use NLI probs for final mistake detection, or otherwise multiply probabilities from VQA and NLI
+                                if NLI_REPLACE_PROBS:
+                                    frame_mistake_probs.append(nli_mistake_probs[parallel_idx])
+                                else:
+                                    frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
                             else:
-                                frame_mistake_probs.append(mistake_prob * nli_mistake_probs[parallel_idx])
+                                # If going to use a combined NLI probability for all relevant evidence from this frame, just save the VQA probability directly
+                                frame_mistake_probs.append(mistake_prob)
                             # TODO: consider combining NLI probabilities by creating one premise based on relevant evidence and do one more inference (follow recoverr paper)
-                    else:
-                        # Visual filter didn't see any target objects, so assume there's a mistake
-                        frame_mistake_probs.append(1.0)
+                        else:
+                            # Visual filter didn't see any target objects, so assume there's a mistake;
+                            # use relevance of question here
+                            frame_mistake_probs.append(abs(nli_relevance[parallel_idx]))
 
                     frame_nli_mistake_probs.append(nli_mistake_probs[parallel_idx])
                     frame_nli_relevance_probs.append(nli_relevance[parallel_idx])
 
                     parallel_idx += 1
 
-                example_mistake_probs.append(frame_mistake_probs)
+                if NLI_RERUN_ON_RELEVANT_EVIDENCE:
+                    # If we're using the NLI probability for all relevant evidence combined into one premise, then condense the frame probabilities accordingly
+                    if frame_idx in all_frame_premises_idxs:
+                        # If there was any relevant evidence for this frame, find it and incorporate it
+                        mistake_prob = nli_final_mistake_probs_by_frame[all_frame_premises_idxs.index(frame_idx)]
+                        frame_nli_final_mistake_probs.append(mistake_prob)
+                        if not NLI_REPLACE_PROBS:
+                            # Factor in max mistake probability for this frame from VQA step
+                            mistake_prob *= max(frame_mistake_probs)
+                        example_mistake_probs.append([mistake_prob])
+                    else:
+                        # There's no relevant evidence for this frame, so assume there's no mistake
+                        example_mistake_probs.append([0.0])
+
+                else:
+                    example_mistake_probs.append(frame_mistake_probs)
                 example_nli_mistake_probs.append(frame_nli_mistake_probs)
                 example_nli_relevance_probs.append(frame_nli_relevance_probs)
+                if len(frame_nli_final_mistake_probs) > 0:
+                    example_nli_final_mistake_probs.append(frame_nli_final_mistake_probs[0])
+
+                frame_idx += 1
 
             mistake_probs.append(example_mistake_probs)
             compiled_nli_mistake_probs.append(example_nli_mistake_probs)
             compiled_nli_relevance_probs.append(example_nli_relevance_probs)
+            compiled_nli_final_mistake_probs.append(example_nli_final_mistake_probs)
 
         # From here, follow HeuristicMistakeDetectionEvaluator: just average reweighted likelihood of mistake then use a threshold to decide if there's a mistake
         agg_preds = []
-        for mistake_prob, nli_mistake_prob, nli_relevance_prob, example in tqdm(zip(mistake_probs, compiled_nli_mistake_probs, compiled_nli_relevance_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
+        for mistake_prob, nli_mistake_prob, nli_relevance_prob, nli_final_mistake_prob, example in tqdm(zip(mistake_probs, compiled_nli_mistake_probs, compiled_nli_relevance_probs, compiled_nli_final_mistake_probs, self.examples), desc=f"evaluating mistake detection at threshold {detection_threshold}", total=len(self.examples)):
             if len(mistake_prob) > 0:
                 example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION) # Call this again since the example got reloaded from cache
                 mean_mistake_prob = aggregate_mistake_probs_over_frames(mistake_prob, example.frame_times)                                
@@ -390,6 +507,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                 final_mistake_prediction=mistake_pred_final,
                 nli_mistake_probs=nli_mistake_prob,
                 nli_relevance_probs=nli_relevance_prob,
+                nli_final_mistake_probs=nli_final_mistake_prob
             )
 
             agg_preds.append(pred_object)            
@@ -412,42 +530,50 @@ def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_
     metrics = {k: v for k, v in metrics.items() if type(k) == float}
 
     # Gather FPR and FNR from metrics
-    false_positive_rates = [round(1.0 - metrics[threshold]['false_positive_rate'], 3) for threshold in metrics]
-    false_negative_rates = [round(1.0 - metrics[threshold]['false_negative_rate'], 3) for threshold in metrics]
+    false_positive_rates = [round(metrics[threshold]['false_positive_rate'], 3) for threshold in metrics]
+    false_negative_rates = [round(metrics[threshold]['false_negative_rate'], 3) for threshold in metrics]
 
-    # Ensure input rates are within the valid range for norm.ppf
-    false_positive_rates = np.clip(false_positive_rates, 0.0001, 0.9999)
-    false_negative_rates = np.clip(false_negative_rates, 0.0001, 0.9999)
+    # # Ensure input rates are within the valid range for norm.ppf
+    # false_positive_rates = np.clip(false_positive_rates, 0.0001, 0.9999)
+    # false_negative_rates = np.clip(false_negative_rates, 0.0001, 0.9999)
 
-    # Convert FPR and FNR to normal deviate scale
-    x = norm.ppf(false_positive_rates)
-    y = norm.ppf(false_negative_rates)
+    # # Convert FPR and FNR to normal deviate scale
+    # x = norm.ppf(false_positive_rates)
+    # y = norm.ppf(false_negative_rates)
     
     # Ensure all plotted values are finite by filtering out any non-finite values
-    finite_indices = np.isfinite(x) & np.isfinite(y)
-    x = x[finite_indices]
-    y = y[finite_indices]
+    # finite_indices = np.isfinite(x) & np.isfinite(y)
+    # x = x[finite_indices]
+    # y = y[finite_indices]
+
+    x = false_positive_rates
+    y = false_negative_rates
 
     # Plot DET curve
     plt.figure(figsize=(8, 6))
     plt.plot(x, y, marker='o', linestyle='-', color='magenta')  # Unique color
     
     # Label axes with normal deviate scale
-    plt.xlabel('False Positive Rate (Normal Deviate Scale)')
-    plt.ylabel('False Negative Rate (Normal Deviate Scale)')
-    
+    # plt.xlabel('False Positive Rate (Normal Deviate Scale)')
+    # plt.ylabel('False Negative Rate (Normal Deviate Scale)')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('False Negative Rate')    
+
     # Set grid and title
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     
     # Customize axes for better readability
     tick_vals = np.linspace(0.00, 1.0, 11)
-    ticks = norm.ppf(tick_vals)
+    # ticks = norm.ppf(tick_vals)
+    ticks = tick_vals
     tick_labels = [f"{round(val, 2)}" for val in tick_vals]
     plt.xticks(ticks, tick_labels)
     plt.yticks(ticks, tick_labels)
 
-    plt.xlim([norm.ppf(0.01), norm.ppf(0.99)])
-    plt.ylim([norm.ppf(0.01), norm.ppf(0.99)])
+    # plt.xlim([norm.ppf(0.01), norm.ppf(0.99)])
+    # plt.ylim([norm.ppf(0.01), norm.ppf(0.99)])
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
 
     plt.savefig(save_path)
 
@@ -468,41 +594,49 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
         metric = {k: v for k, v in metric.items() if isinstance(k, float)}
 
         # Gather FPR and FNR from metrics
-        false_positive_rates = [round(1.0 - metric[threshold]['false_positive_rate'], 3) for threshold in metric]
-        false_negative_rates = [round(1.0 - metric[threshold]['false_negative_rate'], 3) for threshold in metric]
+        false_positive_rates = [round(metric[threshold]['false_positive_rate'], 3) for threshold in metric]
+        false_negative_rates = [round(metric[threshold]['false_negative_rate'], 3) for threshold in metric]
 
         # Ensure input rates are within the valid range for norm.ppf
-        false_positive_rates = np.clip(false_positive_rates, 0.0001, 0.9999)
-        false_negative_rates = np.clip(false_negative_rates, 0.0001, 0.9999)
+        # false_positive_rates = np.clip(false_positive_rates, 0.0001, 0.9999)
+        # false_negative_rates = np.clip(false_negative_rates, 0.0001, 0.9999)
 
         # Convert FPR and FNR to normal deviate scale
-        x = norm.ppf(false_positive_rates)
-        y = norm.ppf(false_negative_rates)
+        # x = norm.ppf(false_positive_rates)
+        # y = norm.ppf(false_negative_rates)
         
         # Ensure all plotted values are finite by filtering out any non-finite values
-        finite_indices = np.isfinite(x) & np.isfinite(y)
-        x = x[finite_indices]
-        y = y[finite_indices]
+        # finite_indices = np.isfinite(x) & np.isfinite(y)
+        # x = x[finite_indices]
+        # y = y[finite_indices]
+
+        x = false_positive_rates
+        y = false_negative_rates
 
         # Plot DET curve
         plt.plot(x, y, marker='o', linestyle='-', color=colors(i), label=name)
 
     # Label axes with normal deviate scale
-    plt.xlabel('False Positive Rate (Normal Deviate Scale)')
-    plt.ylabel('False Negative Rate (Normal Deviate Scale)')
-    
+    # plt.xlabel('False Positive Rate (Normal Deviate Scale)')
+    # plt.ylabel('False Negative Rate (Normal Deviate Scale)')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('False Negative Rate')
+
     # Set grid and title
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     
     # Customize axes for better readability
     tick_vals = np.linspace(0.00, 1.0, 11)
-    ticks = norm.ppf(tick_vals)
+    # ticks = norm.ppf(tick_vals)
+    ticks = tick_vals
     tick_labels = [f"{round(val, 2)}" for val in tick_vals]
     plt.xticks(ticks, tick_labels)
     plt.yticks(ticks, tick_labels)
 
-    plt.xlim([norm.ppf(0.01), norm.ppf(0.99)])
-    plt.ylim([norm.ppf(0.01), norm.ppf(0.99)])
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
+    # plt.xlim([norm.ppf(0.01), norm.ppf(0.99)])
+    # plt.ylim([norm.ppf(0.01), norm.ppf(0.99)])
 
     # Add legend
     plt.legend()

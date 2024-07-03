@@ -95,6 +95,12 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
                                                multi_frame=True,
                                                debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
         indexed_procedures = dataset.get_all_procedures
+    elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
+        dataset = Ego4DMistakeDetectionDataset(data_split=args.partition, 
+                                               mismatch_augmentation=True,
+                                               multi_frame=False,
+                                               debug_n_examples_per_class=args.debug_n_examples if args.debug else None)        
+        indexed_procedures = dataset.get_all_procedures
 
     # Generate prompts - one per example
     prompts = []

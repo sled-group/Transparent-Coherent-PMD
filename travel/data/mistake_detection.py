@@ -15,8 +15,8 @@ def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
 
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
-    Ego4D = "ego4d" # Ego4D following SuccessVQA format
-    # Ego4D_Augmented = "ego4d_augmented" # Ego4D augmented with more negative examples from mismatched verb/noun
+    Ego4D = "ego4d" # Ego4D following SuccessVQA format augmented with additional sampled mismatch examples for more easy negatives
+    Ego4D_Single = "ego4d_single" # Ego4D with only annotated effect frames from video clips
     # EpicKitchens = "epickitchens" # Can consider adding EK later if need more training data for VQG
 
 @dataclass
@@ -184,7 +184,8 @@ class MistakeDetectionDataset:
     def generate_examples(self, data_split: str, **kwargs: dict[str, Any]) -> list[MistakeDetectionExample]:
         raise NotImplementedError("Subclass should implement dataset loading procedure.")
 
-    def get_cache_dir(self, **kwargs: dict[str, Any]) -> str:
+    @staticmethod
+    def get_cache_dir(**kwargs: dict[str, Any]) -> str:
         raise NotImplementedError("Subclass should implement logic for generating cached data directory.")
         
     def get_example_dir(self, example_id: str) -> str:
@@ -210,7 +211,8 @@ class MistakeDetectionDataset:
         self.example_dirs.append(example_cache_dir)
         self.n_examples += 1
         
-    def load_example_from_file(self, example_dir: str, load_frames: bool=True) -> MistakeDetectionExample:
+    @staticmethod
+    def load_example_from_file(example_dir: str, load_frames: bool=True) -> MistakeDetectionExample:
         """
         Loads an example from cache by the directory it's saved in.
 

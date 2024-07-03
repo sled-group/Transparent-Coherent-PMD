@@ -26,8 +26,10 @@ grounding:
   minimum_crop_size: 50
   maximum_bboxes_per_object: 5
 mistake_detection_strategies:
-  frames_proportion: 0.5
+  ema_tau: 2.0
+  frames_proportion: 1.0
   nli_model_path: "facebook/bart-large-mnli"
   nli_batch_size: 128
   nli_relevance_delta: 0.2
+  nli_rerun_on_relevant_evidence: true
   nli_replace_probs: false

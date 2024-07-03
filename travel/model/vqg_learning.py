@@ -138,7 +138,9 @@ class FrameVQAMistakeDetectionScorer:
             if self.visual_filter_type == VisualFilterTypes.Spatial or self.visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
                 frames, questions = self.visual_filter(self.nlp, frames, questions, return_visible_target_objects=False)
             elif self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
-                frames = self.visual_filter(self.nlp, frames, questions, )
+                frames = self.visual_filter(self.nlp, frames, questions)
+            else:
+                raise ValueError(f"Visual filter type {self.visual_filter_type} not supported for generating VQG training data.")
         
         # Then delete these pre-loaded logits
         del logits 
