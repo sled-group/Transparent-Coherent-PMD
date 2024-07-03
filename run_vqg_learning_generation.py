@@ -74,10 +74,11 @@ lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
 
 # Set results directory
 if args.resume_dir is None:
-    this_results_dir = f"VQG_data"
+    lm_name = args.lm_name.split('/')[-1]
+    this_results_dir = os.path.join(lm_name, f"VQG_data")
     if args.debug:
         this_results_dir += f"_debug{args.debug_n_examples}"
-    this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{'_'.join([str(t) for t in args.temperatures])}"
+    this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}_{'_'.join([str(t) for t in args.temperatures])}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqg_learning", this_results_dir)
     if not os.path.exists(this_results_dir):
         os.makedirs(this_results_dir)

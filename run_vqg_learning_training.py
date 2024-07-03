@@ -173,7 +173,7 @@ def main():
 
     # Set up output directory, training args, and wandb
     timestamp = datetime.datetime.now()
-    output_dir_name = f"{args.training_mode}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    output_dir_name = os.path.join(args.lm_name.split('/')[-1], f"{args.training_mode}_{timestamp.strftime('%Y%m%d%H%M%S')}")
     if args.debug:
         output_dir_name += "_debug"
     this_results_dir = os.path.join(args.training_data_path, output_dir_name)

@@ -72,10 +72,12 @@ print(lm.model.generation_config)
 # Prepare output directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"VQG_{args.task}"
+    lm_name = args.lm_name.split('/')[-1]
+    this_results_dir = os.path.join(args.task, lm_name, f"VQG_{args.task}")
+
     if args.debug:
         this_results_dir += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
-    this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqg", this_results_dir)
     os.makedirs(this_results_dir)
 else:
