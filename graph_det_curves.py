@@ -21,7 +21,7 @@ from travel.model.mistake_detection import generate_det_curves
 #     "VQG2VQA",
 #     "VQG2VQA + Spatial",
 # ]
-# output_fname_prefix = "det_comparison_val"
+# output_fname_prefix = "det_comparison_main_val"
 
 # Graph 2: spatial filter parts breakdown (adding TOC to all 3 results, removing rephrase from spatial filter)
 # results_fnames = [
@@ -40,7 +40,7 @@ from travel.model.mistake_detection import generate_det_curves
 #     "VQG2VQA + Spatial",
 #     "VQG2VQA + Spatial (no rephrase)",
 # ]
-# output_fname_prefix = "det_spatial_breakdown_val"
+# output_fname_prefix = "det_comparison_spatial_breakdown_val"
 
 # Graph 3: Introducing NLI
 # results_fnames = [
@@ -57,7 +57,7 @@ from travel.model.mistake_detection import generate_det_curves
 #     "VQG2VQA + Spatial",
 #     "VQG2VQA + Spatial + NLI",
 # ]
-# output_fname_prefix = "det_nli_val"
+# output_fname_prefix = "det_comparison_nli_val"
 
 results_fnames = [
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_target_object_counter1.0_20240702181455/metrics_heuristic_val.json",
@@ -73,7 +73,7 @@ results_names = [
     "VQG2VQA + Spatial (0.75)",
     "VQG2VQA + Spatial (1.0)",
 ]
-output_fname_prefix = "det_spatial_intensity_val"
+output_fname_prefix = "det_comparison_spatial_intensity_val"
 
 
 # TODO: Graph 4: Spatial Filter Intensity

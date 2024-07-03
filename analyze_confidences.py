@@ -35,13 +35,18 @@ results_names = [
     "VQG2VQA + Spatial + NLI"
 ]
 
-# Analysis 0: Attempt to ensemble
-print("(0) Compiling pred data and attempting ensemble...")
-mistake_confidences = [[] for _ in results_fnames]
-success_confidences = [[] for _ in results_fnames]
-all_confidences = [[] for _ in results_fnames]
+print("(0) Compiling pred data...")
+mistake_probs = [[] for _ in results_fnames]
+success_probs = [[] for _ in results_fnames]
+all_probs = [[] for _ in results_fnames]
+mistake_confidence = [[] for _ in results_fnames]
+success_confidence = [[] for _ in results_fnames]
+all_confidence = [[] for _ in results_fnames]
 all_labels = [[] for _ in results_fnames]
 all_correctness = [[] for _ in results_fnames]
+all_error = [[] for _ in results_fnames]
+mistake_error = [[] for _ in results_fnames]
+success_error = [[] for _ in results_fnames]
 for i, result_fname in enumerate(results_fnames):
     result_preds = json.load(open(result_fname, "r"))
     for pred in result_preds.values():
@@ -49,97 +54,139 @@ for i, result_fname in enumerate(results_fnames):
         example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
         mistake = example.mistake
         
-        mistake_probs = np.array(pred['mistake_detection']["0.0"]["mistake_probs"])
-        mistake_prob = aggregate_mistake_probs_over_frames(mistake_probs, example.frame_times)
+        example_mistake_probs = np.array(pred['mistake_detection']["0.0"]["mistake_probs"])
+        mistake_prob = aggregate_mistake_probs_over_frames(example_mistake_probs, example.frame_times)
 
         if mistake:
-            mistake_confidences[i].append(mistake_prob)
+            mistake_probs[i].append(mistake_prob)
+            mistake_confidence[i].append(abs(mistake_prob - 0.5) * 2.0)
+            mistake_error[i].append(mistake_prob if not mistake else 1 - mistake_prob)
         else:
-            success_confidences[i].append(mistake_prob)
+            success_probs[i].append(mistake_prob)
+            success_confidence[i].append(abs(mistake_prob - 0.5) * 2.0)
+            success_error[i].append(mistake_prob if not mistake else 1 - mistake_prob)
 
-        all_confidences[i].append(mistake_prob)
+        all_probs[i].append(mistake_prob)
+        all_confidence[i].append(abs(mistake_prob - 0.5) * 2.0)
         all_labels[i].append(mistake)
         all_correctness[i].append(True if (mistake_prob >= metrics[i]["best_threshold"] and mistake) or (mistake_prob < metrics[i]["best_threshold"] and not mistake) else False)
-
-successvqa_preds = json.load(open(results_fnames[0], "r"))
-vqg2vqa_preds = json.load(open(results_fnames[1], "r"))
-
-# Loop over examples
-ensemble_vqa_outputs = []
-ensemble_dataset = Ego4DMistakeDetectionDataset(data_split="val", 
-                                                      mismatch_augmentation=True,
-                                                      multi_frame=True,
-                                                      debug_n_examples_per_class=250)
-for k in successvqa_preds:
-    vqa_outputs_successvqa = successvqa_preds[k]["vqa"]
-    vqa_outputs_vqg2vqa = vqg2vqa_preds[k]["vqa"]
-    example = MistakeDetectionExample.from_dict(pred["example"] | {"frames": ["" for _ in pred["example"]["frame_times"]]}, load_frames=False)
-    example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
-
-    # Loop over frames
-    example_vqa_outputs = []
-    for successvqa_outputs, vqg2vqa_outputs in zip(vqa_outputs_successvqa, vqa_outputs_vqg2vqa):
-        all_outputs = successvqa_outputs + vqg2vqa_outputs
-
-        # Select VQA output that had the highest confidence among ensembled approaches
-        max_confidence_output = max(all_outputs, key=lambda x: abs(x["answer_probs"]["0"]) - abs(x["answer_probs"]["1"]))
-        max_confidence_output["expected_answer"] = VQAResponse(max_confidence_output["expected_answer"])
-        max_confidence_output["predicted_answer"] = VQAResponse(max_confidence_output["predicted_answer"])
-        max_confidence_output["answer_probs"] = {VQAResponse(int(k)): float(v) for k, v in max_confidence_output["answer_probs"].items()}
-        example_vqa_outputs.append([VQAOutputs(**max_confidence_output, response_token_ids={}, logits=None)])
-        # mistake_answer = 1 - max_confidence_output["expected_answer"]
-        # mistake_prob = max_confidence_output["answer_probs"][str(mistake_answer)]
-
-    ensemble_vqa_outputs.append(example_vqa_outputs)
+        all_error[i].append(mistake_prob if not mistake else 1 - mistake_prob)
 
 
-evaluator = HeuristicMistakeDetectionEvaluator(ensemble_dataset, ensemble_vqa_outputs)
-mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
+# # Analysis 0: Attempt to ensemble
+# print("(0) Attempting ensemble...")
+# successvqa_preds = json.load(open(results_fnames[0], "r"))
+# vqg2vqa_preds = json.load(open(results_fnames[1], "r"))
 
-# Compile preds per mistake detection example
-preds = compile_mistake_detection_preds(ensemble_dataset, ensemble_vqa_outputs, mistake_detection_preds)
+# # Loop over examples
+# ensemble_vqa_outputs = []
+# ensemble_dataset = Ego4DMistakeDetectionDataset(data_split="val", 
+#                                                       mismatch_augmentation=True,
+#                                                       multi_frame=True,
+#                                                       debug_n_examples_per_class=250)
+# for k in successvqa_preds:
+#     vqa_outputs_successvqa = successvqa_preds[k]["vqa"]
+#     vqa_outputs_vqg2vqa = vqg2vqa_preds[k]["vqa"]
+#     example = MistakeDetectionExample.from_dict(pred["example"] | {"frames": ["" for _ in pred["example"]["frame_times"]]}, load_frames=False)
+#     example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
 
-output_fname = f"ensembled_det_curve_{'_'.join(results_names).replace(' ', '-')}.pdf"
-save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames]
-for path in results_fnames:
-# Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
-    metrics_filename = f"metrics_ensemble_heuristic_val.json"
-    json.dump(metrics, open(os.path.join("/".join(path.split("/")[:-1]), metrics_filename), "w"), indent=4)
+#     # Loop over frames
+#     example_vqa_outputs = []
+#     for successvqa_outputs, vqg2vqa_outputs in zip(vqa_outputs_successvqa, vqa_outputs_vqg2vqa):
+#         all_outputs = successvqa_outputs + vqg2vqa_outputs
 
-    preds_filename = f"preds_ensemble_heuristic_val.json"
-    json.dump(preds, open(os.path.join("/".join(path.split("/")[:-1]), preds_filename), "w"), indent=4)
+#         # Select VQA output that had the highest confidence among ensembled approaches
+#         max_confidence_output = max(all_outputs, key=lambda x: abs(x["answer_probs"]["0"]) - abs(x["answer_probs"]["1"]))
+#         max_confidence_output["expected_answer"] = VQAResponse(max_confidence_output["expected_answer"])
+#         max_confidence_output["predicted_answer"] = VQAResponse(max_confidence_output["predicted_answer"])
+#         max_confidence_output["answer_probs"] = {VQAResponse(int(k)): float(v) for k, v in max_confidence_output["answer_probs"].items()}
+#         example_vqa_outputs.append([VQAOutputs(**max_confidence_output, response_token_ids={}, logits=None)])
+#         # mistake_answer = 1 - max_confidence_output["expected_answer"]
+#         # mistake_prob = max_confidence_output["answer_probs"][str(mistake_answer)]
 
-    det_filename = f"det_ensemble_heuristic_val.pdf"
-    generate_det_curve(metrics, os.path.join(os.path.join("/".join(path.split("/")[:-1]), det_filename)))
+#     ensemble_vqa_outputs.append(example_vqa_outputs)
 
-print("Done!")
+
+# evaluator = HeuristicMistakeDetectionEvaluator(ensemble_dataset, ensemble_vqa_outputs)
+# mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
+
+# # Compile preds per mistake detection example
+# preds = compile_mistake_detection_preds(ensemble_dataset, ensemble_vqa_outputs, mistake_detection_preds)
+
+# output_fname = f"ensembled_det_curve_{'_'.join(results_names).replace(' ', '-')}.pdf"
+# save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames]
+# for path in results_fnames:
+# # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
+#     metrics_filename = f"metrics_ensemble_heuristic_val.json"
+#     json.dump(metrics, open(os.path.join("/".join(path.split("/")[:-1]), metrics_filename), "w"), indent=4)
+
+#     preds_filename = f"preds_ensemble_heuristic_val.json"
+#     json.dump(preds, open(os.path.join("/".join(path.split("/")[:-1]), preds_filename), "w"), indent=4)
+
+#     det_filename = f"det_ensemble_heuristic_val.pdf"
+#     generate_det_curve(metrics, os.path.join(os.path.join("/".join(path.split("/")[:-1]), det_filename)))
+
+# print("Done!")
 
 # Analysis 1: Plot confidence and variance for model predictions on success and mistake predictions
 print("(1) Beginning confidence graph generation...")
 
+# Bar graph comparing mistake probability for mistake and success examples
 x = np.arange(len(results_names))  # the label locations
 width = 0.35  # the width of the bars
 
 fig, ax = plt.subplots()
+fig.set_figwidth(10)
 for i in range(len(results_fnames)):
     rects1 = ax.bar(
         x[i] - width/2, 
-        np.mean(mistake_confidences[i]), 
+        np.mean(mistake_probs[i]), 
         width, 
-        yerr=np.std(mistake_confidences[i]), 
+        yerr=np.std(mistake_probs[i]), 
         label='Mistake Examples' if i == 0 else "", 
-        color='green', 
+        color='red', 
         capsize=5
     )
     rects2 = ax.bar(
         x[i] + width/2, 
-        np.mean(success_confidences[i]), 
+        np.mean(success_probs[i]), 
         width, 
-        yerr=np.std(success_confidences[i]), 
+        yerr=np.std(success_probs[i]), 
         label='Success Examples' if i == 0 else "", 
-        color='red', 
+        color='green', 
         capsize=5
     )
+
+# Add some text for labels, title and custom x-axis tick labels, etc.
+ax.set_xlabel('Result')
+ax.set_ylabel('Mistake Probability')
+ax.set_xticks(x)
+ax.set_xticklabels(results_names)
+ax.legend()
+
+fig.tight_layout()
+
+output_fname = f"confidence_comparison1_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames]
+for path in save_paths:
+    fig.savefig(path)
+
+x = np.arange(len(results_names))  # the label locations
+
+# Scatter plot of mistake vs success confidence
+fig, ax = plt.subplots()
+fig.set_figwidth(10)
+fig.set_figheight(7)
+for i in range(len(results_fnames)):
+    y_mistake = mistake_confidence[i]
+    y_success = success_confidence[i]
+    x_mistake = np.full(len(y_mistake), x[i] - 0.1)  # slight offset for visual clarity
+    x_success = np.full(len(y_success), x[i] + 0.1)  # slight offset for visual clarity
+    marker_size_mistake = mistake_error[i]
+    marker_size_success = success_error[i]
+
+    ax.scatter(x_mistake, y_success, color='red', label='Mistake Examples' if i == 0 else "")
+    ax.scatter(x_success, y_mistake, color='green', label='Success Examples' if i == 0 else "")
 
 # Add some text for labels, title and custom x-axis tick labels, etc.
 ax.set_xlabel('Result')
@@ -150,29 +197,29 @@ ax.legend()
 
 fig.tight_layout()
 
-output_fname = f"confidence_comparison_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+output_fname = f"confidence_comparison2_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
 save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames]
 for path in save_paths:
     fig.savefig(path)
 
-print("(1) Confidence graph generated!")
+print("(1) Confidence graphs generated!")
 
 # Analysis 2: Correlation of confidences with mistake labels
 print("(2) Beginning correlation analysis of confidences...")
 for i in range(len(results_fnames)):
-    # pprint(all_confidences[i])
+    # pprint(all_probs[i])
     # pprint(all_labels[i])
     print(f"{results_names[i]} point biserial correlation between confidence and correctness:")
-    pprint(pointbiserialr(all_correctness[i], all_confidences[i]))
+    pprint(pointbiserialr(all_correctness[i], all_confidence[i]))
     print("")
     print(f"{results_names[i]} Brier score:")
-    print(brier_score_loss([1 if l else 0 for l in all_labels[i]], all_confidences[i], pos_label=1))
+    print(brier_score_loss([1 if l else 0 for l in all_labels[i]], all_probs[i], pos_label=1))
     print("\n")
 
 plt.clf()
 for i in range(len(results_fnames)):
 
-    fraction_of_positives, mean_predicted_value = calibration_curve(all_labels[i], all_confidences[i], n_bins=10)
+    fraction_of_positives, mean_predicted_value = calibration_curve(all_labels[i], all_probs[i], n_bins=20)
     plt.plot(mean_predicted_value, fraction_of_positives, label=results_names[i])
 
 # Plot perfectly calibrated line
