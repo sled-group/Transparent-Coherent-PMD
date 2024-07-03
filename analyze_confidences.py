@@ -20,7 +20,9 @@ from travel.model.mistake_detection import aggregate_mistake_probs_over_frames, 
 results_fnames = [
     "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/preds_heuristic_val.json",
     "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_heuristic_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_nli_val.json",
     "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_nli_val.json",
 ]
 metrics = [
     json.load(open(fname.replace("preds_", "metrics_"), "r")) for fname in results_fnames
@@ -28,7 +30,9 @@ metrics = [
 results_names = [
     "SuccessVQA",
     "VQG2VQA",
+    "VQG2VQA + NLI",
     "VQG2VQA + Spatial",
+    "VQG2VQA + Spatial + NLI"
 ]
 
 # Analysis 0: Attempt to ensemble

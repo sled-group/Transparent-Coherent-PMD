@@ -21,7 +21,7 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.vqa import VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
@@ -192,13 +192,13 @@ for eval_partition in args.eval_partitions:
     preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
 
     # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
-    metrics_filename = f"metrics_{args.mistake_detection_strategy}_{eval_partition}.json"
+    metrics_filename = f"metrics_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
     json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
-    preds_filename = f"preds_{args.mistake_detection_strategy}_{eval_partition}.json"
+    preds_filename = f"preds_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
     json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
 
-    det_filename = f"det_{args.mistake_detection_strategy}_{eval_partition}.pdf"
+    det_filename = f"det_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
     generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))

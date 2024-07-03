@@ -429,12 +429,12 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
 
                 # Determine if there's a mistake for each frame
                 for question_output in frame_outputs:
-                    if question_output.target_object_counts is None or len(question_output.target_object_counts) == 0 or not max(question_output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
-                        # Incorporate NLI model feedback
-                        if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
-                            # NLI model found this question irrelevant, so 0 mistake probability
-                            frame_mistake_probs.append(0.0)
-                        else:
+                    # Incorporate NLI model feedback
+                    if abs(nli_relevance[parallel_idx]) < NLI_RELEVANCE_DELTA:
+                        # NLI model found this question irrelevant, so 0 mistake probability
+                        frame_mistake_probs.append(0.0)
+                    else:
+                        if question_output.target_object_counts is None or len(question_output.target_object_counts) == 0 or not max(question_output.target_object_counts.values()) == 0: # Check if all target objects of the question are present in this frame - if not, don't include in prediction
                             # Reweight mistake prob from VLM by NLI model (which accounts for bad/irrelevant generated questions)
                             mistake_answer = VQAResponse(1-int(question_output.expected_answer.value))
                             mistake_prob = question_output.answer_probs[mistake_answer]
@@ -448,9 +448,10 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                                 # If going to use a combined NLI probability for all relevant evidence from this frame, just save the VQA probability directly
                                 frame_mistake_probs.append(mistake_prob)
                             # TODO: consider combining NLI probabilities by creating one premise based on relevant evidence and do one more inference (follow recoverr paper)
-                    else:
-                        # Visual filter didn't see any target objects, so assume there's a mistake
-                        frame_mistake_probs.append(1.0)
+                        else:
+                            # Visual filter didn't see any target objects, so assume there's a mistake;
+                            # use relevance of question here
+                            frame_mistake_probs.append(abs(nli_relevance[parallel_idx]))
 
                     frame_nli_mistake_probs.append(nli_mistake_probs[parallel_idx])
                     frame_nli_relevance_probs.append(nli_relevance[parallel_idx])
