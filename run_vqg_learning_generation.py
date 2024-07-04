@@ -110,7 +110,6 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
     for procedure_id, procedure_description in tqdm(dataset.get_all_procedures(), desc=f"({worker_index}) generating prompts"):
         all_procedures.append((procedure_id, procedure_description))
     all_procedures_split = split_list_into_partitions(all_procedures, n_workers)
-    pickle.dump(all_procedures_split, open(os.path.join(this_results_dir, f"procedures_{worker_index}.pkl"), "wb"))
     worker_procedures = all_procedures_split[worker_index]
 
     for procedure_id, procedure_description in worker_procedures:
@@ -130,7 +129,6 @@ else:
     # Load prompts
     prompts = load_vqg_inputs(os.path.join(this_results_dir, prompts_fname))
     print(f"({worker_index}) {len(prompts)} prompts loaded for {args.partition} partition")
-    all_procedures_split = pickle.load(open(os.path.join(this_results_dir, f"procedures_{worker_index}.pkl"), "rb"))
 
 # Load combined VQG outputs if we have any
 worker_vqg_outputs_fname = f"VQG_cache_{args.partition}_worker{worker_index}.json"
@@ -180,7 +178,9 @@ if n_workers > 1 and worker_index == 0:
         while True:
             if os.path.exists(other_worker_vqg_outputs_fname):
                 other_vqg_outputs = load_vqg_outputs(other_worker_vqg_outputs_fname)
-                if len(other_vqg_outputs) == len(all_procedures_split[other_worker_index]) * len(args.temperatures):
+                other_prompts_fname = f"prompts_{args.partition}_{worker_index}.json"
+                other_prompts = load_vqg_inputs(os.path.join(this_results_dir, other_prompts_fname))
+                if len(other_vqg_outputs) == len(other_prompts) * len(args.temperatures):
                     print(f"({worker_index}) Collected VQG outputs from worker {other_worker_index}.")
                     vqg_outputs |= other_vqg_outputs
                     break
@@ -193,7 +193,8 @@ if worker_index == 0:
     for key in vqg_outputs:
         key_parts = key.split("_")
         temperature, prompt_idx = float(key_parts[0]), int(key_parts[1])
-        vqg_outputs_new[vqg_outputs[key].procedure_id].append(vqg_outputs[key])
+        if vqg_outputs[key] is not None:
+            vqg_outputs_new[vqg_outputs[key].procedure_id].append(vqg_outputs[key])
     vqg_outputs = vqg_outputs_new
 
     frameVQA_examples = []
