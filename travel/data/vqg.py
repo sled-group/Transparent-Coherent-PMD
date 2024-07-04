@@ -514,7 +514,7 @@ def load_vqg_outputs(path: str) -> dict[Any, VQGOutputs]:
         try:
             vqg_outputs = {int(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
         except:
-            vqg_outputs = {str(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
+            vqg_outputs = {str(k): (VQGOutputs(**v) if v is not None else None) for k, v in vqg_outputs.items()}
         return vqg_outputs
     else:
         return {}

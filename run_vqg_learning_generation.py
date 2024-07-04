@@ -1,4 +1,5 @@
 # Need this call at the beginning of every script to set random seeds and set the HF cache
+import pickle
 from time import sleep
 from travel import init_travel
 init_travel()
@@ -88,10 +89,15 @@ else:
     assert os.path.exists(this_results_dir), "Specified resuming directory must already exist!"    
 
 # Load Ego4D for mistake detection
-dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
-                                        mismatch_augmentation=True,
-                                        debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-print(f"({worker_index}) {len(dataset)} Ego4D mistake detection examples loaded from {args.partition} partition")
+while True:
+    try:
+        dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
+                                                mismatch_augmentation=True,
+                                                debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
+        print(f"({worker_index}) {len(dataset)} Ego4D mistake detection examples loaded from {args.partition} partition")
+        break
+    except:
+        continue
 
 # Generate or load prompts
 prompts_fname = f"prompts_{args.partition}_{worker_index}.json"
@@ -104,6 +110,7 @@ if args.resume_dir is None or not os.path.exists(os.path.join(this_results_dir, 
     for procedure_id, procedure_description in tqdm(dataset.get_all_procedures(), desc=f"({worker_index}) generating prompts"):
         all_procedures.append((procedure_id, procedure_description))
     all_procedures_split = split_list_into_partitions(all_procedures, n_workers)
+    pickle.dump(all_procedures_split, open(os.path.join(this_results_dir, f"procedures_{worker_index}.pkl"), "wb"))
     worker_procedures = all_procedures_split[worker_index]
 
     for procedure_id, procedure_description in worker_procedures:
@@ -123,6 +130,7 @@ else:
     # Load prompts
     prompts = load_vqg_inputs(os.path.join(this_results_dir, prompts_fname))
     print(f"({worker_index}) {len(prompts)} prompts loaded for {args.partition} partition")
+    all_procedures_split = pickle.load(open(os.path.join(this_results_dir, f"procedures_{worker_index}.pkl"), "rb"))
 
 # Load combined VQG outputs if we have any
 worker_vqg_outputs_fname = f"VQG_cache_{args.partition}_worker{worker_index}.json"
