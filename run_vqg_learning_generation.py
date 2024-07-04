@@ -167,6 +167,7 @@ for temperature, temp_count in tqdm(zip(temperatures, counts), desc="temperature
                               save_path=os.path.join(this_results_dir, worker_vqg_outputs_fname),
                               vqg_outputs=vqg_outputs,
                               omit_failed_instances=False)
+print(f"{worker_index} Done generating!")
 
 # Combine all VQG outputs from workers (only worker 0 does this)
 if n_workers > 1 and worker_index == 0:
