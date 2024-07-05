@@ -44,7 +44,7 @@ else:
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
     vlm_name = args.vlm_name.split('/')[-1]
-    this_results_dir = os.path.join(args.vqg_directory, args.vlm_name, f"VQA_data_{vlm_name}")
+    this_results_dir = os.path.join(args.vqg_directory, vlm_name, f"VQA_data_{vlm_name}")
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
