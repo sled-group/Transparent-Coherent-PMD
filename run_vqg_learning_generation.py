@@ -36,6 +36,7 @@ parser.add_argument("--output_dir", type=str, help="Directory name to output dat
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
+parser.add_argument("--run_id", type=str, help="Unique ID for this run.")
 args = parser.parse_args()
 
 # Split up work by srun processes; if SLURM_PROCID is not accessible, just run all the work here
@@ -81,6 +82,8 @@ if args.resume_dir is None:
         this_results_dir += f"_debug{args.debug_n_examples}"
     this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}_{'_'.join([str(t) for t in args.temperatures])}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqg_learning", this_results_dir)
+    if args.run_id is not None:
+        this_results_dir += f"_{args.run_id}"
     if not os.path.exists(this_results_dir):
         os.makedirs(this_results_dir)
 else:

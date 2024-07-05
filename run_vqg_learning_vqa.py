@@ -3,7 +3,6 @@ from travel import init_travel
 init_travel()
 
 import argparse
-import datetime
 import json
 from memory_profiler import profile
 import os
@@ -30,6 +29,8 @@ parser.add_argument("--batch_size", type=int, default=52, help="Batch size for V
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples. Can also be used to add another partition of data to existing reuslts directory.")
 parser.add_argument("--track_memory", action="store_true", help="Pass this argument to use `pympler` to print out summaries of memory usage periodically during execution.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
+parser.add_argument("--run_id", type=str, help="Unique ID for this run.")
+
 args = parser.parse_args()
 
 if "_debug" in args.vqg_directory:
@@ -42,12 +43,12 @@ else:
 
 # Prepare output directory; save training examples for VQG in sub-folder of VQG results
 if args.resume_dir is None:
-    timestamp = datetime.datetime.now()
     vlm_name = args.vlm_name.split('/')[-1]
     this_results_dir = os.path.join(args.vqg_directory, vlm_name, f"VQA_data_{vlm_name}")
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
-    this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    if args.run_id is not None:
+        this_results_dir += f"_{args.run_id}"
 else:
     this_results_dir = args.resume_dir
 
