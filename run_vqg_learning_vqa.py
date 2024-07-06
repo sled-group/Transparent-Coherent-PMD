@@ -14,7 +14,7 @@ from travel.constants import IMAGES_CHUNK_SIZE
 from travel.data.utils import split_list_into_partitions
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAOutputs
-from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
+from travel.data.vqg_learning import load_frameVQA_examples, save_vqg_training_examples, load_vqg_training_examples, FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.model.grounding import VisualFilterTypes
 from travel.model.vqa import save_vqa_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
@@ -166,6 +166,9 @@ else:
 
 # All of the data has now been saved in subdirectories of this_results_dir; it can later be loaded from this_results_dir using load_vqg_training_examples method
 if worker_index == 0:
+    # Combine all the generated data
+
+
     shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
     json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
 

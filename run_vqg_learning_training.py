@@ -155,20 +155,30 @@ def main():
                                                  trust_remote_code=True)
     model = prepare_model_for_kbit_training(model)
 
-    print_trainable_parameters(model)
-    print(f"Memory footprint: {model.get_memory_footprint() / 1e9} GB")
+    if global_rank == 0:
+        pprint(model.__dict__)
+        print_trainable_parameters(model)
+        print(f"Memory footprint: {model.get_memory_footprint() / 1e9} GB")
 
-    peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
-                            inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
-                            r=64,                           # dimension of low-rank matrices
-                            lora_alpha=16,                  # scaling coefficient of weight update
-                            target_modules="all-linear",
-                            lora_dropout=0.1,               # dropout regularization on LoRA weights
-                            bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
+    if not getattr(model, "peft_config", None):
+        peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
+                                inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
+                                r=64,                           # dimension of low-rank matrices
+                                lora_alpha=16,                  # scaling coefficient of weight update
+                                target_modules="all-linear",
+                                lora_dropout=0.1,               # dropout regularization on LoRA weights
+                                bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
+    else:
+        peft_config = model.peft_config['default']
+
 
     # Set up output directory, training args, and wandb
     timestamp = datetime.datetime.now()
-    output_dir_name = os.path.join(args.lm_name.split('/')[-1], f"{args.training_mode}_{timestamp.strftime('%Y%m%d%H%M%S')}")
+    lm_name = args.lm_name.split('/')[-1] if "SFT" not in args.lm_name else model.peft_config['default'].base_model_name_or_path.split('/')[-1]
+    output_dir_name = f"{args.training_mode}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    if "SFT" in args.lm_name and args.training_mode == "DPO":
+        output_dir_name = f"{args.lm_name.split('/')[-1]}-{output_dir_name}"
+    output_dir_name = os.path.join(lm_name, output_dir_name)
     if args.debug:
         output_dir_name += "_debug"
     this_results_dir = os.path.join(args.training_data_path, output_dir_name)
@@ -181,7 +191,7 @@ def main():
                                       optim='paged_adamw_8bit',
                                       bf16=True,
                                       num_train_epochs=args.n_epochs,
-                                      gradient_accumulation_steps=1 if args.debug else 10,
+                                      gradient_accumulation_steps=1,
                                       save_strategy=args.save_strategy,
                                       save_total_limit=3,
                                       save_only_model=False,
