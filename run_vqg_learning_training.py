@@ -123,20 +123,16 @@ def main():
             rejected = rejected[:100]
 
         if args.training_mode == "DPO":
-            dataset = Dataset.from_dict(
-                {
+            dataset = Dataset.from_dict({
                     "prompt": prompt,
                     "chosen": chosen,
                     "rejected": rejected,
-                }
-            )
+                })
         elif args.training_mode == "SFT":
-            dataset = Dataset.from_dict(
-                {
+            dataset = Dataset.from_dict({
                     "prompt": prompt + prompt,
                     "completion": chosen + rejected,
-                }
-            )
+                })
 
         datasets[partition] = dataset
 
@@ -157,7 +153,6 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(args.lm_name, device_map="auto",
                                                  quantization_config=bnb_config, 
                                                  trust_remote_code=True)
-    model.train()
     model = prepare_model_for_kbit_training(model)
 
     print_trainable_parameters(model)
@@ -196,7 +191,8 @@ def main():
                                       logging_strategy="steps",
                                       logging_steps=1 if args.debug else 10,
                                       run_name=wandb_run_name,
-                                      ddp_backend="gloo",)
+                                      ddp_backend="gloo",
+                                      ddp_find_unused_parameters=False)
 
     if args.training_mode == "DPO":
         trainer = DPOTrainer(
