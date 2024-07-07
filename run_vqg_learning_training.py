@@ -16,7 +16,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import DPOTrainer, DPOConfig, SFTTrainer, SFTConfig
 
-from travel.data.vqg import generate_vqg_prompt
+from travel.data.vqg import generate_vqg_prompt, generate_vqg_prompt_icl, VQG_DEMONSTRATIONS
 from travel.data.vqg_learning import load_vqg_training_examples
 
 def print_trainable_parameters(model):
@@ -46,6 +46,9 @@ def main():
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
     parser.add_argument("--beta", type=float, default=0.1, help="DPO beta parameter for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
+    parser.add_argument("--n_demonstrations", type=int, default=20, choices=range(0, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
+    parser.add_argument("--lora_r", type=int, default=64, help="LoRA r (matrix dimension).")
+    parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha (weight update scaling coefficient).")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
     parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
     args = parser.parse_args()
@@ -104,7 +107,9 @@ def main():
         for ex1, ex2 in tqdm(pairs, "Pairing examples"):
             if not args.debug:
                 assert ex1.procedure_description == ex2.procedure_description, f"Procedures for training pair don't match!\n\n{ex1.procedure_description}\n\n{ex2.procedure_description}"
-            prompt.append(generate_vqg_prompt(ex1.procedure_description))
+            # prompt.append(generate_vqg_prompt(ex1.procedure_description))
+            # prompt.append(ex1.prompt)
+            prompt.append(generate_vqg_prompt_icl(ex1.procedure_description, args.n_demonstrations))
 
             gen1 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex1.questions)])
             gen2 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex2.questions)])
@@ -163,8 +168,8 @@ def main():
     if not getattr(model, "peft_config", None):
         peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
                                 inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
-                                r=64,                           # dimension of low-rank matrices
-                                lora_alpha=16,                  # scaling coefficient of weight update
+                                r=args.lora_r,                           # dimension of low-rank matrices
+                                lora_alpha=args.lora_alpha,                  # scaling coefficient of weight update
                                 target_modules="all-linear",
                                 lora_dropout=0.1,               # dropout regularization on LoRA weights
                                 bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
