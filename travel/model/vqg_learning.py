@@ -51,11 +51,11 @@ class FrameVQAMistakeDetectionScorer:
         self.processor.tokenizer.padding_side = "left"
 
         if visual_filter_type == VisualFilterTypes.Spatial:
-            # Load spatial filter onto separate GPU if available
             self.visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=visual_filter_strength, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
-            # Load spatial filter onto separate GPU if available
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, device=visual_filter_device)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=visual_filter_strength, device=visual_filter_device)
+        elif visual_filter_type == VisualFilterTypes.Spatial_Blur:
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=visual_filter_strength, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Contrastive_Region:
             self.visual_filter = ContrastiveRegionFilter(mask_strength=visual_filter_strength, device=visual_filter_device)
         else:

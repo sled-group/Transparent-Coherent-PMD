@@ -42,6 +42,8 @@ def main():
     parser.add_argument("--training_data_path", type=str, required=True, help="File or directory where training vqg_training_examples.json is stored.")
     parser.add_argument("--val_data_path", type=str, required=False, help="File or directory where validation vqg_training_examples.json is stored. If not passed, will be set to the same as the training data directory.")
     parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
+    parser.add_argument("--run_id", type=str, help="Unique ID for this run. Usually a timestamp string, e.g., 20240708165001.")
+    parser.add_argument("--resume_dir", type=str, help="Path to output directory for previous run to resume from.")
     parser.add_argument("--training_mode", type=str, default="DPO", choices=["DPO", "SFT"], help="Which mode of training to run (SFT or DPO)." )
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
@@ -209,16 +211,22 @@ def main():
 
 
     # Set up output directory, training args, and wandb
-    timestamp = datetime.datetime.now()
-    lm_name = args.lm_name.split('/')[-1] if "SFT" not in args.lm_name else model.peft_config['default'].base_model_name_or_path.split('/')[-1]
-    output_dir_name = f"{args.training_mode}_{timestamp.strftime('%Y%m%d%H%M%S')}"
-    if "SFT" in args.lm_name and args.training_mode == "DPO":
-        output_dir_name = f"{args.lm_name.split('/')[-1]}-{output_dir_name}"
-    output_dir_name = os.path.join(lm_name, output_dir_name)
-    if args.debug:
-        output_dir_name += "_debug"
-    this_results_dir = os.path.join(args.training_data_path, output_dir_name)
-    wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
+    if args.resume_dir is None:
+        lm_name = args.lm_name.split('/')[-1] if "SFT" not in args.lm_name else model.peft_config['default'].base_model_name_or_path.split('/')[-1]
+        output_dir_name = f"{args.training_mode}_{args.run_id}"
+        if "SFT" in args.lm_name and args.training_mode == "DPO":
+            output_dir_name = f"{args.lm_name.split('/')[-1]}-{output_dir_name}"
+        output_dir_name = os.path.join(lm_name, output_dir_name)
+        if args.debug:
+            output_dir_name += "_debug"
+        this_results_dir = os.path.join(args.training_data_path, output_dir_name)
+        wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
+    else:
+        # Set output directory to the resume_dir and recover wandb_run_name
+        this_results_dir = args.resume_dir
+        output_dir_name = "/".join(this_results_dir.split("/")[:-2:])
+        wandb_run_name = f"{output_dir_name}_{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
+
     config_class = DPOConfig if args.training_mode == "DPO" else SFTConfig
     training_args = config_class(output_dir=this_results_dir,
                                       per_device_train_batch_size=args.train_batch_size,
@@ -265,7 +273,7 @@ def main():
         )        
 
     print(f"({global_rank}) Starting model training...")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_dir is not None)
 
     print("Saving best model...")
     trainer.save_model(this_results_dir)

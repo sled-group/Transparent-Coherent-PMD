@@ -31,7 +31,7 @@ parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "t
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
-parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters.")
+parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -77,6 +77,9 @@ for worker_index in range(n_workers):
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
             visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
+        elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_Blur:
+            visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
+            nlp = spacy.load('en_core_web_lg')            
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
