@@ -115,19 +115,21 @@ def main():
         pairs = []
         for procedure_id in data_paired:
 
-            if partition != "train":
-                # Randomly split the list into two halves and create pairs (want smaller, varied data for evaluation)
-                random.shuffle(data_paired[procedure_id])
-                split_point = len(data_paired[procedure_id]) // 2
-                p1 = data_paired[procedure_id][:split_point]
-                p2 = data_paired[procedure_id][split_point:]
-                if len(p2) > len(p1):
-                    p1 += [random.choice(data_paired[procedure_id])]
-                assert len(p1) == len(p2), "Halves of paired outputs aren't the same size!"
-                pairs += [(tp1, tp2) for tp1, tp2 in zip(p1,p2)]
-            else:
-                # Take all combinations of questions sets for this procedure ID (just want more data for training)
-                pairs += itertools.combinations(data_paired[procedure_id], 2)
+            # if partition != "train":
+
+            # Randomly split the list into two halves and create pairs (want smaller, varied data for evaluation)
+            random.shuffle(data_paired[procedure_id])
+            split_point = len(data_paired[procedure_id]) // 2
+            p1 = data_paired[procedure_id][:split_point]
+            p2 = data_paired[procedure_id][split_point:]
+            if len(p2) > len(p1):
+                p1 += [random.choice(data_paired[procedure_id])]
+            assert len(p1) == len(p2), "Halves of paired outputs aren't the same size!"
+            pairs += [(tp1, tp2) for tp1, tp2 in zip(p1,p2)]
+
+            # else:
+            #     # Take all combinations of questions sets for this procedure ID (just want more data for training)
+            #     pairs += itertools.combinations(data_paired[procedure_id], 2)
 
         prompt = []
         chosen = []
@@ -162,6 +164,7 @@ def main():
                     "rejected": rejected,
                 })
         elif args.training_mode == "SFT":
+            # TODO: should this actually just take one best question set per prompt so we aren't training the model on competing examples?
             dataset = Dataset.from_dict({
                     "prompt": prompt + prompt,
                     "completion": chosen + rejected,
