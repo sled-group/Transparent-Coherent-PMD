@@ -162,7 +162,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
         if visual_filter_mode is not None and visual_filter is not None:
             if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
                 frames = visual_filter(nlp, frames, questions)
-            elif visual_filter_mode in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase]:
+            elif visual_filter_mode in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
                 spatial_cache_fname = os.path.join(worker_cache_dir, f"spatial_filter_outputs_chunk{chunk_idx}.pkl")
                 if os.path.exists(spatial_cache_fname):
                     frames, new_questions, visible_target_objects = pickle.load(open(spatial_cache_fname, "rb"))

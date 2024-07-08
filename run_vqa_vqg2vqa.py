@@ -118,6 +118,7 @@ else:
 for eval_partition in args.eval_partitions:
     # Load VQG outputs from run_vqg.py
     vqg_outputs = load_vqg_outputs(os.path.join(args.vqg_directory, f"vqg_outputs_{eval_partition}.json"))
+    pprint(vqg_outputs)
 
     def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]:
         questions = []
