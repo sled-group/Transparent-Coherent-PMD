@@ -1,4 +1,5 @@
 # Need this call at the beginning of every script to set random seeds and set the HF cache
+import itertools
 from travel import init_travel
 init_travel()
 
@@ -6,6 +7,7 @@ import argparse
 from collections import defaultdict
 from datasets import Dataset
 import datetime
+import numpy as np
 import os
 from peft import LoraConfig, prepare_model_for_kbit_training
 from pprint import pprint
@@ -17,7 +19,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import DPOTrainer, DPOConfig, SFTTrainer, SFTConfig
 
 from travel.data.vqg import generate_vqg_prompt, generate_vqg_prompt_icl, VQG_DEMONSTRATIONS
-from travel.data.vqg_learning import load_vqg_training_examples
+from travel.data.vqg_learning import load_vqg_training_examples, VQGTrainingExample
 
 def print_trainable_parameters(model):
     """
@@ -44,9 +46,9 @@ def main():
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
-    parser.add_argument("--beta", type=float, default=0.1, help="DPO beta parameter for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--n_demonstrations", type=int, default=20, choices=range(0, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
+    parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parameter for training.")
     parser.add_argument("--lora_r", type=int, default=64, help="LoRA r (matrix dimension).")
     parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha (weight update scaling coefficient).")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -84,22 +86,48 @@ def main():
     # Pair examples based on preference scores
     datasets = {}
     for partition in data:
-        data_paired = defaultdict(list)
+        
+        # First gather all the questions and scores we collected by procedure ID
+        data_paired = {}
         for example in data[partition]:
-            data_paired[example.procedure_id].append(example)
+            if example.procedure_id not in data_paired:
+                data_paired[example.procedure_id] = defaultdict(list)
+
+            question_set = sorted([example.questions[0].strip().lower() + " " + str(example.expected_answers[0]), example.questions[1].strip().lower() + " " + str(example.expected_answers[1])])
+            question_set = (question_set[0], question_set[1])
+            data_paired[example.procedure_id][question_set].append(example)
+        
+        # Then average scores across duplicate question sets for each procedure
+        new_data_paired = {}
+        for procedure_id in data_paired:
+            new_question_set_data = []
+            for question_set in data_paired[procedure_id]:
+                average_score = np.mean([ex.preference_score for ex in data_paired[procedure_id][question_set]])
+
+                # Take first training example for this question set and reassign the score
+                new_ex = data_paired[procedure_id][question_set][0]
+                new_ex.preference_score = average_score
+                new_question_set_data.append(new_ex)
+
+            new_data_paired[procedure_id] = new_question_set_data
+        data_paired = new_data_paired
+
         pairs = []
         for procedure_id in data_paired:
-            # Randomly split the list into two halves and create pairs
-            # (we could also use all pairs but this generates way too much data)
-            random.shuffle(data_paired[procedure_id])
-            split_point = len(data_paired[procedure_id]) // 2
-            p1 = data_paired[procedure_id][:split_point]
-            p2 = data_paired[procedure_id][split_point:]
-            if len(p2) > len(p1):
-                p2 += random.choice(data_paired[procedure_id])
-            assert len(p1) == len(p2), "Halves of paired outputs aren't the same size!"
-            pairs += [(tp1, tp2) for tp1, tp2 in zip(p1,p2)]
-            # pairs += itertools.combinations(data_paired[procedure_id], 2)
+
+            if partition != "train":
+                # Randomly split the list into two halves and create pairs (want smaller, varied data for evaluation)
+                random.shuffle(data_paired[procedure_id])
+                split_point = len(data_paired[procedure_id]) // 2
+                p1 = data_paired[procedure_id][:split_point]
+                p2 = data_paired[procedure_id][split_point:]
+                if len(p2) > len(p1):
+                    p1 += [random.choice(data_paired[procedure_id])]
+                assert len(p1) == len(p2), "Halves of paired outputs aren't the same size!"
+                pairs += [(tp1, tp2) for tp1, tp2 in zip(p1,p2)]
+            else:
+                # Take all combinations of questions sets for this procedure ID (just want more data for training)
+                pairs += itertools.combinations(data_paired[procedure_id], 2)
 
         prompt = []
         chosen = []
@@ -213,7 +241,7 @@ def main():
         trainer = DPOTrainer(
             model,
             args=training_args,
-            beta=args.beta,
+            beta=args.dpo_beta,
             max_prompt_length=int(1.5 * max([len(p.split()) for p in prompt])),
             max_length=int(1.5 * max([len(g.split()) for g in chosen + rejected])),
             train_dataset=datasets["train"],
