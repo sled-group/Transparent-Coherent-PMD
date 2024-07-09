@@ -6,14 +6,15 @@ from PIL import Image
 from spacy.lang.en import English
 import torch
 from tqdm import tqdm
-from transformers import PreTrainedModel
+import shelve
+from transformers import PreTrainedModel, Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
 from transformers.processing_utils import ProcessorMixin
 from typing import Optional, Callable
 
 from travel.constants import CACHE_FREQUENCY, IMAGES_CHUNK_SIZE
 from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
-from travel.data.vqa import VQAResponse, VQAOutputs, get_vqa_response_token_ids
+from travel.data.vqa import VQAResponse, VQAOutputs, get_vqa_response_token_ids, COMPLETION_PROMPT_TEMPLATES
 from travel.model.grounding import VisualFilterTypes, AdaptiveVisualFilter
 from travel.model.mistake_detection import DETECTION_FRAMES_PROPORTION
 
@@ -285,3 +286,85 @@ def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
+
+def clean_up_captions(captions: list[str],
+                    model_type: type,
+                    processor: ProcessorMixin):
+    """
+    Remove unwanted tokens at the beginning of captions, used in run_captioning.
+
+    :param captions: List of captions generated
+    :model_type: Type of model used to generate captions
+    :param  processor: VLM processor from `transformers`, including post processing methods
+    """
+
+    if (model_type == LlavaForConditionalGeneration):
+        return [caption.split("ASSISTANT: ")[1].strip() for caption in captions]
+    elif (model_type == LlavaNextForConditionalGeneration):
+        return [caption.split("[/INST] ")[1].strip() for caption in captions]
+    elif (model_type == Kosmos2ForConditionalGeneration):
+        return [processor.post_process_generation(caption)[0] for caption in captions]
+    elif (model_type == Blip2ForConditionalGeneration):
+        return [caption.strip() for caption in captions]
+    else:
+        return captions
+
+
+def run_captioning(vlm: PreTrainedModel,
+                processor: ProcessorMixin,
+                frames: list[Image.Image],
+                batch_size: int=1,
+                cache_path: Optional[str]=None) -> list[str]:
+    """
+    Get captions of given frames in batches with a given VLM and its processor.
+
+    :param vlm: VLM for conditional generation from `transformers`.
+    :param processor: VLM processor from `transformers`, including tokenizer and image processor.
+    :param frames: List of images to caption.
+    :param batch_size: Batch size for running inference.
+    :param cache_path: Path to a file for caching captions without the file extension, ex: "/Path/to/file". In this path, there will be file.dir, file.dat, file.bak files for caching.  
+    :return: List of captions corresponding to each given frame.
+    """
+
+    prompt_template = COMPLETION_PROMPT_TEMPLATES[type(vlm)]
+    captions = []
+    if cache_path is not None:
+        # Load cached captions if there are any
+        if os.path.exists(cache_path + '.dir'):
+            with shelve.open(cache_path) as cache_file:
+                try:
+                    captions = cache_file["captions"]
+                except:
+                    pass
+
+    last_save = len(captions)
+    with torch.no_grad():
+        # Start at len(captions) so we don't produce any captions that were already cached (resuming logic)
+        for i in tqdm(range(len(captions), len(frames), batch_size), desc=f"running cpationing with ({str(vlm.device)})"):
+            # Prepare the batch
+            batch_frames = frames[i:i+batch_size]
+            batch_prompts = [prompt_template for i in range(batch_size)]
+
+            # Run through VLM to get captions
+            inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
+            inputs = inputs.to(vlm.device)
+
+            outputs = vlm.generate(**inputs, max_new_tokens=100)
+            outputs = processor.batch_decode(outputs, skip_special_tokens=True)
+            outputs = clean_up_captions(outputs, type(vlm), processor)
+            captions.append(outputs)
+
+            # Cache captions if needed
+            if cache_path is not None and (i - last_save + 1) >= CACHE_FREQUENCY:
+                with shelve.open(cache_path) as cache_file:
+                    cache_file["captions"] = captions
+                    cache_file.sync()
+                last_save = i + 1
+
+    # Last cache
+    if cache_path is not None:
+        with shelve.open(cache_path) as cache_file:
+            cache_file["captions"] = captions
+            cache_file.sync()
+
+    return captions
