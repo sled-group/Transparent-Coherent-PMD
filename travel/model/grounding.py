@@ -2,6 +2,7 @@ import dataclasses
 from enum import Enum
 import cv2
 import numpy as np
+import os
 from PIL import Image
 from pprint import pprint
 import spacy
@@ -328,6 +329,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         self.rephrase_questions = rephrase_questions
         self.mask_strength = mask_strength
         self.mask_type = mask_type
+        assert mask_type == ImageMaskTypes.Blur or 0.0 <= mask_strength <= 1.0, "Mask strength must be in [0.0, 1.0] for darkness spatial filter!"
         super().__init__(**kwargs)
 
     @staticmethod
@@ -469,6 +471,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
         new_frames = []
         new_questions = []
+        frame_idx = 0
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
         for old_question, (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(questions, spatial_parse_results, detection_results, frames, padded_images):
             bboxes = detection_result["boxes"]
@@ -580,20 +583,25 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     
                     # Create an output image initially the same as the original image
                     new_frame = np.copy(frame_padded_array)
+                    # Image.fromarray(new_frame.astype(np.uint8)).save(f"temp_images/{frame_idx}a.jpg")
+
                     if np.min(new_frame) >= 0 and np.max(new_frame) <= 1:
                         print("Warning: new_frame was normalized.")
                         new_frame *= 255
 
-
                     # Apply the blurred regions where mask is 0
                     for c in range(frame_padded_array.shape[2]):
                         new_frame[:, :, c][mask == 0] = blurred_image[:, :, c][mask == 0]
+                        # Image.fromarray(new_frame.astype(np.uint8)).save(f"temp_images/{frame_idx}b{c}.jpg")
                     
+                    # Image.fromarray(new_frame.astype(np.uint8)).save(f"temp_images/{frame_idx}c.jpg")
 
                 # Undo padding of masked/cropped image to pass to VLM later
                 new_frame = Image.fromarray(new_frame.astype(np.uint8))
                 new_height = new_frame.width / frame.width * frame.height
                 new_frame = new_frame.crop((0, 0, new_frame.width - 1, new_height))
+
+                # new_frame.save(f"temp_images/{frame_idx}d.jpg")
 
                 if look_at_noun and self.mask_type == ImageMaskTypes.Darkness and self.mask_strength == 1.0:
                     # If we're completely blocking out everything but some bboxes, crop the image to only look at them
@@ -609,6 +617,8 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # No detection - don't modify the image or question
                 new_frames.append(frame)
                 new_questions.append(old_question)
+
+            frame_idx += 1
 
         if return_visible_target_objects:
             return new_frames, new_questions, object_counts

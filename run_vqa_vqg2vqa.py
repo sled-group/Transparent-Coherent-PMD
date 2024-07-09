@@ -1,5 +1,7 @@
 # Need this call at the beginning of every script to set random seeds and set the HF cache
 from travel import init_travel
+
+from TRAVEl.travel.model.grounding import ImageMaskTypes
 init_travel()
 
 import argparse
@@ -72,13 +74,13 @@ for worker_index in range(n_workers):
 
     if args.visual_filter_mode is not None:
         if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
-            visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
+            visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
-            visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
+            visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_Blur:
-            visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
+            visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Blur, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')            
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")

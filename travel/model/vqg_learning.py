@@ -12,6 +12,8 @@ from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
 from travel.model.vqa import run_vqa
 
+from TRAVEl.travel.model.grounding import ImageMaskTypes
+
 # NOTE: we may need to employ multiple scorers (for several VLM types)
 # NOTE: we may need to implement scorers for different types of inputs, e.g., video
 class FrameVQAMistakeDetectionScorer:
@@ -51,11 +53,11 @@ class FrameVQAMistakeDetectionScorer:
         self.processor.tokenizer.padding_side = "left"
 
         if visual_filter_type == VisualFilterTypes.Spatial:
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=visual_filter_strength, device=visual_filter_device)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=visual_filter_strength, device=visual_filter_device)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Spatial_Blur:
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=visual_filter_strength, device=visual_filter_device)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=visual_filter_strength, mask_type=ImageMaskTypes.Blur, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Contrastive_Region:
             self.visual_filter = ContrastiveRegionFilter(mask_strength=visual_filter_strength, device=visual_filter_device)
         else:
