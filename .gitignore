@@ -20,3 +20,4 @@ mprof*.pdf
 mprofile_*.dat
 TRAVEl_cache_dir/
 *.out
+temp*

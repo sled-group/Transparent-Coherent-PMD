@@ -562,15 +562,26 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                     new_frame = np.array(frame_padded) * mask
                 elif self.mask_type == ImageMaskTypes.Blur:
                     # Apply Gaussian blur to the entire image
-                    frame_padded_array = np.asarray(frame_padded).astype(np.uint8)
-                    blurred_image = cv2.blur(frame_padded_array, (int(self.mask_strength), int(self.mask_strength)), 0.0)
+                    new_frame = np.array(frame_padded.convert("RGB"))
+
+                    # Apply the average blur
+                    for i in range(new_frame.shape[0]):
+                        for j in range(new_frame.shape[1]):
+                            if mask[i, j] == 0:
+                                # Extract the region of interest
+                                roi = new_frame[i:i+int(self.mask_strength), j:j+int(self.mask_strength)]
+                                # Compute the mean value for each channel
+                                mean_value = roi.mean(axis=(0, 1))
+                                new_frame[i, j] = mean_value
+
+                    # blurred_image = cv2.blur(frame_padded_array, (int(self.mask_strength), int(self.mask_strength)), 0.0)
                     
                     # Create an output image initially the same as the original image
-                    new_frame = np.copy(frame_padded_array)
+                    # new_frame = np.copy(frame_padded_array)
                     
                     # Apply the blurred regions where mask is 0
-                    for c in range(frame_padded_array.shape[2]):
-                        new_frame[:, :, c][mask == 0] = blurred_image[:, :, c][mask == 0]    
+                    # for c in range(frame_padded_array.shape[2]):
+                    #     new_frame[:, :, c][mask == 0] = blurred_image[:, :, c][mask == 0]    
 
                 # Undo padding of masked/cropped image to pass to VLM later
                 new_frame = Image.fromarray(new_frame.astype(np.uint8))
