@@ -9,10 +9,8 @@ from travel.constants import DATA_CACHE_DIR
 from travel.data.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, ImageMaskTypes
 from travel.model.vqa import run_vqa
-
-from TRAVEl.travel.model.grounding import ImageMaskTypes
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
 # NOTE: we may need to implement scorers for different types of inputs, e.g., video

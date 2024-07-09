@@ -1,7 +1,6 @@
 # Need this call at the beginning of every script to set random seeds and set the HF cache
 from travel import init_travel
 
-from TRAVEl.travel.model.grounding import ImageMaskTypes
 init_travel()
 
 import argparse
@@ -22,7 +21,7 @@ from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, SUCCESSVQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter, ImageMaskTypes
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
