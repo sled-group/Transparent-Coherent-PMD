@@ -232,7 +232,7 @@ def main():
                                       per_device_train_batch_size=args.train_batch_size,
                                       per_device_eval_batch_size=args.eval_batch_size,
                                       learning_rate=args.learning_rate,
-                                    #   optim='paged_adamw_8bit', # TODO: this might be causing error resuming training
+                                    #   optim='paged_adamw_8bit', # TODO: set this rather than rely on default
                                       bf16=True,
                                       num_train_epochs=args.n_epochs,
                                       gradient_accumulation_steps=1,
