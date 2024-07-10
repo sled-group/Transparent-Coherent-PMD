@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks]) # TODO: support running for Ego4D's evaluation sets
 parser.add_argument("--partition", type=str, required=False, choices=["val", "test"], help="Partition to run VQG on. For some tasks with a consistent set of procedures shared across partitions, this may not be required.")
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-parser.add_argument("--n_demonstrations", type=int, default=20, choices=range(1, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
+parser.add_argument("--n_demonstrations", type=int, default=20, choices=range(0, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
 parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
 parser.add_argument("--batch_size", type=int, default=12, help="Batch size for VQG.")
@@ -72,10 +72,12 @@ print(lm.model.generation_config)
 # Prepare output directory
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
-    this_results_dir = f"VQG_{args.task}"
+    lm_name = args.lm_name.split('/')[-1]
+    this_results_dir = os.path.join(args.task, lm_name, f"VQG_{args.task}")
+
     if args.debug:
         this_results_dir += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
-    this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqg", this_results_dir)
     os.makedirs(this_results_dir)
 else:

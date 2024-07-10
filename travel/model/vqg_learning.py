@@ -9,7 +9,7 @@ from travel.constants import DATA_CACHE_DIR
 from travel.data.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, ImageMaskTypes
 from travel.model.vqa import run_vqa
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
@@ -51,11 +51,11 @@ class FrameVQAMistakeDetectionScorer:
         self.processor.tokenizer.padding_side = "left"
 
         if visual_filter_type == VisualFilterTypes.Spatial:
-            # Load spatial filter onto separate GPU if available
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=visual_filter_strength, device=visual_filter_device)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
-            # Load spatial filter onto separate GPU if available
-            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, device=visual_filter_device)
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=visual_filter_device)
+        elif visual_filter_type == VisualFilterTypes.Spatial_Blur:
+            self.visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=visual_filter_strength, mask_type=ImageMaskTypes.Blur, device=visual_filter_device)
         elif visual_filter_type == VisualFilterTypes.Contrastive_Region:
             self.visual_filter = ContrastiveRegionFilter(mask_strength=visual_filter_strength, device=visual_filter_device)
         else:
@@ -135,7 +135,7 @@ class FrameVQAMistakeDetectionScorer:
                 print("\nMemory (before running spatial filter)")
                 memory_tracker.print_diff()
 
-            if self.visual_filter_type == VisualFilterTypes.Spatial or self.visual_filter_type == VisualFilterTypes.Spatial_NoRephrase:
+            if self.visual_filter_type in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
                 frames, questions = self.visual_filter(self.nlp, frames, questions, return_visible_target_objects=False)
             elif self.visual_filter_type == VisualFilterTypes.Contrastive_Region:
                 frames = self.visual_filter(self.nlp, frames, questions)

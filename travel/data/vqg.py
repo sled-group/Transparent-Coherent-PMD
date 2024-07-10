@@ -459,8 +459,9 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
     :return: Prompt for VQG including in-context demonstrations.
     """
     assert n_demonstrations <= len(VQG_DEMONSTRATIONS), f"Requested {n_demonstrations} in-context demonstrations for VQG, but only {len(VQG_DEMONSTRATIONS)} are available in travel.model.vqg.VQG_DEMONSTRATIONS."
-    demonstrations = VQG_DEMONSTRATIONS[:n_demonstrations]
+    demonstrations = VQG_DEMONSTRATIONS
     random.shuffle(demonstrations) # Shuffle demonstrations for each prompt to ensure the ordering is not sub-optimal
+    demonstrations = demonstrations[:n_demonstrations]
     examples = [generate_vqg_example(demo) for demo in demonstrations]
     examples += [generate_vqg_prompt(procedure_description)]
     return "\n\n".join(examples)
@@ -514,7 +515,7 @@ def load_vqg_outputs(path: str) -> dict[Any, VQGOutputs]:
         try:
             vqg_outputs = {int(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
         except:
-            vqg_outputs = {str(k): VQGOutputs(**v) for k, v in vqg_outputs.items()}
+            vqg_outputs = {str(k): (VQGOutputs(**v) if v is not None else None) for k, v in vqg_outputs.items()}
         return vqg_outputs
     else:
         return {}

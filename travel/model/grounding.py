@@ -1,6 +1,8 @@
 import dataclasses
 from enum import Enum
+import cv2
 import numpy as np
+import os
 from PIL import Image
 from pprint import pprint
 import spacy
@@ -309,12 +311,25 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
 
         return target_object_counts
 
+class ImageMaskTypes(Enum):
+    Darkness = "darkness"
+    Blur = "blur"
+
 class SpatialVisualFilter(AdaptiveVisualFilter):
 
     """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
-    def __init__(self, rephrase_questions: bool=True, mask_strength: float=1.0, **kwargs: dict[str, Any]):
+    def __init__(self, rephrase_questions: bool=True, mask_strength: float=1.0, mask_type: ImageMaskTypes=ImageMaskTypes.Darkness,  **kwargs: dict[str, Any]):
+        """
+        Initializes `SpatialVisualFilter`.
+
+        :param rephrase_questions: Whether questions should be rephrased after applying spatial filter (e.g., if cropped to bowl, replace spatial relation "in the bowl" with "in the image" in input question).
+        :param mask_strength: Strength of visual filter. If `mask_type` is `ImageMaskTypes.Darkness`, this corresponds to the darkness of any masks placed over the image (1.0 is fully black, 0.5 is 50% black, and so on). If 'ImageMaskTypes.Blur`, this corresponds to the kernel size (both width and height) of Gaussian blur in pixels.
+        :param mask_type: Type of masking to apply.
+        """
         self.rephrase_questions = rephrase_questions
         self.mask_strength = mask_strength
+        self.mask_type = mask_type
+        assert mask_type == ImageMaskTypes.Blur or 0.0 <= mask_strength <= 1.0, "Mask strength must be in [0.0, 1.0] for darkness spatial filter!"
         super().__init__(**kwargs)
 
     @staticmethod
@@ -456,6 +471,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
         new_frames = []
         new_questions = []
+        frame_idx = 0
         # Iterate in parallel through spatial parse results, detection results, frames, and padded frames
         for old_question, (look_at_noun, noun, new_question), detection_result, frame, frame_padded in zip(questions, spatial_parse_results, detection_results, frames, padded_images):
             bboxes = detection_result["boxes"]
@@ -541,19 +557,54 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 if look_at_noun:
                     mask = 1 - mask
                                 
-                # Apply mask strength to black parts of resulting mask
-                mask = (1.0 - (1 - mask) * self.mask_strength)
-                
-                mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
+                # Apply mask to frame
+                if self.mask_type == ImageMaskTypes.Darkness:
+                    # Apply mask strength to black parts of resulting mask
+                    mask = (1.0 - (1 - mask) * self.mask_strength)
+                    mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)                    
+                    new_frame = np.array(frame_padded) * mask
+                elif self.mask_type == ImageMaskTypes.Blur:
+                    # Apply Gaussian blur to the entire image
+                    frame_padded_array = np.array(frame_padded.convert("RGB"))
+
+                    # # Apply the average blur
+                    # for i in range(new_frame.shape[0]):
+                    #     for j in range(new_frame.shape[1]):
+                    #         if mask[i, j] == 0:
+                    #             # Extract the region of interest
+                    #             roi = new_frame[i:i+int(self.mask_strength), j:j+int(self.mask_strength)]
+                    #             # Compute the mean value for each channel
+                    #             mean_value = roi.mean(axis=(0, 1))
+                    #             new_frame[i, j] = mean_value
+
+                    kernel_size = int(self.mask_strength)
+                    kernel_size = kernel_size if kernel_size % 2 == 1 else kernel_size + 1 # Gaussian kernel size needs to be odd
+                    blurred_image = cv2.GaussianBlur(frame_padded_array, (kernel_size, kernel_size), 0.0)
+                    
+                    # Create an output image initially the same as the original image
+                    new_frame = np.copy(frame_padded_array)
+                    # Image.fromarray(new_frame.astype(np.uint8)).save(f"temp_images/{frame_idx}a.jpg")
+
+                    if np.min(new_frame) >= 0 and np.max(new_frame) <= 1:
+                        print("Warning: new_frame was normalized.")
+                        new_frame *= 255
+
+                    # Apply the blurred regions where mask is 0
+                    for c in range(frame_padded_array.shape[2]):
+                        new_frame[:, :, c][mask == 0] = blurred_image[:, :, c][mask == 0]
+                        # Image.fromarray(new_frame.astype(np.uint8)).save(f"temp_images/{frame_idx}b{c}.jpg")
+                    
+                    # Image.fromarray(new_frame.astype(np.uint8)).save(f"temp_images/{frame_idx}c.jpg")
 
                 # Undo padding of masked/cropped image to pass to VLM later
-                new_frame = np.array(frame_padded) * mask
                 new_frame = Image.fromarray(new_frame.astype(np.uint8))
                 new_height = new_frame.width / frame.width * frame.height
                 new_frame = new_frame.crop((0, 0, new_frame.width - 1, new_height))
 
-                if look_at_noun and self.mask_strength == 1.0:
-                    # If we're blocking out everything but some bboxes, crop the image to only look at them
+                # new_frame.save(f"temp_images/{frame_idx}d.jpg")
+
+                if look_at_noun and self.mask_type == ImageMaskTypes.Darkness and self.mask_strength == 1.0:
+                    # If we're completely blocking out everything but some bboxes, crop the image to only look at them
                     min_x = np.min(bboxes[:, 0])
                     min_y = np.min(bboxes[:, 1])
                     max_x = np.max(bboxes[:, 2])
@@ -566,6 +617,8 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
                 # No detection - don't modify the image or question
                 new_frames.append(frame)
                 new_questions.append(old_question)
+
+            frame_idx += 1
 
         if return_visible_target_objects:
             return new_frames, new_questions, object_counts
@@ -626,8 +679,9 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
 
 
 class VisualFilterTypes(Enum):
-    Spatial = "spatial"
-    Spatial_NoRephrase = "spatial_norephrase"
-    Contrastive_Region = "contrastive_region"
-    Target_Object_Counter = "target_object_counter"
+    Spatial = "spatial" # Default spatial filter that crops and masks images in black based on target objects and spatial relations mentioned in questions, then rephrases questions based on the information that has been abstracted away
+    Spatial_NoRephrase = "spatial_norephrase" # Same spatial filter but does not rephrase questions
+    Spatial_Blur = "spatial_blur" # Spatial filter that blurs rather than blacks out unimportant regions (also doesn't crop images or rephrase questions)
+    Contrastive_Region = "contrastive_region" # Contrastive region guidance https://contrastive-region-guidance.github.io/
+    Target_Object_Counter = "target_object_counter" # Filter that identifies objects mentioned in visual questions and counts their occurrences in frames
     # Don't include target object counter here because it won't be used in the same way as other filters

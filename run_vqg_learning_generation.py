@@ -1,4 +1,5 @@
 # Need this call at the beginning of every script to set random seeds and set the HF cache
+import pickle
 from time import sleep
 from travel import init_travel
 init_travel()
@@ -35,6 +36,7 @@ parser.add_argument("--output_dir", type=str, help="Directory name to output dat
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
+parser.add_argument("--run_id", type=str, help="Unique ID for this run.")
 args = parser.parse_args()
 
 # Split up work by srun processes; if SLURM_PROCID is not accessible, just run all the work here
@@ -74,11 +76,14 @@ lm.tokenizer.pad_token_id = lm.model.config.eos_token_id
 
 # Set results directory
 if args.resume_dir is None:
-    this_results_dir = f"VQG_data"
+    lm_name = args.lm_name.split('/')[-1]
+    this_results_dir = os.path.join(lm_name, f"VQG_data")
     if args.debug:
         this_results_dir += f"_debug{args.debug_n_examples}"
-    this_results_dir += f"_{args.lm_name.split('/')[-1]}_icl{args.n_demonstrations}_{'_'.join([str(t) for t in args.temperatures])}"
+    this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}_{'_'.join([str(t) for t in args.temperatures])}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqg_learning", this_results_dir)
+    if args.run_id is not None:
+        this_results_dir += f"_{args.run_id}"
     if not os.path.exists(this_results_dir):
         os.makedirs(this_results_dir)
 else:
@@ -87,10 +92,15 @@ else:
     assert os.path.exists(this_results_dir), "Specified resuming directory must already exist!"    
 
 # Load Ego4D for mistake detection
-dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
-                                        mismatch_augmentation=True,
-                                        debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-print(f"({worker_index}) {len(dataset)} Ego4D mistake detection examples loaded from {args.partition} partition")
+while True:
+    try:
+        dataset = Ego4DMistakeDetectionDataset(data_split=args.partition,
+                                                mismatch_augmentation=True,
+                                                debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
+        print(f"({worker_index}) {len(dataset)} Ego4D mistake detection examples loaded from {args.partition} partition")
+        break
+    except:
+        continue
 
 # Generate or load prompts
 prompts_fname = f"prompts_{args.partition}_{worker_index}.json"
@@ -160,6 +170,7 @@ for temperature, temp_count in tqdm(zip(temperatures, counts), desc="temperature
                               save_path=os.path.join(this_results_dir, worker_vqg_outputs_fname),
                               vqg_outputs=vqg_outputs,
                               omit_failed_instances=False)
+print(f"{worker_index} Done generating!")
 
 # Combine all VQG outputs from workers (only worker 0 does this)
 if n_workers > 1 and worker_index == 0:
@@ -171,7 +182,9 @@ if n_workers > 1 and worker_index == 0:
         while True:
             if os.path.exists(other_worker_vqg_outputs_fname):
                 other_vqg_outputs = load_vqg_outputs(other_worker_vqg_outputs_fname)
-                if len(other_vqg_outputs) == len(all_procedures_split[other_worker_index]) * len(args.temperatures):
+                other_prompts_fname = f"prompts_{args.partition}_{worker_index}.json"
+                other_prompts = load_vqg_inputs(os.path.join(this_results_dir, other_prompts_fname))
+                if len(other_vqg_outputs) == len(other_prompts) * len(args.temperatures):
                     print(f"({worker_index}) Collected VQG outputs from worker {other_worker_index}.")
                     vqg_outputs |= other_vqg_outputs
                     break
@@ -184,7 +197,8 @@ if worker_index == 0:
     for key in vqg_outputs:
         key_parts = key.split("_")
         temperature, prompt_idx = float(key_parts[0]), int(key_parts[1])
-        vqg_outputs_new[vqg_outputs[key].procedure_id].append(vqg_outputs[key])
+        if vqg_outputs[key] is not None:
+            vqg_outputs_new[vqg_outputs[key].procedure_id].append(vqg_outputs[key])
     vqg_outputs = vqg_outputs_new
 
     frameVQA_examples = []
