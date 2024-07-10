@@ -11,8 +11,9 @@ from travel.constants import RESULTS_DIR
 from travel.model.mistake_detection import generate_det_curves
 
 # Configure results to graph here
+TASK = "ego4d"
 timestamp = datetime.datetime.now()
-graph_dir = os.path.join(RESULTS_DIR, "analysis", f"det_curves_{timestamp.strftime('%Y%m%d%H%M%S')}")
+graph_dir = os.path.join(RESULTS_DIR, "analysis", TASK, f"det_curves_{timestamp.strftime('%Y%m%d%H%M%S')}")
 if not os.path.exists(graph_dir):
     os.makedirs(graph_dir)
 

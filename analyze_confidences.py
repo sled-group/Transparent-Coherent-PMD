@@ -20,8 +20,9 @@ from travel.model.mistake_detection import aggregate_mistake_probs_over_frames, 
 from travel.model.utils import expected_calibration_error
 
 # Configure results to graph here
+TASK = "ego4d"
 timestamp = datetime.datetime.now()
-output_dir = os.path.join(RESULTS_DIR, "analysis", f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}")
+output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}")
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
