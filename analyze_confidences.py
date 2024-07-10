@@ -2,6 +2,7 @@
 from travel import init_travel
 init_travel()
 
+import datetime
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,19 +12,27 @@ from scipy.stats import pointbiserialr
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import brier_score_loss
 
+from travel.constants import RESULTS_DIR
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionExample
 from travel.data.vqa import VQAOutputs, VQAResponse
 from travel.model.mistake_detection import aggregate_mistake_probs_over_frames, DETECTION_FRAMES_PROPORTION, MISTAKE_DETECTION_THRESHOLDS, mistake_detection_metrics, generate_det_curve, HeuristicMistakeDetectionEvaluator, compile_mistake_detection_preds
+from travel.model.utils import expected_calibration_error
+
+# Configure results to graph here
+timestamp = datetime.datetime.now()
+output_dir = os.path.join(RESULTS_DIR, "analysis", f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}")
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
 
 # Configure arguments here
 results_fnames = [
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_target_object_counter1.0_20240702182300/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_nli_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_nli_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_target_object_counter1.0_20240702182300/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_heuristic_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_nli_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_nli_val.json",
 ]
 metrics = [
     json.load(open(fname.replace("preds_", "metrics_"), "r")) for fname in results_fnames
@@ -169,7 +178,7 @@ ax.legend()
 fig.tight_layout()
 
 output_fname = f"confidence_comparison1_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
-save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames]
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for path in save_paths:
     fig.savefig(path)
 
@@ -200,7 +209,7 @@ ax.legend()
 fig.tight_layout()
 
 output_fname = f"confidence_comparison2_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
-save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames]
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for path in save_paths:
     fig.savefig(path)
 
@@ -208,19 +217,31 @@ print("(1) Confidence graphs generated!")
 
 # Analysis 2: Correlation of confidences with mistake labels
 print("(2) Beginning correlation analysis of confidences...")
+lines = []
 for i in range(len(results_fnames)):
     # pprint(all_probs[i])
     # pprint(all_labels[i])
-    print(f"{results_names[i]} point biserial correlation between confidence and correctness:")
-    pprint(pointbiserialr(all_correctness[i], all_confidence[i]))
-    print("")
-    print(f"{results_names[i]} Brier score:")
-    print(brier_score_loss([1 if l else 0 for l in all_labels[i]], all_probs[i], pos_label=1))
-    print("\n")
+    lines.append(f"{results_names[i]} point biserial correlation between confidence and correctness:")
+    lines.append(str(pointbiserialr(all_correctness[i], all_confidence[i])))
+    lines.append("")
+    lines.append(f"{results_names[i]} Brier score:")
+    lines.append(str(brier_score_loss([1 if l else 0 for l in all_labels[i]], all_probs[i], pos_label=1)))
+    lines.append("")
+    lines.append(f"{results_names[i]} ECE (10 bins):")
+    ece_probs = (1.0 - np.expand_dims(np.array(all_probs[i]), 1), np.expand_dims(np.array(all_probs[i]), 1))
+    ece_probs = np.concatenate(ece_probs, axis=1)
+    ece = expected_calibration_error(ece_probs, [1 if l else 0 for l in all_labels[i]])
+    lines.append(str(ece))
+    lines.append("\n")
+
+output_fname = f"confidence_analysis_metrics_{'_'.join(results_names).replace(' ', '-')}.txt"
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+for save_path in save_paths:
+    with open(save_path, 'w') as f:
+        f.write("\n".join(lines))
 
 plt.clf()
 for i in range(len(results_fnames)):
-
     fraction_of_positives, mean_predicted_value = calibration_curve(all_labels[i], all_probs[i], n_bins=20)
     plt.plot(mean_predicted_value, fraction_of_positives, label=results_names[i])
 
@@ -234,7 +255,7 @@ plt.legend(loc='best')
 plt.grid()
 
 output_fname = f"calibration_curves_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
-save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames]
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for path in save_paths:
     plt.savefig(path)
 
