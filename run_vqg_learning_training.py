@@ -198,19 +198,16 @@ def main():
         print_trainable_parameters(model)
         print(f"Memory footprint: {model.get_memory_footprint() / 1e9} GB")
 
-    # if not getattr(model, "peft_config", None):
-    #     peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
-    #                             inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
-    #                             r=args.lora_r,                           # dimension of low-rank matrices
-    #                             lora_alpha=args.lora_alpha,                  # scaling coefficient of weight update
-    #                             target_modules="all-linear",
-    #                             lora_dropout=0.1,               # dropout regularization on LoRA weights
-    #                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
-    # else:
-    #     peft_config = model.peft_config['default']
-
-    # TODO: change this back if it doesn't help
-    peft_config = None
+    if not getattr(model, "peft_config", None):
+        peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
+                                inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
+                                r=args.lora_r,                           # dimension of low-rank matrices
+                                lora_alpha=args.lora_alpha,                  # scaling coefficient of weight update
+                                target_modules="all-linear",
+                                lora_dropout=0.1,               # dropout regularization on LoRA weights
+                                bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
+    else:
+        peft_config = model.peft_config['default']
 
     # Set up output directory, training args, and wandb
     if args.resume_dir is None:
@@ -219,6 +216,7 @@ def main():
         if "SFT" in args.lm_name and args.training_mode == "DPO":
             output_dir_name = f"{args.lm_name.split('/')[-1]}-{output_dir_name}"
         output_dir_name = os.path.join(lm_name, output_dir_name)
+        output_dir_name += f"_icl{args.n_demonstrations}"
         if args.debug:
             output_dir_name += "_debug"
         this_results_dir = os.path.join(args.training_data_path, output_dir_name)

@@ -4,7 +4,7 @@ import numpy as np
 from pprint import pprint
 from scipy.special import softmax
 from scipy.stats import norm
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, auc
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
@@ -579,7 +579,9 @@ def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_
 
 def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]], curve_names: list[str], save_paths: list[str]):
     """
-    Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`. A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point to set the threshold in the bottom left corner.
+    Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`.
+     A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point 
+     to set the threshold in the bottom left corner.
 
     :param metrics: List of `metrics` objects returned by `evaluate_mistake_detection()`.
     :param curve_names: List of names of the approach associated with each passed entry of `metrics`, e.g., ["Random", "SuccessVQA", "VQG2VQA"].
@@ -646,6 +648,71 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
         plt.savefig(save_path)
 
 
+def generate_roc_curves(metrics: list[dict[Union[float, str], dict[str, float]]], curve_names: list[str], save_paths: list[str]):
+    """
+    Generates and saves a PDF of a Receiver Operating Characteristic (ROC) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`.
+     A ROC curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point 
+     to set the threshold in the bottom left corner. Also saves the area under the ROC curve in a text file in the same location.
+
+    :param metrics: List of `metrics` objects returned by `evaluate_mistake_detection()`.
+    :param curve_names: List of names of the approach associated with each passed entry of `metrics`, e.g., ["Random", "SuccessVQA", "VQG2VQA"].
+    :param save_paths: Paths to save copies of the PDF of the DET curve.
+    """
+    assert len(metrics) == len(curve_names), "Expected same number of metrics and curve names!"
+
+    colors = plt.get_cmap('tab10', len(metrics))
+    plt.figure(figsize=(8, 6))
+    aurocs = []
+    for i, (metric, name) in enumerate(zip(metrics, curve_names)):
+        # Some of the keys in the metrics file may not be floats (for thresholds), e.g., a "best_metrics" key is also saved here
+        metric = {k: v for k, v in metric.items() if isinstance(k, float)}
+
+        # Gather FPR and TPR from metrics
+        false_positive_rates = [round(metric[threshold]['false_positive_rate'], 3) for threshold in metric]
+        true_positive_rates = [round(1.0 - metric[threshold]['false_negative_rate'], 3) for threshold in metric]
+
+        x = false_positive_rates
+        y = true_positive_rates
+
+        # Plot DET curve
+        plt.plot(x, y, marker='o', linestyle='-', color=colors(i), label=name)
+
+        x_y_sorted = sorted([(this_x, this_y) for this_x, this_y in zip(x, y)], key=lambda t: t[0])
+        x_sorted = [t[0] for t in x_y_sorted]
+        y_sorted = [t[1] for t in x_y_sorted]
+        aurocs.append(auc(x_sorted, y_sorted))
+
+    # Label axes with normal deviate scale
+    # plt.xlabel('False Positive Rate (Normal Deviate Scale)')
+    # plt.ylabel('False Negative Rate (Normal Deviate Scale)')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('False Negative Rate')
+
+    # Set grid and title
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    
+    # Customize axes for better readability
+    tick_vals = np.linspace(0.00, 1.0, 11)
+    # ticks = norm.ppf(tick_vals)
+    ticks = tick_vals
+    tick_labels = [f"{round(val, 2)}" for val in tick_vals]
+    plt.xticks(ticks, tick_labels)
+    plt.yticks(ticks, tick_labels)
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
+    # plt.xlim([norm.ppf(0.01), norm.ppf(0.99)])
+    # plt.ylim([norm.ppf(0.01), norm.ppf(0.99)])
+
+    # Add legend
+    plt.legend()
+
+    # Save to files
+    for save_path in save_paths:
+        plt.savefig(save_path)
+        with open(save_path.replace(".pdf", ".txt"), "w") as f:
+            f.write("\n".join([f"{result_name}: {auc_metric}\n" for auc_metric, result_name in zip(aurocs, curve_names)]))
+
 def compile_mistake_detection_preds(dataset: MistakeDetectionDataset,
                                     vqa_outputs: list[list[list[VQAOutputs]]],
                                     mistake_detection_preds: dict[float, list[MistakeDetectionOutputs]],
@@ -668,3 +735,5 @@ def compile_mistake_detection_preds(dataset: MistakeDetectionDataset,
                 compiled_preds[example_id]["mistake_detection"] = {}
             compiled_preds[example_id]["mistake_detection"][threshold] = pred.to_dict()
     return compiled_preds
+
+# TODO: delete this comment

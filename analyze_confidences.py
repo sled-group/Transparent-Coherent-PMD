@@ -8,9 +8,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from pprint import pprint
+import random
 from scipy.stats import pointbiserialr
 from sklearn.calibration import calibration_curve
-from sklearn.metrics import brier_score_loss
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import brier_score_loss, auc
+from tqdm import tqdm
 
 from travel.constants import RESULTS_DIR
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
@@ -28,12 +31,15 @@ if not os.path.exists(output_dir):
 
 # Configure arguments here
 results_fnames = [
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_target_object_counter1.0_20240702182300/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_nli_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_nli_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_target_object_counter1.0_20240702182300/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_heuristic_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_nli_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_blur45.0_20240709234703/preds_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/preds_heuristic_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/preds_nli_val.json",
 ]
 metrics = [
     json.load(open(fname.replace("preds_", "metrics_"), "r")) for fname in results_fnames
@@ -44,7 +50,10 @@ results_names = [
     "VQG2VQA",
     "VQG2VQA + NLI",
     "VQG2VQA + Spatial",
-    "VQG2VQA + Spatial + NLI"
+    "VQG2VQA + Spatial + NLI",
+    "VQG2VQA + Spatial (Blur k45) + NLI",
+    "VQG2VQA + Spatial (No Rephrase)",
+    "VQG2VQA + Spatial (No Rephrase) + NLI"
 ]
 
 print("(0) Compiling pred data...")
@@ -216,7 +225,7 @@ for path in save_paths:
 
 print("(1) Confidence graphs generated!")
 
-# Analysis 2: Correlation of confidences with mistake labels
+# Analysis 2: Correlation of confidences with mistake labels, calibration curves, etc.
 print("(2) Beginning correlation analysis of confidences...")
 lines = []
 for i in range(len(results_fnames)):
@@ -261,3 +270,169 @@ for path in save_paths:
     plt.savefig(path)
 
 print("(2) Done!")
+
+# Analysis 3: Selective prediction metrics
+def calculate_abstention_metrics(mistake_probs, labels, threshold, error_cost=1):
+    """Code adapted from ReCoVERR repo: https://github.com/tejas1995/ReCoVERR/blob/0cbd88de4e5782dc16092ad3dad82a33544ce827/src/VanillaSelectivePrediction.ipynb#L110"""
+    num_covered, total_risk, effective_reliability, num_covered_correct, num_correct = 0, 0, 0, 0, 0
+
+    # Convert mistake probabilities into success and mistake probabilities to get answers
+    mistake_probs_binary = (1.0 - np.expand_dims(np.array(mistake_probs), 1), np.expand_dims(np.array(mistake_probs), 1))
+    mistake_probs_binary = np.concatenate(mistake_probs_binary, axis=1)
+    answers = np.argmax(mistake_probs_binary, axis=1)
+    confidences_per_answer = mistake_probs_binary[np.arange(len(answers)), answers]
+
+    abstained_idxs = []
+    for idx, (ans, conf, label) in enumerate(zip(answers, confidences_per_answer, labels)):
+        acc = 1.0 if ans == label else 0.0
+        if acc == 1.0:
+            num_correct += 1
+
+        selected = True if conf >= threshold else False
+        if selected:
+            num_covered += 1
+            if acc == 1.0:
+                num_covered_correct += 1
+            total_risk += 1.0 - acc
+            effective_reliability += acc if acc > 0.0 else -error_cost
+        else:
+            abstained_idxs.append(idx)
+
+    coverage = num_covered/len(labels)
+    risk = total_risk/num_covered if num_covered > 0 else 0.0
+    effective_reliability = effective_reliability/len(labels)
+    selective_prediction_recall = num_covered_correct / num_correct if num_correct > 0 else 0.0
+    return coverage, risk, effective_reliability, selective_prediction_recall, abstained_idxs
+
+def plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, result_name, save_paths):
+    colors = plt.get_cmap('tab10', 4)
+    plt.figure(figsize=(8, 6))
+    for metric, metric_name, color in [(coverages, "Coverage", colors(0)), 
+                                       (risks, "Risk", colors(1)), 
+                                       (eff_reliabilities, "Effective Reliability", colors(2)),
+                                       (sp_recalls, "Selective Prediction Recall", colors(3))]:
+        # Plot DET curve
+        plt.plot(thresholds, metric, marker='o', linestyle='-', color=color, label=metric_name)
+
+    # Label axes with normal deviate scale
+    plt.xlabel('Confidence Threshold')
+    plt.ylabel('Metric Value')
+    plt.title(f"{result_name} Selective Prediction Metrics")
+
+    # Set grid and title
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    
+    # Customize axes for better readability
+    tick_vals = np.linspace(0.00, 1.0, 11)
+    ticks = tick_vals
+    tick_labels = [f"{round(val, 2)}" for val in tick_vals]
+    plt.xticks(ticks, tick_labels)
+    plt.yticks(ticks, tick_labels)
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
+
+    # Add legend
+    plt.legend()
+
+    # Save to files
+    for save_path in save_paths:
+        plt.savefig(save_path)
+
+def generate_risk_coverage_plot(coverages, risks, result_names, save_paths):
+    """Plots coverage vs. risk for multiple series of data."""
+    assert len(coverages) == len(risks)
+    colors = plt.get_cmap('tab10', len(coverages))
+    plt.figure(figsize=(8, 6))
+
+    aucs = []
+    for i, (coverage, risk, result_name) in enumerate(zip(coverages, risks, result_names)):
+        plt.plot(coverage, risk, marker='.', linestyle='-', color=colors(i), label=result_name)
+        
+        coverage_risk_sorted = sorted([(c, r) for c, r in zip(coverage, risk)], key=lambda x: x[0])
+        coverage_sorted = [t[0] for t in coverage_risk_sorted]
+        risk_sorted = [t[1] for t in coverage_risk_sorted]
+        aucs.append(auc(coverage_sorted, risk_sorted))
+    
+    # Label axes with normal deviate scale
+    plt.xlabel('Coverage')
+    plt.ylabel('Risk')
+
+    # Set grid and title
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    
+    # Customize axes for better readability
+    tick_vals = np.linspace(0.00, 1.0, 11)
+    ticks = tick_vals
+    tick_labels = [f"{round(val, 2)}" for val in tick_vals]
+    plt.xticks(ticks, tick_labels)
+    plt.yticks(ticks, tick_labels)
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
+
+    # Add legend
+    plt.legend()
+
+    # Save to files
+    for save_path in save_paths:
+        plt.savefig(save_path)
+        with open(save_path.replace(".pdf", ".txt"), "w") as f:
+            f.write("\n".join([f"{result_name}: {auc_metric}\n" for auc_metric, result_name in zip(aucs, result_names)]))
+
+num_thresholds = 100
+penalty = 1
+thresholds = [i/num_thresholds for i in range(1, num_thresholds)] # [0.01, 0.02, 0.03, ..., 0.98, 0.99]
+thresholds = [t for t in thresholds if t >= 0.5] # [0.50, 0.51, ..., 0.98, 0.99] (only keep thresholds at least 0.5 because every class is predicted with at least 0.5 likelihood in binary classification)
+
+all_coverages = []
+all_risks = []
+for i in range(len(results_fnames)):
+    coverages, risks, eff_reliabilities, sp_recalls = [], [], [], []
+    for t in tqdm(thresholds, desc="thresholds"):
+        c, r, e, spr, _ = calculate_abstention_metrics(all_probs[i], [1 if l else 0 for l in all_labels[i]], t, penalty)
+        coverages.append(c)
+        risks.append(r)
+        eff_reliabilities.append(e)
+        sp_recalls.append(spr)
+
+    output_fname = f"selective_prediction_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
+    save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), output_fname)] + [os.path.join(output_dir, output_fname)]
+
+    plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)
+
+    # Save coverage and risk for later risk-coverage curve
+    all_coverages.append(coverages)
+    all_risks.append(risks)
+
+    # Apply Platt scaling and re-run
+    calibration_indices = random.sample(list(range(len(all_probs[i]))), 100)
+
+    calibration_probs = [prob for j, prob in enumerate(all_probs[i]) if j in calibration_indices]
+    calibration_labels = [label for j, label in enumerate(all_labels[i]) if j in calibration_indices]
+
+    evaluation_probs = [prob for j, prob in enumerate(all_probs[i]) if j not in calibration_indices]
+    evaluation_labels = [label for j, label in enumerate(all_labels[i]) if j not in calibration_indices]
+
+    clf = LogisticRegression().fit(np.expand_dims(np.array(calibration_probs), 1), calibration_labels)
+    calibrated_probs = clf.predict_proba(np.expand_dims(np.array(evaluation_probs), 1))[:, 1]
+    pprint(calibrated_probs)
+
+    coverages, risks, eff_reliabilities, sp_recalls = [], [], [], []
+    for t in tqdm(thresholds, desc="thresholds"):
+        c, r, e, spr, _ = calculate_abstention_metrics(calibrated_probs, [1 if l else 0 for l in evaluation_labels], t, penalty)
+        coverages.append(c)
+        risks.append(r)
+        eff_reliabilities.append(e)
+        sp_recalls.append(spr)
+
+    output_fname = f"selective_prediction_calibrated_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
+    save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), output_fname)] + [os.path.join(output_dir, output_fname)]
+
+    plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)    
+
+
+output_fname = f"risk_coverage_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
+generate_risk_coverage_plot(all_coverages, all_risks, results_names, save_paths)
+
