@@ -272,10 +272,9 @@ for path in save_paths:
 print("(2) Done!")
 
 # Analysis 3: Selective prediction metrics
-num_thresholds = 100
 penalty = 1
-thresholds = [i/num_thresholds for i in range(1, num_thresholds)] # [0.01, 0.02, 0.03, ..., 0.98, 0.99]
-thresholds = [t for t in thresholds if t >= 0.5] # [0.50, 0.51, ..., 0.98, 0.99] (only keep thresholds at least 0.5 because every class is predicted with at least 0.5 likelihood in binary classification)
+thresholds = np.linspace(0.0, 1.0, 101) # [0.0, 0.01, 0.02, 0.03, ..., 0.98, 0.99, 1.0]
+thresholds = [t for t in thresholds if t >= 0.5] # [0.50, 0.51, ..., 0.98, 0.99, 1.0] (only keep thresholds at least 0.5 because every class is predicted with at least 0.5 likelihood in binary classification)
 
 all_coverages = []
 all_risks = []
