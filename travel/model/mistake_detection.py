@@ -764,13 +764,13 @@ def plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     
     # Customize axes for better readability
-    tick_vals = np.linspace(0.00, 1.0, 11)
+    tick_vals = np.linspace(0.0, 1.0, 11)
     ticks = tick_vals
     tick_labels = [f"{round(val, 2)}" for val in tick_vals]
     plt.xticks(ticks, tick_labels)
     plt.yticks(ticks, tick_labels)
 
-    plt.xlim([0.0, 1.0])
+    plt.xlim([0.5, 1.0])
     plt.ylim([0.0, 1.0])
 
     # Add legend
