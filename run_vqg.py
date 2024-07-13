@@ -173,7 +173,8 @@ if n_workers == 1:
         vqg_outputs = correct_vqg_outputs_with_nli(vqg_outputs, nli_model, nli_tokenizer)
         del nli_model, nli_tokenizer
 
-        # Save corrected VQG outputs
+        # Save corrected VQG outputs (and a copy of the uncorrected ones)
+        shutil.copy(os.path.join(this_results_dir, vqg_outputs_fname), os.path.join(this_results_dir, vqg_outputs_fname.replace(".json", "_uncorrected.json")))
         save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
 
 else:

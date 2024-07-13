@@ -159,6 +159,7 @@ def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs],
     all_procedures = [output.procedure_description for output in vqg_outputs.values() for question in output.questions]
     all_premises_yes = [f"{question} Yes" for question in all_questions]
     all_premises_no = [f"{question} No" for question in all_questions]
+    # TODO: we should also check whether answers to questions contradict each other... can do this by using one QA as premise and the other as hypothesis and vice versa
 
     new_answers = []
     with torch.no_grad():
@@ -180,7 +181,6 @@ def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs],
             logits_yes = logits_yes.cpu()
             logits_yes = logits_yes[:,[0,2]] # Take logits for contradiction and entailment only
             probs_yes = logits_yes.softmax(dim=1)
-
 
             # Run negated premise through NLI model
             x = nli_tokenizer.batch_encode_plus(list(zip(batch_premises_no, hypothesis)), 
