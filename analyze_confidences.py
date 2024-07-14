@@ -25,7 +25,8 @@ from travel.model.utils import expected_calibration_error
 # Configure results to graph here
 TASK = "ego4d"
 timestamp = datetime.datetime.now()
-output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}")
+run_folder_name = f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}"
+output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name)
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
@@ -47,7 +48,13 @@ results_fnames = [
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240712233421/preds_nli_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713091801/preds_nli_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240712233432/preds_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713191222/preds_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713191244/preds_nli_val.json"
 ]
+for results_fname in results_fnames:
+    if not os.path.exists(os.path.join(os.path.join("/".join(results_fname.split("/")[:-1]), run_folder_name))):
+        os.makedirs(os.path.join(os.path.join("/".join(results_fname.split("/")[:-1]), run_folder_name)))
+                 
 metrics = [
     json.load(open(fname.replace("preds_", "metrics_"), "r")) for fname in results_fnames
 ]
@@ -57,6 +64,8 @@ results_names = [
     "VQG2VQA (NLI corrected) + NLI",
     "VQG2VQA + Spatial + NLI",
     "VQG2VQA (NLI corrected) + Spatial + NLI",
+    "VQG2VQA (NLI corrected v2) + NLI",
+    "VQG2VQA (NLI corrected v2) + Spatial + NLI"
 ]
 # results_names = [
 #     "SuccessVQA",
@@ -202,7 +211,7 @@ ax.legend()
 fig.tight_layout()
 
 output_fname = f"confidence_comparison1_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
-save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for path in save_paths:
     fig.savefig(path)
 
@@ -233,7 +242,7 @@ ax.legend()
 fig.tight_layout()
 
 output_fname = f"confidence_comparison2_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
-save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for path in save_paths:
     fig.savefig(path)
 
@@ -259,7 +268,7 @@ for i in range(len(results_fnames)):
     lines.append("\n")
 
 output_fname = f"confidence_analysis_metrics_{'_'.join(results_names).replace(' ', '-')}.txt"
-save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for save_path in save_paths:
     with open(save_path, 'w') as f:
         f.write("\n".join(lines))
@@ -279,7 +288,7 @@ plt.legend(loc='best')
 plt.grid()
 
 output_fname = f"calibration_curves_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
-save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for path in save_paths:
     plt.savefig(path)
 
@@ -302,7 +311,7 @@ for i in range(len(results_fnames)):
         sp_recalls.append(spr)
 
     output_fname = f"selective_prediction_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
-    save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), output_fname)] + [os.path.join(output_dir, output_fname)]
+    save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
 
     plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)
 
@@ -332,12 +341,12 @@ for i in range(len(results_fnames)):
         sp_recalls.append(spr)
 
     output_fname = f"selective_prediction_calibrated_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
-    save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), output_fname)] + [os.path.join(output_dir, output_fname)]
+    save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
 
     plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)    
 
 
 output_fname = f"risk_coverage_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
-save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
+save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
 generate_risk_coverage_plot(all_coverages, all_risks, results_names, save_paths)
 

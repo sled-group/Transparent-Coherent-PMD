@@ -4,6 +4,7 @@ from tqdm import tqdm
 from transformers import TextGenerationPipeline
 from transformers.pipelines.pt_utils import KeyDataset
 from typing import Optional, Union
+import yaml
 
 from travel import set_random_seed
 from travel.constants import CACHE_FREQUENCY, RANDOM_SEED
@@ -152,6 +153,9 @@ def run_vqg_semi_structured(lm: TextGenerationPipeline, inputs: list[VQGInputs],
     save_vqg_outputs(vqg_outputs, save_path)
     return vqg_outputs
 
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+NLI_CORRECTION_MINIMUM_CONFIDENCE = config["vqg"]["nli_correction_minimum_confidence"]
 def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs], nli_model, nli_tokenizer) -> dict[Union[str, int], VQGOutputs]:
     """
     Uses a given Hugging Face AutoModelForSequenceClassification (or other callable that can be used in the same way) geared toward NLI to correct proposed answers in VQG outputs.
@@ -203,7 +207,7 @@ def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs],
                 # Correct answer if NLI model is at least 80% sure and there's a big difference between success probability for yes and no
                 success_prob = this_probs[success_answer]
                 relevance = abs(this_probs[1] - this_probs[0])
-                if success_prob >= 0.8 and relevance >= NLI_RELEVANCE_DELTA:
+                if success_prob >= NLI_CORRECTION_MINIMUM_CONFIDENCE and relevance >= NLI_RELEVANCE_DELTA:
                     new_answers.append("No" if success_answer == 0 else "Yes")
                 else:
                     new_answers.append("No" if old_a == 0 else "Yes")

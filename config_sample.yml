@@ -18,6 +18,8 @@ data:
     split_path: "/nfs/turbo/coe-chaijy/generated-data/ego4d/v2/splits"
     video_path: "/nfs/turbo/coe-chaijy-unreplicated/datasets/ego4d/v2/full_scale"
     misalignsrl_path: "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/ego4d_mismatch_srl_files/misalignsrl_more_samples_same_split.parquet"
+vqg:
+  nli_correction_minimum_confidence: 0.8
 grounding:
   owlv2_path: "google/owlv2-base-patch16"
   owl_threshold: 0.3

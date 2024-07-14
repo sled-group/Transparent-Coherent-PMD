@@ -13,7 +13,8 @@ from travel.model.mistake_detection import generate_det_curves, generate_roc_cur
 # Configure results to graph here
 TASK = "ego4d"
 timestamp = datetime.datetime.now()
-graph_dir = os.path.join(RESULTS_DIR, "analysis", TASK, f"classification_curves_{timestamp.strftime('%Y%m%d%H%M%S')}")
+run_folder_name = f"classification_curves_{timestamp.strftime('%Y%m%d%H%M%S')}"
+graph_dir = os.path.join(RESULTS_DIR, "analysis", TASK, run_folder_name)
 if not os.path.exists(graph_dir):
     os.makedirs(graph_dir)
 
@@ -115,13 +116,13 @@ for results_fnames, results_names, output_fname_prefix in [
 
     # Graph DET and ROC curves
     output_fname = f"det_comparison_{output_fname_prefix}_{'_'.join(results_names).replace(' ', '-')}.pdf"
-    save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(graph_dir, output_fname)]
+    save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(graph_dir, output_fname)]
     generate_det_curves(metrics,
                         results_names,
                         save_paths)
 
     output_fname = f"roc_comparison_{output_fname_prefix}_{'_'.join(results_names).replace(' ', '-')}.pdf"
-    save_paths = [os.path.join("/".join(fname.split("/")[:-1]), output_fname) for fname in results_fnames] + [os.path.join(graph_dir, output_fname)]
+    save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(graph_dir, output_fname)]
     generate_roc_curves(metrics,
                         results_names,
                         save_paths)
