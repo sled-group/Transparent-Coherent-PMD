@@ -84,7 +84,10 @@ if args.resume_dir is None:
     if args.debug:
         task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
     this_results_dir = os.path.join(task_name, lm_name, f"VQG_{task_name}")
-    this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}"
+    if args.correct_with_nli:
+        this_results_dir += f"_nli_corrected"
+    this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqg", this_results_dir)
     os.makedirs(this_results_dir)
 else:

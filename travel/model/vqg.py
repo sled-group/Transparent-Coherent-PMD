@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from tqdm import tqdm
 from transformers import TextGenerationPipeline
@@ -7,7 +8,7 @@ from typing import Optional, Union
 from travel import set_random_seed
 from travel.constants import CACHE_FREQUENCY, RANDOM_SEED
 from travel.data.vqg import VQGInputs, VQGOutputs, parse_vqg_outputs, save_vqg_outputs
-from travel.model.mistake_detection import NLI_BATCH_SIZE
+from travel.model.mistake_detection import NLI_BATCH_SIZE, NLI_RELEVANCE_DELTA
 
 # TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name? - at least for CaptainCook4D
 def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}, omit_failed_instances: bool=True) -> dict[str, Optional[VQGOutputs]]:
@@ -156,6 +157,7 @@ def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs],
     Uses a given Hugging Face AutoModelForSequenceClassification (or other callable that can be used in the same way) geared toward NLI to correct proposed answers in VQG outputs.
     """
     all_questions = [question for output in vqg_outputs.values() for question in output.questions]
+    all_answers = [answer for output in vqg_outputs.values() for answer in output.answers]
     all_procedures = [output.procedure_description for output in vqg_outputs.values() for question in output.questions]
     all_premises_yes = [f"{question} Yes" for question in all_questions]
     all_premises_no = [f"{question} No" for question in all_questions]
@@ -166,6 +168,7 @@ def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs],
         for i in tqdm(range(0, len(all_questions), NLI_BATCH_SIZE), desc=f"running NLI ({str(nli_model.device)})"):
             # Prepare the batch
             batch_questions = all_questions[i:i+NLI_BATCH_SIZE]
+            batch_answers = all_answers[i:i+NLI_BATCH_SIZE]
             batch_procedures = all_procedures[i:i+NLI_BATCH_SIZE]
             batch_premises_yes = all_premises_yes[i:i+NLI_BATCH_SIZE]
             batch_premises_no = all_premises_no[i:i+NLI_BATCH_SIZE]
@@ -194,7 +197,16 @@ def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs],
             
             probs = torch.cat((probs_no[:, 1].unsqueeze(1), probs_yes[:, 1].unsqueeze(1)), dim=1)
             success_answers = torch.argmax(probs, dim=1)
-            new_answers += ["No" if a == 0 else "Yes" for a in success_answers.tolist()]
+            
+            # TODO: may need to change this logic later or update threshold
+            for old_a, success_answer, this_probs in zip(batch_answers, success_answers.tolist(), probs.tolist()):
+                # Correct answer if NLI model is at least 80% sure and there's a big difference between success probability for yes and no
+                success_prob = this_probs[success_answer]
+                relevance = abs(this_probs[1] - this_probs[0])
+                if success_prob >= 0.8 and relevance >= NLI_RELEVANCE_DELTA:
+                    new_answers.append("No" if success_answer == 0 else "Yes")
+                else:
+                    new_answers.append("No" if old_a == 0 else "Yes")
 
             # TODO: consider calculating relevance here later and use it to flag bad questions?
             if torch.cuda.is_available():

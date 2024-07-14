@@ -30,31 +30,45 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 # Configure arguments here
+# results_fnames = [
+#     "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/preds_heuristic_val.json",
+#     "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_target_object_counter1.0_20240702182300/preds_heuristic_val.json",
+#     "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_heuristic_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_nli_val.json",
+#     "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_heuristic_val.json",
+#     "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_nli_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_blur45.0_20240709234703/preds_nli_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/preds_heuristic_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/preds_nli_val.json",
+# ]
 results_fnames = [
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_target_object_counter1.0_20240702182300/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_20240701115231/preds_nli_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_heuristic_val.json",
-    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial1.0_20240701115730/preds_nli_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_blur45.0_20240709234703/preds_nli_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/preds_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/preds_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/SuccessVQA_ego4d_debug500_llava-1.5-7b-hf_20240712182848/preds_heuristic_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713091808/preds_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240712233421/preds_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713091801/preds_nli_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240712233432/preds_nli_val.json",
 ]
 metrics = [
     json.load(open(fname.replace("preds_", "metrics_"), "r")) for fname in results_fnames
 ]
 results_names = [
     "SuccessVQA",
-    "SuccessVQA + TOC",
-    "VQG2VQA",
     "VQG2VQA + NLI",
-    "VQG2VQA + Spatial",
+    "VQG2VQA (NLI corrected) + NLI",
     "VQG2VQA + Spatial + NLI",
-    "VQG2VQA + Spatial (Blur k45) + NLI",
-    "VQG2VQA + Spatial (No Rephrase)",
-    "VQG2VQA + Spatial (No Rephrase) + NLI"
+    "VQG2VQA (NLI corrected) + Spatial + NLI",
 ]
+# results_names = [
+#     "SuccessVQA",
+#     "SuccessVQA + TOC",
+#     "VQG2VQA",
+#     "VQG2VQA + NLI",
+#     "VQG2VQA + Spatial",
+#     "VQG2VQA + Spatial + NLI",
+#     "VQG2VQA + Spatial (Blur k45) + NLI",
+#     "VQG2VQA + Spatial (No Rephrase)",
+#     "VQG2VQA + Spatial (No Rephrase) + NLI"
+# ]
 
 print("(0) Compiling pred data...")
 mistake_probs = [[] for _ in results_fnames]
