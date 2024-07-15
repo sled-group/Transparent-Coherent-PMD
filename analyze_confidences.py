@@ -215,9 +215,8 @@ save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, out
 for path in save_paths:
     fig.savefig(path)
 
-x = np.arange(len(results_names))  # the label locations
-
 # Scatter plot of mistake vs success confidence
+x = np.arange(len(results_names))  # the label locations
 fig, ax = plt.subplots()
 fig.set_figwidth(10)
 fig.set_figheight(7)
@@ -245,6 +244,57 @@ output_fname = f"confidence_comparison2_val_{'_'.join(results_names).replace(' '
 save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for path in save_paths:
     fig.savefig(path)
+
+for i, result_fname in enumerate(results_fnames):
+    plt.clf()
+    result_name = results_names[i]
+
+    # Define the bins
+    bins = np.linspace(0, 1.0, 11)
+
+    # Compute histogram data
+    hist1, _ = np.histogram(mistake_probs[i], bins=bins)
+    hist2, _ = np.histogram(success_probs[i], bins=bins)
+
+    # Plot the stacked histogram
+    bars1 = plt.bar(bins[:-1], hist1, width=bins[1]-bins[0], label='Mistake Examples', color="red", align='edge')
+    bars2 = plt.bar(bins[:-1], hist2, width=bins[1]-bins[0], bottom=hist1, label='Success Examples', color="green", align='edge')
+
+    # Add labels with the proportion of mistake vs. success probs
+    for bar1, bar2 in zip(bars1, bars2):
+        total = bar1.get_height() + bar2.get_height()
+        if total > 0:
+            proportion1 = bar1.get_height() / total
+            proportion2 = bar2.get_height() / total
+            plt.text(
+                bar1.get_x() + bar1.get_width() / 2,
+                bar1.get_height() / 2,
+                f'{proportion1:.2f}',
+                ha='center',
+                va='center',
+                color='white'
+            )
+            plt.text(
+                bar2.get_x() + bar2.get_width() / 2,
+                bar1.get_height() + bar2.get_height() / 2,
+                f'{proportion2:.2f}',
+                ha='center',
+                va='center',
+                color='white'
+            )
+
+    # Add labels and title
+    plt.xlabel('Mistake Probability')
+    plt.ylabel('Count')
+    plt.legend()
+
+    # Display the plot
+    plt.show()
+
+    output_fname = f"confidence_histogram_val_{result_name.replace(' ', '-')}.pdf"
+    save_paths = [os.path.join("/".join(result_fname.split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
+    for path in save_paths:
+        fig.savefig(path)
 
 print("(1) Confidence graphs generated!")
 
