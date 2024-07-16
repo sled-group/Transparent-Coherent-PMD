@@ -1,8 +1,8 @@
 # Need this call at the beginning of every script to set random seeds and set the HF cache
-import itertools
 from travel import init_travel
 init_travel()
 
+from accelerate.utils import InitProcessGroupKwargs
 import argparse
 from collections import defaultdict
 from datasets import Dataset
@@ -12,11 +12,14 @@ from peft import LoraConfig, prepare_model_for_kbit_training
 from pprint import pprint
 import random
 import torch
+import torch.distributed as dist
 from torch.distributed.elastic.multiprocessing.errors import record
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from trl import DPOTrainer, DPOConfig, SFTTrainer, SFTConfig, PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead
+import wandb
 
+from travel.constants import HF_TOKEN, DEFAULT_WANDB_PROJECT
 from travel.data.vqg import generate_vqg_prompt, generate_vqg_prompt_icl, VQG_DEMONSTRATIONS
 from travel.data.vqg_learning import load_vqg_training_examples, VQGTrainingExample
 
@@ -56,12 +59,16 @@ def main():
     parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
     args = parser.parse_args()
 
+    # Initialize DDP
+    if args.training_mode == "PPO":
+        dist.init_process_group(backend='gloo')
+
     # Load local rank from torchrun if we have it (for debugging purpose)
     local_rank = int(os.environ["LOCAL_RANK"]) if "LOCAL_RANK" in os.environ else 0
     global_rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
     world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
 
-    if args.val_data_path is None:
+    if args.val_data_path is None and args.training_mode != "PPO":
         args.val_data_path = args.training_data_path
 
     print("World size:", world_size)
@@ -74,12 +81,15 @@ def main():
     print(f"({global_rank}) Preparing training and validation data...")
     data = {
         "train": load_vqg_training_examples(args.training_data_path, "train"),
-        "val": load_vqg_training_examples(args.val_data_path, "val")
-    } # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
+    }
+    if args.training_mode != "PPO":
+        data["val"] = load_vqg_training_examples(args.val_data_path, "val") 
+        # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
+
     # If a path to a .json file was provided, change it to the directory the .json file is in
     if args.training_data_path.endswith(".json"):
         args.training_data_path = "/".join(args.training_data_path.split("/")[:-1])
-    if args.val_data_path.endswith(".json"):
+    if args.val_data_path is not None and args.val_data_path.endswith(".json"):
         args.val_data_path = "/".join(args.val_data_path.split("/")[:-1])
     
     # Set up LM for training
@@ -90,12 +100,13 @@ def main():
         bnb_4bit_compute_dtype=torch.bfloat16,
         bnb_4bit_use_double_quant=True,
     )
-    tokenizer = AutoTokenizer.from_pretrained(args.lm_name, add_eos_token=True, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.lm_name, add_eos_token=True, use_fast=True, token=HF_TOKEN)
     tokenizer.pad_token = tokenizer.eos_token
     # tokenizer.padding_side = "left"
     if args.training_mode != "PPO":
         model = AutoModelForCausalLM.from_pretrained(args.lm_name, device_map="auto",
                                                     quantization_config=bnb_config, 
+                                                    token=HF_TOKEN,
                                                     trust_remote_code=True)
         model = prepare_model_for_kbit_training(model)
 
@@ -118,7 +129,14 @@ def main():
         peft_config = model.peft_config['default']
 
     if args.training_mode == "PPO":
-        model = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, peft_config=peft_config, quantization_config=bnb_config, device_map="auto")
+        torch.cuda.set_device(local_rank)
+        model = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, 
+                                                                  peft_config=peft_config, 
+                                                                  quantization_config=bnb_config, 
+                                                                  device_map="auto",
+                                                                  trust_remote_code=True,
+                                                                  token=HF_TOKEN)
+        model.pretrained_model = prepare_model_for_kbit_training(model.pretrained_model)
 
     # Set up output directory, training args, and wandb
     if args.resume_dir is None:
@@ -137,6 +155,8 @@ def main():
         this_results_dir = args.resume_dir
         output_dir_name = "/".join(this_results_dir.split("/")[-2:])
         wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
+    if args.training_mode == "PPO" and global_rank == 0:
+        wandb.init(name=wandb_run_name)
 
     # Prepare training examples based on preference scores
     datasets = {}
@@ -237,11 +257,16 @@ def main():
                     responses.append("\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex.questions)]))
                     rewards.append(ex.preference_score)
                     
+            if args.debug:
+                prompt = prompt[:10]
+                responses = responses[:10]
+                rewards = rewards[:10]
+
             dataset = Dataset.from_dict(
                 {
                     "prompt": prompt,
                     "response": responses,
-                    "reward": rewards
+                    "reward": rewards,
                 }
             )
 
@@ -299,44 +324,52 @@ def main():
         print(f"({global_rank}) Starting model training...")
         trainer.train(resume_from_checkpoint=args.resume_dir is not None)
 
-        print("Saving best model...")
-        trainer.save_model(this_results_dir)        
+        if global_rank == 0:
+            print(f"({global_rank}) Saving best model...")
+            trainer.save_model(this_results_dir)        
     else:
         # TODO: make sure this can handle GPU parallel
-        config = PPOConfig(
+        ppo_config = PPOConfig(
             model_name=args.lm_name,
             learning_rate=args.learning_rate,
-            remove_unused_columns=False
+            batch_size=args.train_batch_size,
+            mini_batch_size=args.train_batch_size // 4,
+            gradient_accumulation_steps=4,
+            remove_unused_columns=False,
+            optimize_cuda_cache=True,
+            # accelerator_kwargs={"kwargs_handlers": [InitProcessGroupKwargs(backend="gloo")]},
         )
         ppo_trainer = PPOTrainer(
             model=model,
-            config=config,
+            config=ppo_config,
             dataset=datasets["train"],
             tokenizer=tokenizer,
         )
 
         model.train()
-        for epoch in tqdm(range(args.n_epochs), "epoch"):
-            for batch in tqdm(ppo_trainer.dataloader, desc="batch"):
-                pprint(batch.keys())
+        for epoch in tqdm(range(args.n_epochs), f"({global_rank}) epoch"):
+            for batch in tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch"):
 
                 #### Run PPO step
-                query_tensor = [tokenizer(q, return_tensors="pt")['input_ids'] for q in batch["prompt"]]
-                response_tensor = [tokenizer(r, return_tensors="pt")['input_ids'] for r in batch["response"]]
+                query_tensor = [tokenizer(q, return_tensors="pt")['input_ids'][0] for q in batch["prompt"]]
+                response_tensor = [tokenizer(r, return_tensors="pt")['input_ids'][0] for r in batch["response"]]
                 reward = [torch.tensor(r) for r in batch['reward']]
                 stats = ppo_trainer.step(query_tensor, response_tensor, reward)
                 ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
-
-                pprint(stats)
+                if global_rank == 0:
+                    global_stats = ppo_trainer.gather_stats()
+                    wandb.log(global_stats | {"ppo/epoch": epoch, "ppo/reward": np.mean(torch.tensor(reward).cpu().numpy())})
 
                 #### Save model
-                if epoch % 5 == 0:
+                if epoch % 5 == 0 and global_rank == 0:
                     if not os.path.exists(os.path.join(this_results_dir, f"epoch{epoch}")):
                         os.makedirs(os.path.join(this_results_dir, f"epoch{epoch}"))
                     ppo_trainer.save_pretrained(os.path.join(this_results_dir, f"epoch{epoch}"))    
 
         #### Save model
-        ppo_trainer.save_pretrained(this_results_dir)        
+        if global_rank == 0:
+            ppo_trainer.save_pretrained(this_results_dir)        
+            wandb.finish()
 
 if __name__ == "__main__":
     main()

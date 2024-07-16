@@ -15,3 +15,5 @@ IMAGES_CHUNK_SIZE = int(config["data"]["images_chunk_size"]) # When processing l
 for dir in DATA_CACHE_DIR, MODEL_CACHE_DIR, RESULTS_DIR:
     if not os.path.exists(dir):
         os.makedirs(dir)
+
+DEFAULT_WANDB_PROJECT = "TRAVEl"

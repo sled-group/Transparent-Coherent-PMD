@@ -4,7 +4,7 @@ import random
 import resource
 import torch
 
-from travel.constants import RANDOM_SEED, MODEL_CACHE_DIR
+from travel.constants import RANDOM_SEED, MODEL_CACHE_DIR, DEFAULT_WANDB_PROJECT
 
 # Set random seed
 def set_random_seed(random_seed=RANDOM_SEED):
@@ -14,12 +14,14 @@ def set_random_seed(random_seed=RANDOM_SEED):
     torch.manual_seed(random_seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(random_seed)
+    from trl import set_seed
+    set_seed(random_seed)
 
 def set_hf_cache():
     """Sets Hugging Face cache directory as configured in config.yml. This must be called before importing transformers anywhere else."""
     os.environ['HF_HOME'] = MODEL_CACHE_DIR
 
-def configure_wandb(wandb_project_name: str="TRAVEl"):
+def configure_wandb(wandb_project_name: str=DEFAULT_WANDB_PROJECT):
     """Sets Weights & Biases project name."""
     os.environ["WANDB_PROJECT"] = wandb_project_name
 
@@ -29,8 +31,8 @@ def init_travel(wandb_project_name: str="TRAVEl"):
 
     :param wandb_project_name: Name for project in Weights & Biases (`wandb`).
     """
-    set_random_seed()
     set_hf_cache()
+    set_random_seed()
     configure_wandb(wandb_project_name)
 
 def set_memory_limit(n_bytes):
