@@ -461,7 +461,7 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
     assert n_demonstrations <= len(VQG_DEMONSTRATIONS), f"Requested {n_demonstrations} in-context demonstrations for VQG, but only {len(VQG_DEMONSTRATIONS)} are available in travel.model.vqg.VQG_DEMONSTRATIONS."
     demonstrations = VQG_DEMONSTRATIONS
     random.shuffle(demonstrations) # Shuffle demonstrations for each prompt to ensure the ordering is not sub-optimal
-    demonstrations = demonstrations[:n_demonstrations]
+    demonstrations = demonstrations[:n_demonstrations] # We'll randomly select n_demonstrations of the available demonstrations
     examples = [generate_vqg_example(demo) for demo in demonstrations]
     examples += [generate_vqg_prompt(procedure_description)]
     return "\n\n".join(examples)

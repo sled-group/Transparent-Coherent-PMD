@@ -9,7 +9,7 @@ import json
 import os
 import shutil
 import torch
-from transformers import pipeline, BitsAndBytesConfig
+from transformers import pipeline, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer
 
 from travel.constants import RESULTS_DIR, HF_TOKEN
 from travel.data.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs
@@ -17,13 +17,16 @@ from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d.constants import RECIPE_STEPS
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.utils import split_list_into_partitions
-from travel.model.vqg import run_vqg
+from travel.model.mistake_detection import NLI_MODEL_PATH
+from travel.model.vqg import run_vqg, correct_vqg_outputs_with_nli
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks]) # TODO: support running for Ego4D's evaluation sets
 parser.add_argument("--partition", type=str, required=False, choices=["val", "test"], help="Partition to run VQG on. For some tasks with a consistent set of procedures shared across partitions, this may not be required.")
 parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
 parser.add_argument("--n_demonstrations", type=int, default=20, choices=range(0, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
+parser.add_argument("--semi_structured_prompt", action="store_true", help="Pass this argument in the zero-shot setting to prompt the LM in a semi-structured way to ensure output follows the desired format.")
+parser.add_argument("--correct_with_nli", action="store_true", help="Pass this argument to correct LM's proposed answers to questions with a pre-trained NLI model.")
 parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
 parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
 parser.add_argument("--batch_size", type=int, default=12, help="Batch size for VQG.")
@@ -46,6 +49,10 @@ bnb_config = BitsAndBytesConfig(
 )
 model_kwargs = {"quantization_config": bnb_config}
 n_workers = 1 if torch.cuda.device_count() <= 1 else torch.cuda.device_count()
+if n_workers > 1 and args.correct_with_nli:
+    raise NotImplementedError("Not supporting multi-GPU parallelization with --correct_with_nli yet.")
+    # TODO: convert this script to use srun instead then support correct_with_nli in parallel settings
+
 lms = []
 for worker_index in range(n_workers):
     if torch.cuda.is_available():
@@ -73,11 +80,14 @@ print(lm.model.generation_config)
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
     lm_name = args.lm_name.split('/')[-1]
-    this_results_dir = os.path.join(args.task, lm_name, f"VQG_{args.task}")
-
+    task_name = args.task
     if args.debug:
-        this_results_dir += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
-    this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+        task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
+    this_results_dir = os.path.join(task_name, lm_name, f"VQG_{task_name}")
+    this_results_dir += f"_{lm_name}_icl{args.n_demonstrations}"
+    if args.correct_with_nli:
+        this_results_dir += f"_nli_corrected"
+    this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqg", this_results_dir)
     os.makedirs(this_results_dir)
 else:
@@ -141,20 +151,35 @@ else:
 prompts = [p for p in prompts if p.procedure_id not in vqg_outputs]
 prompt_ids = [p.procedure_id for p in prompts]
 
-if len(prompts) == 0:
+if len(prompts) == 0 and not args.correct_with_nli:
     raise ValueError(f"The passed --resume_dir {args.resume_dir} already has all VQG outputs for {args.partition} partition!")
 
 # Run prompts through LM to generate visual questions (and save VQG outputs)
 if n_workers == 1:
     print("Running VQG sequentially...")
-    vqg_outputs = run_vqg(
-        lm,
-        prompts,
-        prompt_ids,
-        batch_size=args.batch_size,
-        save_path=os.path.join(this_results_dir, vqg_outputs_fname),
-        vqg_outputs=vqg_outputs # Will send in partly completed VQG outputs if we have them
-    )
+    if len(prompts) > 0:
+        vqg_outputs = run_vqg(
+            lm,
+            prompts,
+            prompt_ids,
+            batch_size=args.batch_size,
+            save_path=os.path.join(this_results_dir, vqg_outputs_fname),
+            vqg_outputs=vqg_outputs # Will send in partly completed VQG outputs if we have them
+        )
+
+    # If passed --correct_with_nli, use a pre-trained NLI to correct LM's proposed answers (completely replaces them, later can just make LM only generate questions)
+    if args.correct_with_nli:
+        print("Correcting VQG outputs with NLI model...")
+        del lm
+        nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
+        nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
+        vqg_outputs = correct_vqg_outputs_with_nli(vqg_outputs, nli_model, nli_tokenizer)
+        del nli_model, nli_tokenizer
+
+        # Save corrected VQG outputs (and a copy of the uncorrected ones)
+        shutil.copy(os.path.join(this_results_dir, vqg_outputs_fname), os.path.join(this_results_dir, vqg_outputs_fname.replace(".json", "_uncorrected.json")))
+        save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
+
 else:
     # Split up remaining prompts and prompt IDs by GPU
     prompts_split = split_list_into_partitions(prompts, n_workers)

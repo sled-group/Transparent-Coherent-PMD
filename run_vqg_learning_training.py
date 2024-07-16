@@ -1,23 +1,25 @@
 # Need this call at the beginning of every script to set random seeds and set the HF cache
-import itertools
 from travel import init_travel
 init_travel()
 
+from accelerate.utils import InitProcessGroupKwargs
 import argparse
 from collections import defaultdict
 from datasets import Dataset
-import datetime
 import numpy as np
 import os
 from peft import LoraConfig, prepare_model_for_kbit_training
 from pprint import pprint
 import random
 import torch
+import torch.distributed as dist
 from torch.distributed.elastic.multiprocessing.errors import record
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from trl import DPOTrainer, DPOConfig, SFTTrainer, SFTConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
+from trl import DPOTrainer, DPOConfig, SFTTrainer, SFTConfig, PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead
+import wandb
 
+from travel.constants import HF_TOKEN, DEFAULT_WANDB_PROJECT
 from travel.data.vqg import generate_vqg_prompt, generate_vqg_prompt_icl, VQG_DEMONSTRATIONS
 from travel.data.vqg_learning import load_vqg_training_examples, VQGTrainingExample
 
@@ -44,7 +46,7 @@ def main():
     parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
     parser.add_argument("--run_id", type=str, help="Unique ID for this run. Usually a timestamp string, e.g., 20240708165001.")
     parser.add_argument("--resume_dir", type=str, help="Path to output directory from previous run to resume from (starts from last checkpoint).")
-    parser.add_argument("--training_mode", type=str, default="DPO", choices=["DPO", "SFT"], help="Which mode of training to run (SFT or DPO)." )
+    parser.add_argument("--training_mode", type=str, default="DPO", choices=["PPO", "SFT", "DPO"], help="Which mode of training to run (PPO, SFT, or DPO)." )
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
@@ -57,12 +59,16 @@ def main():
     parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
     args = parser.parse_args()
 
+    # Initialize DDP
+    if args.training_mode == "PPO":
+        dist.init_process_group(backend='gloo')
+
     # Load local rank from torchrun if we have it (for debugging purpose)
     local_rank = int(os.environ["LOCAL_RANK"]) if "LOCAL_RANK" in os.environ else 0
     global_rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
     world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
 
-    if args.val_data_path is None:
+    if args.val_data_path is None and args.training_mode != "PPO":
         args.val_data_path = args.training_data_path
 
     print("World size:", world_size)
@@ -75,17 +81,84 @@ def main():
     print(f"({global_rank}) Preparing training and validation data...")
     data = {
         "train": load_vqg_training_examples(args.training_data_path, "train"),
-        "val": load_vqg_training_examples(args.val_data_path, "val")
     }
+    if args.training_mode != "PPO":
+        data["val"] = load_vqg_training_examples(args.val_data_path, "val") 
+        # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
+
     # If a path to a .json file was provided, change it to the directory the .json file is in
     if args.training_data_path.endswith(".json"):
         args.training_data_path = "/".join(args.training_data_path.split("/")[:-1])
-    if args.val_data_path.endswith(".json"):
+    if args.val_data_path is not None and args.val_data_path.endswith(".json"):
         args.val_data_path = "/".join(args.val_data_path.split("/")[:-1])
     
-    # (Save testing data for downstream Ego4D-SuccessVQA evaluation)
+    # Set up LM for training
+    print(f"({global_rank}) Loading LM...")
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(args.lm_name, add_eos_token=True, use_fast=True, token=HF_TOKEN)
+    tokenizer.pad_token = tokenizer.eos_token
+    # tokenizer.padding_side = "left"
+    if args.training_mode != "PPO":
+        model = AutoModelForCausalLM.from_pretrained(args.lm_name, device_map="auto",
+                                                    quantization_config=bnb_config, 
+                                                    token=HF_TOKEN,
+                                                    trust_remote_code=True)
+        model = prepare_model_for_kbit_training(model)
 
-    # Pair examples based on preference scores
+        if global_rank == 0:
+            pprint(model.__dict__)
+            print_trainable_parameters(model)
+            print(f"Memory footprint: {model.get_memory_footprint() / 1e9} GB")
+    else:
+        model = None
+
+    if model is None or not getattr(model, "peft_config", None):
+        peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
+                                inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
+                                r=args.lora_r,                           # dimension of low-rank matrices
+                                lora_alpha=args.lora_alpha,                  # scaling coefficient of weight update
+                                target_modules="all-linear",
+                                lora_dropout=0.1,               # dropout regularization on LoRA weights
+                                bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
+    else:
+        peft_config = model.peft_config['default']
+
+    if args.training_mode == "PPO":
+        torch.cuda.set_device(local_rank)
+        model = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, 
+                                                                  peft_config=peft_config, 
+                                                                  quantization_config=bnb_config, 
+                                                                  device_map="auto",
+                                                                  trust_remote_code=True,
+                                                                  token=HF_TOKEN)
+        model.pretrained_model = prepare_model_for_kbit_training(model.pretrained_model)
+
+    # Set up output directory, training args, and wandb
+    if args.resume_dir is None:
+        lm_name = args.lm_name.split('/')[-1] if "SFT" not in args.lm_name else model.peft_config['default'].base_model_name_or_path.split('/')[-1]
+        output_dir_name = f"{args.training_mode}_{args.run_id}"
+        if "SFT" in args.lm_name and args.training_mode == "DPO":
+            output_dir_name = f"{args.lm_name.split('/')[-1]}-{output_dir_name}"
+        output_dir_name = os.path.join(lm_name, output_dir_name)
+        output_dir_name += f"_icl{args.n_demonstrations}"
+        if args.debug:
+            output_dir_name += "_debug"
+        this_results_dir = os.path.join(args.training_data_path, output_dir_name)
+        wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
+    else:
+        # Recover original output directory and wandb run name from resume dir
+        this_results_dir = args.resume_dir
+        output_dir_name = "/".join(this_results_dir.split("/")[-2:])
+        wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
+    if args.training_mode == "PPO" and global_rank == 0:
+        wandb.init(name=wandb_run_name)
+
+    # Prepare training examples based on preference scores
     datasets = {}
     for partition in data:
         
@@ -114,171 +187,189 @@ def main():
             new_data_paired[procedure_id] = new_question_set_data
         data_paired = new_data_paired
 
-        pairs = []
-        for procedure_id in data_paired:
+        if args.training_mode != "PPO":
+            pairs = []
+            for procedure_id in data_paired:
 
-            # if partition != "train":
+                # if partition != "train":
 
-            # Randomly split the list into two halves and create pairs (want smaller, varied data for evaluation)
-            random.shuffle(data_paired[procedure_id])
-            split_point = len(data_paired[procedure_id]) // 2
-            p1 = data_paired[procedure_id][:split_point]
-            p2 = data_paired[procedure_id][split_point:]
-            if len(p2) > len(p1):
-                p1 += [random.choice(data_paired[procedure_id])]
-            assert len(p1) == len(p2), "Halves of paired outputs aren't the same size!"
-            pairs += [(tp1, tp2) for tp1, tp2 in zip(p1,p2)]
+                # Randomly split the list into two halves and create pairs (want smaller, varied data for evaluation)
+                random.shuffle(data_paired[procedure_id])
+                split_point = len(data_paired[procedure_id]) // 2
+                p1 = data_paired[procedure_id][:split_point]
+                p2 = data_paired[procedure_id][split_point:]
+                if len(p2) > len(p1):
+                    p1 += [random.choice(data_paired[procedure_id])]
+                assert len(p1) == len(p2), "Halves of paired outputs aren't the same size!"
+                pairs += [(tp1, tp2) for tp1, tp2 in zip(p1,p2)]
 
-            # else:
-            #     # Take all combinations of questions sets for this procedure ID (just want more data for training)
-            #     pairs += itertools.combinations(data_paired[procedure_id], 2)
+                # else:
+                #     # Take all combinations of questions sets for this procedure ID (just want more data for training)
+                #     pairs += itertools.combinations(data_paired[procedure_id], 2)
 
-        prompt = []
-        chosen = []
-        rejected = []
-        for ex1, ex2 in tqdm(pairs, "Pairing examples"):
-            if not args.debug:
-                assert ex1.procedure_description == ex2.procedure_description, f"Procedures for training pair don't match!\n\n{ex1.procedure_description}\n\n{ex2.procedure_description}"
-            # prompt.append(generate_vqg_prompt(ex1.procedure_description))
-            # prompt.append(ex1.prompt)
-            prompt.append(generate_vqg_prompt_icl(ex1.procedure_description, args.n_demonstrations))
+            prompt = []
+            chosen = []
+            rejected = []
+            for ex1, ex2 in tqdm(pairs, "Pairing examples"):
+                if not args.debug:
+                    assert ex1.procedure_description == ex2.procedure_description, f"Procedures for training pair don't match!\n\n{ex1.procedure_description}\n\n{ex2.procedure_description}"
+                # prompt.append(generate_vqg_prompt(ex1.procedure_description))
+                # prompt.append(ex1.prompt)
+                prompt.append(generate_vqg_prompt_icl(ex1.procedure_description, args.n_demonstrations))
 
-            gen1 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex1.questions)])
-            gen2 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex2.questions)])
+                gen1 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex1.questions)])
+                gen2 = "\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex2.questions)])
 
-            if ex1.preference_score > ex2.preference_score:
-                chosen.append(gen1)
-                rejected.append(gen2)
-            else:
-                chosen.append(gen2)
-                rejected.append(gen1)
+                if ex1.preference_score > ex2.preference_score:
+                    chosen.append(gen1)
+                    rejected.append(gen2)
+                else:
+                    chosen.append(gen2)
+                    rejected.append(gen1)
 
-        # Cut down data if debug mode
-        if args.debug:
-            prompt = prompt[:100]
-            chosen = chosen[:100]
-            rejected = rejected[:100]
+            # Cut down data if debug mode
+            if args.debug:
+                prompt = prompt[:100]
+                chosen = chosen[:100]
+                rejected = rejected[:100]
 
-        if args.training_mode == "DPO":
-            dataset = Dataset.from_dict({
+            if args.training_mode == "DPO":
+                dataset = Dataset.from_dict({
+                        "prompt": prompt,
+                        "chosen": chosen,
+                        "rejected": rejected,
+                    })
+            elif args.training_mode == "SFT":
+                # TODO: should this actually just take one best question set per prompt so we aren't training the model on competing examples?
+                dataset = Dataset.from_dict({
+                        "prompt": prompt + prompt,
+                        "completion": chosen + rejected,
+                    })
+
+        else:
+            prompt = []
+            responses = []
+            rewards = []
+
+            for procedure_id in data_paired:
+                for ex in data_paired[procedure_id]:
+                    prompt.append(generate_vqg_prompt_icl(ex.procedure_description, args.n_demonstrations))
+                    responses.append("\n".join([f"{qi+1}. {question}" for qi, question in enumerate(ex.questions)]))
+                    rewards.append(ex.preference_score)
+                    
+            if args.debug:
+                prompt = prompt[:10]
+                responses = responses[:10]
+                rewards = rewards[:10]
+
+            dataset = Dataset.from_dict(
+                {
                     "prompt": prompt,
-                    "chosen": chosen,
-                    "rejected": rejected,
-                })
-        elif args.training_mode == "SFT":
-            # TODO: should this actually just take one best question set per prompt so we aren't training the model on competing examples?
-            dataset = Dataset.from_dict({
-                    "prompt": prompt + prompt,
-                    "completion": chosen + rejected,
-                })
+                    "response": responses,
+                    "reward": rewards,
+                }
+            )
 
         datasets[partition] = dataset
 
     for p in datasets:
         print(f"{p} data partition: {len(datasets[p])} examples")
 
-    # Set up LM for training
-    print(f"({global_rank}) Loading LM...")
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(args.lm_name, add_eos_token=True, use_fast=True)
-    tokenizer.pad_token = tokenizer.eos_token
-    # tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(args.lm_name, device_map="auto",
-                                                 quantization_config=bnb_config, 
-                                                 trust_remote_code=True)
-    model = prepare_model_for_kbit_training(model)
+    if args.training_mode != "PPO":
+        config_class = DPOConfig if args.training_mode == "DPO" else SFTConfig
+        training_args = config_class(output_dir=this_results_dir,
+                                        per_device_train_batch_size=args.train_batch_size,
+                                        per_device_eval_batch_size=args.eval_batch_size,
+                                        learning_rate=args.learning_rate,
+                                        #   optim='paged_adamw_8bit', # TODO: set this rather than rely on default
+                                        bf16=True,
+                                        num_train_epochs=args.n_epochs,
+                                        gradient_accumulation_steps=1,
+                                        save_strategy=args.save_strategy,
+                                        save_total_limit=3,
+                                        save_only_model=False,
+                                        remove_unused_columns=False,
+                                        evaluation_strategy="epoch",
+                                        report_to="wandb",
+                                        logging_strategy="steps",
+                                        logging_steps=1 if args.debug else 10,
+                                        run_name=wandb_run_name,
+                                        ddp_backend="gloo",
+                                        ddp_find_unused_parameters=False)
 
-    if global_rank == 0:
-        pprint(model.__dict__)
-        print_trainable_parameters(model)
-        print(f"Memory footprint: {model.get_memory_footprint() / 1e9} GB")
+        if args.training_mode == "DPO":
+            trainer = DPOTrainer(
+                model,
+                args=training_args,
+                beta=args.dpo_beta,
+                max_prompt_length=int(1.5 * max([len(p.split()) for p in prompt])),
+                max_length=int(1.5 * max([len(g.split()) for g in chosen + rejected])),
+                train_dataset=datasets["train"],
+                eval_dataset=datasets["val"],
+                tokenizer=tokenizer,
+                peft_config=peft_config,
+            )
+        elif args.training_mode == "SFT":
+            trainer = SFTTrainer(
+                model=model,
+                train_dataset=datasets["train"],
+                eval_dataset=datasets["val"],
+                peft_config=peft_config,
+                max_seq_length=int(1.5 * max([len(p.split()) + len(g.split()) for p, g in zip(prompt + prompt, chosen + rejected)])),
+                packing=True,
+                tokenizer=tokenizer,
+                args=training_args,         
+            )        
 
-    # if not getattr(model, "peft_config", None):
-    #     peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
-    #                             inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
-    #                             r=args.lora_r,                           # dimension of low-rank matrices
-    #                             lora_alpha=args.lora_alpha,                  # scaling coefficient of weight update
-    #                             target_modules="all-linear",
-    #                             lora_dropout=0.1,               # dropout regularization on LoRA weights
-    #                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
-    # else:
-    #     peft_config = model.peft_config['default']
+        print(f"({global_rank}) Starting model training...")
+        trainer.train(resume_from_checkpoint=args.resume_dir is not None)
 
-    # TODO: change this back if it doesn't help
-    peft_config = None
-
-    # Set up output directory, training args, and wandb
-    if args.resume_dir is None:
-        lm_name = args.lm_name.split('/')[-1] if "SFT" not in args.lm_name else model.peft_config['default'].base_model_name_or_path.split('/')[-1]
-        output_dir_name = f"{args.training_mode}_{args.run_id}"
-        if "SFT" in args.lm_name and args.training_mode == "DPO":
-            output_dir_name = f"{args.lm_name.split('/')[-1]}-{output_dir_name}"
-        output_dir_name = os.path.join(lm_name, output_dir_name)
-        if args.debug:
-            output_dir_name += "_debug"
-        this_results_dir = os.path.join(args.training_data_path, output_dir_name)
-        wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
+        if global_rank == 0:
+            print(f"({global_rank}) Saving best model...")
+            trainer.save_model(this_results_dir)        
     else:
-        # Recover original output directory and wandb run name from resume dir
-        this_results_dir = args.resume_dir
-        output_dir_name = "/".join(this_results_dir.split("/")[-2:])
-        wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}_{'_'.join(args.training_data_path.split('/')[-2:])}"
-
-    config_class = DPOConfig if args.training_mode == "DPO" else SFTConfig
-    training_args = config_class(output_dir=this_results_dir,
-                                      per_device_train_batch_size=args.train_batch_size,
-                                      per_device_eval_batch_size=args.eval_batch_size,
-                                      learning_rate=args.learning_rate,
-                                    #   optim='paged_adamw_8bit', # TODO: set this rather than rely on default
-                                      bf16=True,
-                                      num_train_epochs=args.n_epochs,
-                                      gradient_accumulation_steps=1,
-                                      save_strategy=args.save_strategy,
-                                      save_total_limit=3,
-                                      save_only_model=False,
-                                      remove_unused_columns=False,
-                                      evaluation_strategy="epoch",
-                                      report_to="wandb",
-                                      logging_strategy="steps",
-                                      logging_steps=1 if args.debug else 10,
-                                      run_name=wandb_run_name,
-                                      ddp_backend="gloo",
-                                      ddp_find_unused_parameters=False)
-
-    if args.training_mode == "DPO":
-        trainer = DPOTrainer(
-            model,
-            args=training_args,
-            beta=args.dpo_beta,
-            max_prompt_length=int(1.5 * max([len(p.split()) for p in prompt])),
-            max_length=int(1.5 * max([len(g.split()) for g in chosen + rejected])),
-            train_dataset=datasets["train"],
-            eval_dataset=datasets["val"],
-            tokenizer=tokenizer,
-            peft_config=peft_config,
+        # TODO: make sure this can handle GPU parallel
+        ppo_config = PPOConfig(
+            model_name=args.lm_name,
+            learning_rate=args.learning_rate,
+            batch_size=args.train_batch_size,
+            mini_batch_size=args.train_batch_size // 4,
+            gradient_accumulation_steps=4,
+            remove_unused_columns=False,
+            optimize_cuda_cache=True,
+            # accelerator_kwargs={"kwargs_handlers": [InitProcessGroupKwargs(backend="gloo")]},
         )
-    elif args.training_mode == "SFT":
-        trainer = SFTTrainer(
+        ppo_trainer = PPOTrainer(
             model=model,
-            train_dataset=datasets["train"],
-            eval_dataset=datasets["val"],
-            peft_config=peft_config,
-            max_seq_length=int(1.5 * max([len(p.split()) + len(g.split()) for p, g in zip(prompt + prompt, chosen + rejected)])),
-            packing=True,
+            config=ppo_config,
+            dataset=datasets["train"],
             tokenizer=tokenizer,
-            args=training_args,         
-        )        
+        )
 
-    print(f"({global_rank}) Starting model training...")
-    trainer.train(resume_from_checkpoint=args.resume_dir is not None)
+        model.train()
+        for epoch in tqdm(range(args.n_epochs), f"({global_rank}) epoch"):
+            for batch in tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch"):
 
-    print("Saving best model...")
-    trainer.save_model(this_results_dir)
+                #### Run PPO step
+                query_tensor = [tokenizer(q, return_tensors="pt")['input_ids'][0] for q in batch["prompt"]]
+                response_tensor = [tokenizer(r, return_tensors="pt")['input_ids'][0] for r in batch["response"]]
+                reward = [torch.tensor(r) for r in batch['reward']]
+                stats = ppo_trainer.step(query_tensor, response_tensor, reward)
+                global_stats = ppo_trainer.gather_stats(stats)
+                ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
+                if global_rank == 0:
+                    wandb.log(global_stats | {"ppo/epoch": epoch, "ppo/reward": np.mean(torch.tensor(reward).cpu().numpy())})
+
+                #### Save model
+                if epoch % 5 == 0 and global_rank == 0:
+                    if not os.path.exists(os.path.join(this_results_dir, f"epoch{epoch}")):
+                        os.makedirs(os.path.join(this_results_dir, f"epoch{epoch}"))
+                    ppo_trainer.save_pretrained(os.path.join(this_results_dir, f"epoch{epoch}"))    
+
+        #### Save model
+        if global_rank == 0:
+            ppo_trainer.save_pretrained(this_results_dir)        
+            wandb.finish()
 
 if __name__ == "__main__":
     main()

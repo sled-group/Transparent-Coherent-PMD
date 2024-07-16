@@ -104,9 +104,10 @@ response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 if args.resume_dir is None:
     timestamp = datetime.datetime.now()
     vlm_name = args.vlm_name.split('/')[-1]
-    this_results_dir = os.path.join(args.task, vlm_name, f"VQG2VQA_{args.task}")
+    task_name = args.task
     if args.debug:
-        this_results_dir += f"_debug{args.debug_n_examples}"
+        task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
+    this_results_dir = os.path.join(task_name, vlm_name, f"VQG2VQA_{task_name}")
     this_results_dir += f"_{vlm_name}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"

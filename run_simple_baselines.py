@@ -26,9 +26,10 @@ parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure
 args = parser.parse_args()
 
 timestamp = datetime.datetime.now()
-this_results_dir = os.path.join(args.task, f"simple_baselines_{args.task}")
+task_name = args.task
 if args.debug:
-    this_results_dir += f"_debug{args.debug_n_examples}"
+    task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
+this_results_dir = os.path.join(task_name, f"simple_baselines_{task_name}")
 this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
 this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
 os.makedirs(this_results_dir)

@@ -626,8 +626,15 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
             return new_frames, new_questions
 
 class ContrastiveRegionFilter(AdaptiveVisualFilter):
-    def __init__(self, mask_strength: float=1.0, **kwargs: dict[str, Any]):
+    def __init__(self, mask_strength: float=1.0, mask_type: ImageMaskTypes=ImageMaskTypes.Darkness, **kwargs: dict[str, Any]):
+        """
+        Initializes `ContrastiveRegionFilter`.
+
+        :param mask_strength: Strength of visual filter. If `mask_type` is `ImageMaskTypes.Darkness`, this corresponds to the darkness of any masks placed over the image (1.0 is fully black, 0.5 is 50% black, and so on). If 'ImageMaskTypes.Blur`, this corresponds to the kernel size (both width and height) of Gaussian blur in pixels.
+        :param mask_type: Type of masking to apply.
+        """        
         self.mask_strength = mask_strength
+        self.mask_type = mask_type
         super().__init__(**kwargs)
 
     def __call__(self, nlp: English, frames: list[Image.Image], questions: list[str]) -> list[Image.Image]:
@@ -661,12 +668,43 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
                     # Note the order: (ymin:ymax, xmin:xmax)
                     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 0.0
                                     
-                # Apply mask strength to black parts of resulting mask
-                mask = 1.0 - (1 - mask) * self.mask_strength
+                # Apply mask to frame
+                if self.mask_type == ImageMaskTypes.Darkness:
+                    # Apply mask strength to black parts of resulting mask
+                    mask = (1.0 - (1 - mask) * self.mask_strength)
+                    mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)                    
+                    new_frame = np.array(frame_padded) * mask
+                elif self.mask_type == ImageMaskTypes.Blur:
+                    # Apply Gaussian blur to the entire image
+                    frame_padded_array = np.array(frame_padded.convert("RGB"))
+
+                    # # Apply the average blur
+                    # for i in range(new_frame.shape[0]):
+                    #     for j in range(new_frame.shape[1]):
+                    #         if mask[i, j] == 0:
+                    #             # Extract the region of interest
+                    #             roi = new_frame[i:i+int(self.mask_strength), j:j+int(self.mask_strength)]
+                    #             # Compute the mean value for each channel
+                    #             mean_value = roi.mean(axis=(0, 1))
+                    #             new_frame[i, j] = mean_value
+
+                    kernel_size = int(self.mask_strength)
+                    kernel_size = kernel_size if kernel_size % 2 == 1 else kernel_size + 1 # Gaussian kernel size needs to be odd
+                    blurred_image = cv2.GaussianBlur(frame_padded_array, (kernel_size, kernel_size), 0.0)
+                    
+                    # Create an output image initially the same as the original image
+                    new_frame = np.copy(frame_padded_array)
+                    # Image.fromarray(new_frame.astype(np.uint8)).save(f"temp_images/{frame_idx}a.jpg")
+
+                    if np.min(new_frame) >= 0 and np.max(new_frame) <= 1:
+                        print("Warning: new_frame was normalized.")
+                        new_frame *= 255
+
+                    # Apply the blurred regions where mask is 0
+                    for c in range(frame_padded_array.shape[2]):
+                        new_frame[:, :, c][mask == 0] = blurred_image[:, :, c][mask == 0]
                         
-                # Apply mask and undo padding of masked/cropped image to pass to VLM later
-                mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
-                new_frame = np.array(frame_padded) * mask
+                # Undo padding of image
                 new_frame = Image.fromarray(new_frame.astype(np.uint8))
                 new_height = new_frame.width / frame.width * frame.height
                 new_frame = new_frame.crop((0, 0, new_frame.width - 1, new_height))
