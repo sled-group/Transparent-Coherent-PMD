@@ -355,9 +355,9 @@ def main():
                 response_tensor = [tokenizer(r, return_tensors="pt")['input_ids'][0] for r in batch["response"]]
                 reward = [torch.tensor(r) for r in batch['reward']]
                 stats = ppo_trainer.step(query_tensor, response_tensor, reward)
+                global_stats = ppo_trainer.gather_stats(stats)
                 ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
                 if global_rank == 0:
-                    global_stats = ppo_trainer.gather_stats()
                     wandb.log(global_stats | {"ppo/epoch": epoch, "ppo/reward": np.mean(torch.tensor(reward).cpu().numpy())})
 
                 #### Save model
