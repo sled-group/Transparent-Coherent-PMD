@@ -3,17 +3,18 @@ import json
 import os
 import pickle
 from PIL import Image
+import shelve
 from spacy.lang.en import English
 import torch
 from tqdm import tqdm
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
 from transformers.processing_utils import ProcessorMixin
 from typing import Optional, Callable
 
 from travel.constants import CACHE_FREQUENCY, IMAGES_CHUNK_SIZE
 from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
-from travel.data.vqa import VQAResponse, VQAOutputs, get_vqa_response_token_ids
+from travel.data.vqa import VQAResponse, VQAOutputs, get_vqa_response_token_ids, COMPLETION_PROMPT_TEMPLATES
 from travel.model.grounding import VisualFilterTypes, AdaptiveVisualFilter
 from travel.model.mistake_detection import DETECTION_FRAMES_PROPORTION
 
@@ -81,6 +82,88 @@ def run_vqa(vlm: PreTrainedModel,
 
     return logits
 
+def clean_up_captions(captions: list[str],
+                    model_type: type,
+                    processor: ProcessorMixin):
+    """
+    Remove unwanted tokens at the beginning of captions, used in run_captioning.
+
+    :param captions: List of captions generated
+    :model_type: Type of model used to generate captions
+    :param  processor: VLM processor from `transformers`, including post processing methods
+    """
+
+    if (model_type == LlavaForConditionalGeneration):
+        return [caption.split("ASSISTANT: ")[1].strip() for caption in captions]
+    elif (model_type == LlavaNextForConditionalGeneration):
+        return [caption.split("[/INST] ")[1].strip() for caption in captions]
+    elif (model_type == Kosmos2ForConditionalGeneration):
+        return [processor.post_process_generation(caption)[0] for caption in captions]
+    elif (model_type == Blip2ForConditionalGeneration):
+        return [caption.strip() for caption in captions]
+    else:
+        return captions
+
+
+def run_captioning(vlm: PreTrainedModel,
+                    processor: ProcessorMixin,
+                    frames: list[Image.Image],
+                    batch_size: int=1,
+                    cache_path: Optional[str]=None) -> list[str]:
+    """
+    Get captions of given frames in batches with a given VLM and its processor.
+
+    :param vlm: VLM for conditional generation from `transformers`.
+    :param processor: VLM processor from `transformers`, including tokenizer and image processor.
+    :param frames: List of images to caption.
+    :param batch_size: Batch size for running inference.
+    :param cache_path: Path to a file for caching captions without the file extension, ex: "/Path/to/file". In this path, there will be file.dir, file.dat, file.bak files for caching.  
+    :return: List of captions corresponding to each given frame.
+    """
+
+    prompt_template = COMPLETION_PROMPT_TEMPLATES[type(vlm)]
+    captions = []
+    if cache_path is not None:
+        # Load cached captions if there are any
+        if os.path.exists(cache_path + '.dir'):
+            with shelve.open(cache_path) as cache_file:
+                try:
+                    captions = cache_file["captions"]
+                except:
+                    pass
+
+    last_save = len(captions)
+    with torch.no_grad():
+        # Start at len(captions) so we don't produce any captions that were already cached (resuming logic)
+        for i in tqdm(range(len(captions), len(frames), batch_size), desc=f"running captioning ({str(vlm.device)})"):
+            # Prepare the batch
+            batch_frames = frames[i:i+batch_size]
+            batch_prompts = [prompt_template for _ in range(len(batch_frames))]
+
+            # Run through VLM to get captions
+            inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
+            inputs = inputs.to(vlm.device)
+
+            outputs = vlm.generate(**inputs, max_new_tokens=128)
+            outputs = processor.batch_decode(outputs, skip_special_tokens=True)
+            outputs = clean_up_captions(outputs, type(vlm), processor)
+            captions += outputs
+
+            # Cache captions if needed
+            if cache_path is not None and (i - last_save + 1) >= CACHE_FREQUENCY:
+                with shelve.open(cache_path) as cache_file:
+                    cache_file["captions"] = captions
+                    cache_file.sync()
+                last_save = i + 1
+
+    # Last cache
+    if cache_path is not None:
+        with shelve.open(cache_path) as cache_file:
+            cache_file["captions"] = captions
+            cache_file.sync()
+
+    return captions
+
 def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                                   vlm: PreTrainedModel, 
                                   vlm_processor: ProcessorMixin,  
@@ -94,6 +177,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                                   worker_index: int,
                                   vqa_batch_size: int,
                                   cache_frames: bool=True,
+                                  caption_first: bool=False,
                                   ) -> list[list[list[VQAOutputs]]]:
     """
     GPU-parallelizable method to run VQA in chunks on a MistakeDetectionDataset (with an optional AdaptiveVisualFilter).
@@ -101,16 +185,17 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
     :param eval_dataset: MistakeDetectionDataset to run inference on.
     :param vlm: Initialized VLM for VQA.
     :param vlm_processor: VLM's processor.
-    :generate_prompts: A method that generates a list of prompts from a single MistakeDetectionExample.
-    :n_prompts_per_frame: The number of prompts expected to be generated by `generate_prompts` for each frame in each example.    
-    :visual_filter_mode: Visual filter type (if any).
-    :visual_filter: Initialized visual filter object, which may include a pre-trained object detection or phrase grounding model.
-    :nlp: NLP pipeline from spaCy for the visual filter to use.
-    :cache_dir: Directory to cache outputs in. Caches will be saved in a subdirectory for this worker.
-    :n_workers: Number of GPUs this inference is parallelized across.
-    :worker_index: Worker index for this call.
-    :vqa_batch_size: Batch size for VQA with VLM. This should be maximized for the type of GPU used.
-    :cache_frames: Whether to cache frames to disk after visual filters are applied (otherwise they will be discarded).
+    :param generate_prompts: A method that generates a list of prompts from a single MistakeDetectionExample.
+    :param n_prompts_per_frame: The number of prompts expected to be generated by `generate_prompts` for each frame in each example.    
+    :param visual_filter_mode: Visual filter type (if any).
+    :param visual_filter: Initialized visual filter object, which may include a pre-trained object detection or phrase grounding model.
+    :param nlp: NLP pipeline from spaCy for the visual filter to use.
+    :param cache_dir: Directory to cache outputs in. Caches will be saved in a subdirectory for this worker.
+    :param n_workers: Number of GPUs this inference is parallelized across.
+    :param worker_index: Worker index for this call.
+    :param vqa_batch_size: Batch size for VQA with VLM. This should be maximized for the type of GPU used.
+    :param cache_frames: Whether to cache frames to disk after visual filters are applied (otherwise they will be discarded).
+    :param caption_first: Whether to generate a caption for the image before answering the questions, and including captions in prompts to answer questions.
     """
     assert n_workers >= 1, "n_workers must be positive!"
     assert worker_index < n_workers and worker_index >= 0, f"Worker index should be a valid index for n_workers (n_workers)!"
@@ -138,7 +223,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             example_ids = []
             for example in dataset_chunk:
                 example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
-                this_questions, this_prompts, this_answers, this_frames = generate_prompts(example)
+                this_questions, this_prompts, this_answers, this_frames = generate_prompts(example, add_caption_placeholder=caption_first)
                 assert len(this_questions) == len(this_prompts) == len(this_answers) == len(this_frames), "Passed `generate_prompts` method must return same number of questions, prompts, answers, and frames!"
                 questions += this_questions
                 prompts += this_prompts
@@ -174,6 +259,20 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                 prompts = [prompt.replace(question, new_question) for prompt, question, new_question in zip(prompts, questions, new_questions)]
             elif visual_filter_mode == VisualFilterTypes.Target_Object_Counter:
                 visible_target_objects = visual_filter(nlp, frames, questions, return_dict=True)
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        if caption_first:
+            assert visual_filter_mode != VisualFilterTypes.Contrastive_Region, "CRG filter doesn't support conditioning with a caption yet!"
+
+            # Generate a generic caption for each (filtered) frame first, then use that to condition VQA
+            captions = run_captioning(vlm=vlm,
+                                      processor=vlm_processor,
+                                      frames=frames,
+                                      batch_size=vqa_batch_size,
+                                      cache_path=os.path.join(worker_cache_dir, f"chunk{chunk_idx}_captions"))
+            prompts = [prompt.format(caption=caption) for prompt, caption in zip(prompts, captions)]
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -287,84 +386,3 @@ def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
     return shifted_input_ids
 
 
-def clean_up_captions(captions: list[str],
-                    model_type: type,
-                    processor: ProcessorMixin):
-    """
-    Remove unwanted tokens at the beginning of captions, used in run_captioning.
-
-    :param captions: List of captions generated
-    :model_type: Type of model used to generate captions
-    :param  processor: VLM processor from `transformers`, including post processing methods
-    """
-
-    if (model_type == LlavaForConditionalGeneration):
-        return [caption.split("ASSISTANT: ")[1].strip() for caption in captions]
-    elif (model_type == LlavaNextForConditionalGeneration):
-        return [caption.split("[/INST] ")[1].strip() for caption in captions]
-    elif (model_type == Kosmos2ForConditionalGeneration):
-        return [processor.post_process_generation(caption)[0] for caption in captions]
-    elif (model_type == Blip2ForConditionalGeneration):
-        return [caption.strip() for caption in captions]
-    else:
-        return captions
-
-
-def run_captioning(vlm: PreTrainedModel,
-                    processor: ProcessorMixin,
-                    frames: list[Image.Image],
-                    batch_size: int=1,
-                    cache_path: Optional[str]=None) -> list[str]:
-    """
-    Get captions of given frames in batches with a given VLM and its processor.
-
-    :param vlm: VLM for conditional generation from `transformers`.
-    :param processor: VLM processor from `transformers`, including tokenizer and image processor.
-    :param frames: List of images to caption.
-    :param batch_size: Batch size for running inference.
-    :param cache_path: Path to a file for caching captions without the file extension, ex: "/Path/to/file". In this path, there will be file.dir, file.dat, file.bak files for caching.  
-    :return: List of captions corresponding to each given frame.
-    """
-
-    prompt_template = COMPLETION_PROMPT_TEMPLATES[type(vlm)]
-    captions = []
-    if cache_path is not None:
-        # Load cached captions if there are any
-        if os.path.exists(cache_path + '.dir'):
-            with shelve.open(cache_path) as cache_file:
-                try:
-                    captions = cache_file["captions"]
-                except:
-                    pass
-
-    last_save = len(captions)
-    with torch.no_grad():
-        # Start at len(captions) so we don't produce any captions that were already cached (resuming logic)
-        for i in tqdm(range(len(captions), len(frames), batch_size), desc=f"running captioning ({str(vlm.device)})"):
-            # Prepare the batch
-            batch_frames = frames[i:i+batch_size]
-            batch_prompts = [prompt_template for i in range(batch_size)]
-
-            # Run through VLM to get captions
-            inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
-            inputs = inputs.to(vlm.device)
-
-            outputs = vlm.generate(**inputs, max_new_tokens=100)
-            outputs = processor.batch_decode(outputs, skip_special_tokens=True)
-            outputs = clean_up_captions(outputs, type(vlm), processor)
-            captions.append(outputs)
-
-            # Cache captions if needed
-            if cache_path is not None and (i - last_save + 1) >= CACHE_FREQUENCY:
-                with shelve.open(cache_path) as cache_file:
-                    cache_file["captions"] = captions
-                    cache_file.sync()
-                last_save = i + 1
-
-    # Last cache
-    if cache_path is not None:
-        with shelve.open(cache_path) as cache_file:
-            cache_file["captions"] = captions
-            cache_file.sync()
-
-    return captions
