@@ -234,6 +234,7 @@ def main():
         gradient_accumulation_steps=4,
         remove_unused_columns=False,
         optimize_cuda_cache=True,
+        early_stopping=True
     )
     ppo_trainer = PPOTrainer(
         model=lm,
@@ -348,8 +349,7 @@ def main():
             utility = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
             utility = utility.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
-            # TODO: calculate rewards for ref model and log them
-            # TODO: enable early stopping
+            # TODO: calculate rewards for ref model and log them?
             # TODO: make VLM generate a caption first?
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
             # TODO: add a third NLI score for whether questions contradict each other or are redundant?
@@ -362,7 +362,6 @@ def main():
             reward_indices = torch.stack([torch.tensor([-1, -1]) if ri.shape[0] != 2 else ri for ri in reward_indices]).long() # TODO: make sure this is correct
             if bad_idxs.shape[0] > 0:
                 reward[bad_idxs] == -1.0
-            # TODO: actually handle the case if model generates less than or more than 2 questions
             assert reward_indices.shape == (this_batch_size, 2)
 
             if args.debug:
@@ -377,8 +376,6 @@ def main():
                 print("tokens at reward indices =", tokens_at_reward_indices[0])
                 
             #### Run PPO step
-            # reward = [torch.tensor(r) for r in batch['reward']]
-            # TODO: response sequence length doesn't seem right, need to double check - maybe it's including query tokens
             stats = ppo_trainer.step(query_tensors, response_tensors, reward, reward_indices)
             global_stats = ppo_trainer.gather_stats(stats)
             ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
