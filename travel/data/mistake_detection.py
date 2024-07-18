@@ -143,7 +143,7 @@ class MistakeDetectionDataset:
     def __getitem__(self, index):
         return self.load_example_from_file(self.example_dirs[index])
     
-    def get_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> Iterable[list[MistakeDetectionExample]]:
+    def get_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0, load_frames: bool=True) -> Iterable[list[MistakeDetectionExample]]:
         assert batch_size >= 1, "Batch size must be positive!"
         assert n_workers >= 1, "Number of workers must be positive!"
 
@@ -155,10 +155,10 @@ class MistakeDetectionDataset:
 
         if batch_size > 1:
             for i in range(0, len(example_dirs), batch_size):
-                yield [self.load_example_from_file(d) for d in example_dirs[i : i + batch_size]]
+                yield [self.load_example_from_file(d, load_frames=load_frames) for d in example_dirs[i : i + batch_size]]
         else:
             for d in example_dirs:
-                yield self.load_example_from_file(d)
+                yield self.load_example_from_file(d, load_frames=load_frames)
     
     def count_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> int:
         """
@@ -254,3 +254,5 @@ class MistakeDetectionDataset:
             if example.procedure_id not in already_seen:
                 yield (example.procedure_id, example.procedure_description)
                 already_seen.append(example.procedure_id) 
+
+NLI_HYPOTHESIS_COMPLETION_TEMPLATE = 'The procedure "{procedure}" has been successfully completed.'

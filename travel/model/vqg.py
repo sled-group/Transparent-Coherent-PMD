@@ -76,7 +76,8 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
             torch.cuda.empty_cache()
 
     # Save progress one last time after completion
-    save_vqg_outputs(vqg_outputs, save_path)
+    if save_path is not None:
+        save_vqg_outputs(vqg_outputs, save_path)
     return vqg_outputs
 
 def run_vqg_semi_structured(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}, omit_failed_instances: bool=True) -> dict[str, Optional[VQGOutputs]]:

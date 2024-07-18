@@ -42,17 +42,25 @@ if not os.path.exists(output_dir):
 #     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/preds_heuristic_val.json",
 #     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240701130520/preds_nli_val.json",
 # ]
-results_fnames = [
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/SuccessVQA_ego4d_debug500_llava-1.5-7b-hf_20240712182848/preds_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713091808/preds_nli_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240712233421/preds_nli_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713091801/preds_nli_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240712233432/preds_nli_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713191222/preds_heuristic_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713191222/preds_nli_val.json",
-    # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713191244/preds_heuristic_val.json"
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713191244/preds_nli_val.json",
+# results_fnames = [
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/SuccessVQA_ego4d_debug500_llava-1.5-7b-hf_20240712182848/preds_heuristic_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713091808/preds_nli_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240712233421/preds_nli_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713091801/preds_nli_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240712233432/preds_nli_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713191222/preds_heuristic_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713191222/preds_nli_val.json",
+#     # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713191244/preds_heuristic_val.json"
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713191244/preds_nli_val.json",
     
+# ]
+results_fnames = [
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/SuccessVQA_ego4d_debug500_llava-1.5-7b-hf_20240712182848/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/SuccessVQA_ego4d_debug500_llava-1.5-7b-hf_caption_20240717104130/preds_heuristic_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713191222/preds_nli_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_caption_20240717103812/preds_nli_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713191244/preds_nli_val.json",
+    "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_caption_20240717103844/preds_nli_val.json"
 ]
 for results_fname in results_fnames:
     if not os.path.exists(os.path.join(os.path.join("/".join(results_fname.split("/")[:-1]), run_folder_name))):
@@ -61,17 +69,17 @@ for results_fname in results_fnames:
 metrics = [
     json.load(open(fname.replace("preds_", "metrics_"), "r")) for fname in results_fnames
 ]
-results_names = [
-    "SuccessVQA",
-    "VQG2VQA + NLI",
-    "VQG2VQA (NLI corrected) + NLI",
-    "VQG2VQA + Spatial + NLI",
-    "VQG2VQA (NLI corrected) + Spatial + NLI",
-    "VQG2VQA (NLI corrected v2)",
-    "VQG2VQA (NLI corrected v2) + NLI",
-    # "VQG2VQA (NLI corrected v2) + Spatial",
-    "VQG2VQA (NLI corrected v2) + Spatial + NLI",
-]
+# results_names = [
+#     "SuccessVQA",
+#     "VQG2VQA + NLI",
+#     "VQG2VQA (NLI corrected) + NLI",
+#     "VQG2VQA + Spatial + NLI",
+#     "VQG2VQA (NLI corrected) + Spatial + NLI",
+#     "VQG2VQA (NLI corrected v2)",
+#     "VQG2VQA (NLI corrected v2) + NLI",
+#     # "VQG2VQA (NLI corrected v2) + Spatial",
+#     "VQG2VQA (NLI corrected v2) + Spatial + NLI",
+# ]
 # results_names = [
 #     "SuccessVQA",
 #     "SuccessVQA + TOC",
@@ -83,6 +91,14 @@ results_names = [
 #     "VQG2VQA + Spatial (No Rephrase)",
 #     "VQG2VQA + Spatial (No Rephrase) + NLI"
 # ]
+results_names = [
+    "SuccessVQA",
+    "SuccessVQA + Caption",
+    "VQG2VQA + NLI",
+    "VQG2VQA + Caption + NLI",
+    "VQG2VQA + Spatial + NLI",
+    "VQG2VQA + Caption + Spatial + NLI"
+]
 
 print("(0) Compiling pred data...")
 mistake_probs = [[] for _ in results_fnames]

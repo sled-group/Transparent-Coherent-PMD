@@ -101,7 +101,8 @@ class FrameVQAMistakeDetectionScorer:
                  return_vqa_outputs: bool=False,
                  batch_size: int=1,
                  cache_path: Optional[str]=None,
-                 memory_tracker: Optional[SummaryTracker]=None) -> Union[torch.FloatTensor, list[VQAOutputs]]:
+                 memory_tracker: Optional[SummaryTracker]=None,
+                 return_scores_only: bool=False) -> Union[torch.FloatTensor, list[VQAOutputs]]:
         """
         Score visual questions when posed on individual video frames to a VLM.
         
@@ -209,6 +210,9 @@ class FrameVQAMistakeDetectionScorer:
                 vqa_outputs.append(this_vqa_outputs)
         
         answer_probs, scores = self.get_scores(mistake_labels, vqa_outputs)
+        if return_scores_only:
+            return scores
+
         vqg_training_examples = [
             VQGTrainingExample(
                 task_name=MistakeDetectionTasks.Ego4D,
