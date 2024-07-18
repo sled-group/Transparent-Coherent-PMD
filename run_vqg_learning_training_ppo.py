@@ -18,7 +18,7 @@ from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForSequence
 from trl import PPOConfig, AutoModelForCausalLMWithValueHead
 import wandb
 
-from travel.constants import HF_TOKEN, RESULTS_DIR
+from travel.constants import HF_TOKEN, RESULTS_DIR, DATA_CACHE_DIR
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import NLI_HYPOTHESIS_COMPLETION_TEMPLATE, MistakeDetectionTasks
 from travel.data.vqa import VQAResponse
@@ -167,7 +167,7 @@ def main():
             output_dir_name += f"_debug{args.debug_n_examples}"
         this_results_dir = os.path.join(RESULTS_DIR, "vqg_learning/PPO", output_dir_name)
         wandb_run_name = f"{output_dir_name}_lr{args.learning_rate}"
-        if not os.path.exists(this_results_dir):
+        if not os.path.exists(this_results_dir) and global_rank == 0:
             os.makedirs(this_results_dir)        
     else:
         # Recover original output directory and wandb run name from resume dir
@@ -195,10 +195,12 @@ def main():
                                            mismatch_augmentation=True,
                                            multi_frame=False,
                                            debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-    dataset_path = os.path.join(this_results_dir, "ppo_dataset.pkl")
+    dataset_path = os.path.join(DATA_CACHE_DIR, "ppo_training_dataset.hf")
+    if args.debug:
+        dataset_path = dataset_path.replace(".hf", f"_debug{args.debug_n_examples}.hf")
     if not os.path.exists(dataset_path):
         ppo_dataset = []
-        for example_dir in dataset.example_dirs:
+        for example_dir in tqdm(dataset.example_dirs, desc="Preparing data"):
             example = dataset.load_example_from_file(example_dir)
             assert len(example.frames) == 1, "VQG PPO training is only supported for single-frame mistake detection examples."
             prompt = generate_vqg_prompt_icl(example.procedure_description, args.n_demonstrations)
@@ -214,10 +216,10 @@ def main():
             sample["query_tensors"] = tokenizer.encode(sample["prompt"], return_tensors="pt")[0]
             return sample
         ppo_dataset = ppo_dataset.map(tokenize, batched=False)    
-        ppo_dataset.set_format(type="torch")    
-        pickle.dump(ppo_dataset, open(dataset_path, "wb"))
+        ppo_dataset.set_format(type="torch")
+        ppo_dataset.save_to_disk(dataset_path=dataset_path) 
     else:
-        ppo_dataset = pickle.load(open(dataset_path, "rb"))
+        ppo_dataset = Dataset.load_from_disk(dataset_path=dataset_path)
     print(f"train data partition: {len(ppo_dataset)} examples")
 
     print(f"({global_rank}) {len(dataset)} Ego4D mistake detection examples loaded from train partition")
