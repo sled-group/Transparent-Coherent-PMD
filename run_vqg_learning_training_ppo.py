@@ -238,7 +238,7 @@ def main():
     )
 
     lm.train()
-    newline_token_id = tokenizer.encode("\n", add_special_tokens=False)[1] # this should be 13 for LLaMA 2
+    qmark_token_id = tokenizer.encode("?", add_special_tokens=False)[0] # this should be 1577 for LLaMA 2
     for epoch in tqdm(range(args.n_epochs), f"({global_rank}) epoch"):
         for batch in tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch"):
             this_batch_size = len(batch["procedure_description"])
@@ -256,18 +256,18 @@ def main():
                 generate_ref_response=False,
                 **generation_kwargs
             )
+            query_lengths = [q.shape[-1] for q in query_tensors]
             response_texts = tokenizer.batch_decode(response_tensors)
             response_texts = [text.replace("Љ", "").strip() for text in response_texts] # Hack: sometimes output from LLaMA 2 starts with Љ and whitespace characters
-            response_lengths = [r.shape[-1] for r in response_tensors]
-            response_tensors_padded = pad_and_stack(response_tensors, pad_value=tokenizer.pad_token_id)
             if args.debug:
                 print("\nResponses:")
                 pprint(response_texts[0])
-                pprint(response_tensors_padded[0])
+                pprint(response_tensors[0])
             vqg_outputs = []
             bad_idxs = []
             for text_idx, text in enumerate(response_texts):
                 try:
+                    # TODO: generations can never be parsed
                     vqg_output = parse_vqg_outputs(
                         generated_language=text,
                         procedure_id=batch['procedure_id'][text_idx],
@@ -285,21 +285,6 @@ def main():
                 vqg_outputs.append(vqg_output)
             bad_idxs = torch.tensor(bad_idxs)
 
-            # Locate tokens for each question in generated token IDs for calculating scores
-            # TODO: instead, make the rewards only added per question
-            question_idxs = torch.zeros_like(response_tensors_padded).cpu() # Initialize with 0s
-            pad_mask = (response_tensors_padded == tokenizer.pad_token_id) # Pad tokens will get no score
-            question_idxs[pad_mask] = -1
-            found_newline = (response_tensors_padded == newline_token_id).int() # Locate newline that divides 2 generated questions, and mark elements of q1 with 1
-            cum_sum_newline = torch.cumsum(found_newline, dim=1)
-            after_newline_mask = (cum_sum_newline.cumsum(dim=1) > 1)            
-            question_idxs[after_newline_mask] = 1
-            mask0 = question_idxs == 0
-            mask1 = question_idxs == 1
-            if args.debug:
-                print("\nToken indices per question:")
-                pprint(question_idxs[0])
-
             # Calculate rewards using NLI model and VLM
             premise_questions_expected = [[f"{question} {answer.name}" for question, answer in zip(vqg_output.questions, vqg_output.answers)] for vqg_output in vqg_outputs]
             premise_questions_not_expected = [[f"{question} {VQAResponse(1 - answer.value).name}" for question, answer in zip(vqg_output.questions, vqg_output.answers)] for vqg_output in vqg_outputs]
@@ -316,12 +301,7 @@ def main():
                                nli_model=nli_model,
                                premise_hypothesis_pairs=[(premise, hypothesis) for premises, hypothesis in zip(premise_questions_yes, hypothesis_completion) for premise in premises])
             relevance = torch.abs(probs_no[:, 0] - probs_yes[:, 0])
-            pprint(relevance)
-            print(relevance.shape)
             relevance = relevance.view(this_batch_size, 2).cpu().float()
-            scores_relevance = torch.zeros_like(question_idxs).float()
-            scores_relevance[mask0] = relevance[:, 0].unsqueeze(1).expand_as(scores_relevance)[mask0]
-            scores_relevance[mask1] = relevance[:, 1].unsqueeze(1).expand_as(scores_relevance)[mask1]
 
             # NLI score 2: mistake indication of questions 
             # (expected answer should indicate a success, unexpected answer should indicate a mistake)
@@ -333,9 +313,6 @@ def main():
                                          premise_hypothesis_pairs=[(premise, hypothesis) for premises, hypothesis in zip(premise_questions_not_expected, hypothesis_completion) for premise in premises])
             informativeness = (probs_expected[:, 1] + probs_not_expected[:, 0]) / 2.0 # TODO: think about whether there's a better way to calculate besides averaging
             informativeness = informativeness.view(this_batch_size, 2).cpu().float()
-            scores_informativeness = torch.zeros_like(question_idxs).float()
-            scores_informativeness[mask0] = informativeness[:, 0].unsqueeze(1).expand_as(scores_informativeness)[mask0]
-            scores_informativeness[mask1] = informativeness[:, 1].unsqueeze(1).expand_as(scores_informativeness)[mask1]
 
             # VLM score: mistake detection utility of question sets
             # (questions should together successfully classify mistake or success in frame)
@@ -355,28 +332,32 @@ def main():
                 ) for example, prompt, vqg_output in zip([dataset.load_example_from_file(example_dir, load_frames=False) for example_dir in batch['example_dir']], batch['prompt'], vqg_outputs)
             ]
             utility = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
-            scores_utility = torch.zeros_like(question_idxs).float()
-            scores_utility[mask0] = utility.unsqueeze(1).expand_as(scores_utility)[mask0]
-            scores_utility[mask1] = utility.unsqueeze(1).expand_as(scores_utility)[mask1] # Score from VLM is shared, so assign same value to each question
+            utility = utility.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
             # TODO: make VLM generate a caption first?
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
             # TODO: add a third NLI score for whether questions contradict each other or are redundant?
 
-            reward = (scores_relevance + scores_informativeness + scores_utility) / 3.0
-            reward[bad_idxs, :] = -1.0 # Any malformed generations get -1 score
-            reward = [reward[i, torch.arange(response_lengths[i])] for i in range(this_batch_size)]
-            assert all(reward[i].shape[-1] == response_lengths[i] for i in range(len(reward)))
+            assert relevance.shape == informativeness.shape == utility.shape, f"Relevance, informativeness, and utility shapes should be equal: {relevance.shape}, {informativeness.shape}, {utility.shape}"
+            reward = (relevance + informativeness + utility) / 3.0
             if args.debug:
                 pprint("Rewards:")
                 print("relevance =", relevance[0])
                 print("informativeness =", informativeness[0])
                 print("utility =", utility[0])
-                print("combined =", reward[0])
+                print("combined =", reward[0, :])
+
+            # Find the indices to apply rewards at
+            reward_indices = [response_tensor[response_tensor == qmark_token_id].nonzero().squeeze(1) + qt_length for qt_length, response_tensor in zip(query_lengths, response_tensors)]
+            reward_indices = torch.stack([torch.tensor([-1, -1]) if ri.shape[0] != 2 else ri for ri in reward_indices]).long()
+            reward[bad_idxs] == -1.0
+            # TODO: actually handle the case if model generates less than or more than 2 questions
+            assert reward_indices.shape == (this_batch_size, 2)
 
             #### Run PPO step
             # reward = [torch.tensor(r) for r in batch['reward']]
-            stats = ppo_trainer.step(query_tensors, response_tensors, reward)
+            # TODO: response sequence length doesn't seem right, need to double check - maybe it's including query tokens
+            stats = ppo_trainer.step(query_tensors, response_tensors, reward, reward_indices)
             global_stats = ppo_trainer.gather_stats(stats)
             ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
             if global_rank == 0:
