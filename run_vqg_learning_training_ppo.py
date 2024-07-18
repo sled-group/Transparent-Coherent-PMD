@@ -2,34 +2,31 @@
 from travel import init_travel
 init_travel()
 
-from accelerate.utils import InitProcessGroupKwargs
+from accelerate import Accelerator
 import argparse
-from collections import defaultdict
 from datasets import Dataset
 import numpy as np
 import os
-from peft import LoraConfig, prepare_model_for_kbit_training
+from peft import LoraConfig
 import pickle
 from PIL import Image
 from pprint import pprint
-import random
 import torch
 import torch.distributed as dist
-from torch.distributed.elastic.multiprocessing.errors import record
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments, AutoModelForSequenceClassification, AutoTokenizer
-from trl import DPOTrainer, DPOConfig, SFTTrainer, SFTConfig, PPOConfig, AutoModelForCausalLMWithValueHead
+from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer
+from trl import PPOConfig, AutoModelForCausalLMWithValueHead
 import wandb
 
-from travel.constants import HF_TOKEN, DEFAULT_WANDB_PROJECT, RESULTS_DIR
+from travel.constants import HF_TOKEN, RESULTS_DIR
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import NLI_HYPOTHESIS_COMPLETION_TEMPLATE, MistakeDetectionTasks
 from travel.data.vqa import VQAResponse
-from travel.data.vqg import generate_vqg_prompt, generate_vqg_prompt_icl, VQG_DEMONSTRATIONS, VQGOutputs
-from travel.data.vqg_learning import load_vqg_training_examples, VQGTrainingExample, FrameVQAMistakeDetectionExample
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter, ImageMaskTypes
+from travel.data.vqg import generate_vqg_prompt_icl, VQG_DEMONSTRATIONS, VQGOutputs
+from travel.data.vqg_learning import FrameVQAMistakeDetectionExample
+from travel.model.grounding import VisualFilterTypes
 from travel.model.mistake_detection import NLI_MODEL_PATH
-from travel.model.ppo_trainer import PPOTrainer
+from travel.model.ppo_trainer import PerTokenPPOTrainer as PPOTrainer
 from travel.model.vqg import parse_vqg_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
@@ -83,7 +80,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize DDP
-    assert torch.cuda.device_count() == 2, "PPO must be run with 2 GPUs per process!"
+    # assert torch.cuda.device_count() == 2, "PPO must be run with 2 GPUs per process!"
     dist.init_process_group(backend='gloo')
 
     # Load local rank from torchrun if we have it (for debugging purpose)
@@ -106,8 +103,9 @@ def main():
         bnb_4bit_compute_dtype=torch.bfloat16,
         bnb_4bit_use_double_quant=True,
     )
-    tokenizer = AutoTokenizer.from_pretrained(args.lm_name, add_eos_token=True, use_fast=True, token=HF_TOKEN)
+    tokenizer = AutoTokenizer.from_pretrained(args.lm_name, use_fast=True, token=HF_TOKEN)
     tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
 
     peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
                             inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
@@ -116,27 +114,35 @@ def main():
                             target_modules="all-linear",
                             lora_dropout=0.1,               # dropout regularization on LoRA weights
                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
-
+    device_map = {"": Accelerator().local_process_index}
     torch.cuda.set_device(0)
     lm = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, 
-                                                                peft_config=peft_config, 
-                                                                quantization_config=bnb_config, 
-                                                                trust_remote_code=True,
-                                                                token=HF_TOKEN)
-    lm.pretrained_model = prepare_model_for_kbit_training(lm.pretrained_model)
-    tokenizer.padding_side = "left"
+                                                           device_map=device_map,
+                                                           peft_config=peft_config, 
+                                                           quantization_config=bnb_config, 
+                                                           trust_remote_code=True,
+                                                           token=HF_TOKEN)
+    # lm.pretrained_model = prepare_model_for_kbit_training(lm.pretrained_model)
+    # generation_kwargs = {
+    #     "min_length": -1,
+    #     "do_sample": True if args.temperature > 0.0 else False,
+    #     "temperature": None if args.temperature == 0.0 else args.temperature,
+    #     "top_p": None if args.temperature == 0.0 else args.top_p,
+    #     "max_new_tokens": 64,
+    # }
     generation_kwargs = {
-        "min_length": -1,
-        "do_sample": True if args.temperature > 0.0 else False,
-        "temperature": None if args.temperature == 0.0 else args.temperature,
-        "top_p": None if args.temperature == 0.0 else args.top_p,
-        "max_new_tokens": 64,
-    }
+        "min_length": -1, # don't ignore the EOS token (see above)
+        "top_k": 0.0, # no top-k sampling
+        "top_p": 1.0, # no nucleus sampling
+        "do_sample": True, # yes, we want to sample
+        "pad_token_id": tokenizer.eos_token_id, # most decoder models don't have a padding token - use EOS token instead
+        "max_new_tokens": 64, # specify how many tokens you want to generate at most
+    }    
 
     # Set up online sources of feedback: NLI model and VLM (possibly with visual filter)
 
     # Set up NLI model for online feedback
-    torch.cuda.set_device(1)
+    # torch.cuda.set_device(1)
     nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
     nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
@@ -144,8 +150,8 @@ def main():
     scorer = FrameVQAMistakeDetectionScorer(args.vlm_name,
                                             visual_filter_type=VisualFilterTypes(args.visual_filter_mode) if args.visual_filter_mode is not None else None,
                                             visual_filter_strength=args.visual_filter_strength,
-                                            vlm_device=1,
-                                            visual_filter_device=1 if args.visual_filter_mode is not None else None)
+                                            vlm_device=0,
+                                            visual_filter_device=0 if args.visual_filter_mode is not None else None)
 
     # Set up output directory, training args, and wandb
     if args.resume_dir is None:
@@ -236,9 +242,11 @@ def main():
         tokenizer=tokenizer,
         data_collator=collator
     )
+    if not ppo_trainer.is_peft_model:
+        raise ValueError("PEFT model did not successfully get loaded by PPO trainer!")
 
     lm.train()
-    qmark_token_id = tokenizer.encode("?", add_special_tokens=False)[0] # this should be 1577 for LLaMA 2
+    newline_token_id = tokenizer.encode("\n", add_special_tokens=False)[1] # this should be 13 for LLaMA 2
     for epoch in tqdm(range(args.n_epochs), f"({global_rank}) epoch"):
         for batch in tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch"):
             this_batch_size = len(batch["procedure_description"])
@@ -246,23 +254,29 @@ def main():
             if args.debug:
                 print("\nPrompts:")
                 pprint(batch['prompt'][0])
-                pprint(batch["query_tensors"][0])
+                pprint(batch["query_tensors"][0].shape)
 
             # Generate and parse questions
             query_tensors = batch["query_tensors"]
-            response_tensors = ppo_trainer.generate(
+            response_tensors, ref_response_tensors = ppo_trainer.generate(
                 query_tensors,
                 return_prompt=False,
-                generate_ref_response=False,
+                generate_ref_response=True,
                 **generation_kwargs
             )
+            # response_tensors = lm.generate(
+            #     pad_and_stack(query_tensors, tokenizer.pad_token_id).to(lm.pretrained_model.device),
+            #     **generation_kwargs,
+            # )
             query_lengths = [q.shape[-1] for q in query_tensors]
             response_texts = tokenizer.batch_decode(response_tensors)
+            ref_response_texts = tokenizer.batch_decode(ref_response_tensors)
             response_texts = [text.replace("Љ", "").strip() for text in response_texts] # Hack: sometimes output from LLaMA 2 starts with Љ and whitespace characters
             if args.debug:
                 print("\nResponses:")
                 pprint(response_texts[0])
-                pprint(response_tensors[0])
+                pprint(ref_response_texts[0])
+                pprint(response_tensors[0].shape)
             vqg_outputs = []
             bad_idxs = []
             for text_idx, text in enumerate(response_texts):
@@ -334,26 +348,34 @@ def main():
             utility = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
             utility = utility.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
+            # TODO: calculate rewards for ref model and log them
+            # TODO: enable early stopping
             # TODO: make VLM generate a caption first?
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
             # TODO: add a third NLI score for whether questions contradict each other or are redundant?
 
             assert relevance.shape == informativeness.shape == utility.shape, f"Relevance, informativeness, and utility shapes should be equal: {relevance.shape}, {informativeness.shape}, {utility.shape}"
             reward = (relevance + informativeness + utility) / 3.0
+
+            # Find the indices to apply rewards at (at the first 2 newlines, i.e., where each question is done being generated)
+            reward_indices = [(response_tensor == newline_token_id).nonzero()[:2].squeeze(1).cpu() + qt_length for qt_length, response_tensor in zip(query_lengths, response_tensors)]
+            reward_indices = torch.stack([torch.tensor([-1, -1]) if ri.shape[0] != 2 else ri for ri in reward_indices]).long() # TODO: make sure this is correct
+            if bad_idxs.shape[0] > 0:
+                reward[bad_idxs] == -1.0
+            # TODO: actually handle the case if model generates less than or more than 2 questions
+            assert reward_indices.shape == (this_batch_size, 2)
+
             if args.debug:
                 pprint("Rewards:")
                 print("relevance =", relevance[0])
                 print("informativeness =", informativeness[0])
                 print("utility =", utility[0])
                 print("combined =", reward[0, :])
-
-            # Find the indices to apply rewards at
-            reward_indices = [response_tensor[response_tensor == qmark_token_id].nonzero().squeeze(1) + qt_length for qt_length, response_tensor in zip(query_lengths, response_tensors)]
-            reward_indices = torch.stack([torch.tensor([-1, -1]) if ri.shape[0] != 2 else ri for ri in reward_indices]).long()
-            reward[bad_idxs] == -1.0
-            # TODO: actually handle the case if model generates less than or more than 2 questions
-            assert reward_indices.shape == (this_batch_size, 2)
-
+                print("reward indices =", reward_indices[0, :])
+                reward_indices_for_response = [reward_indices[i] - query_lengths[i] for i in range(this_batch_size)]
+                tokens_at_reward_indices = [response_tensors[i][reward_indices_for_response[i].long()] for i in range(this_batch_size)]
+                print("tokens at reward indices =", tokens_at_reward_indices[0])
+                
             #### Run PPO step
             # reward = [torch.tensor(r) for r in batch['reward']]
             # TODO: response sequence length doesn't seem right, need to double check - maybe it's including query tokens
@@ -373,10 +395,14 @@ def main():
                     os.makedirs(os.path.join(this_results_dir, f"epoch{epoch}"))
                 ppo_trainer.save_pretrained(os.path.join(this_results_dir, f"epoch{epoch}"))    
 
+    print(f"({global_rank}) Done training!")
+
     #### Save model
     if global_rank == 0:
+        print(f"({global_rank}) Saving model...")
         ppo_trainer.save_pretrained(this_results_dir)        
         wandb.finish()
+    
 
 if __name__ == "__main__":
     main()
