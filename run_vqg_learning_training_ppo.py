@@ -348,7 +348,7 @@ def main():
             informativeness = (probs_expected[:, 1] + probs_not_expected[:, 0]) / 2.0 # TODO: think about whether there's a better way to calculate besides averaging
             informativeness = informativeness.view(this_batch_size, 2).cpu().float()
 
-            # VLM score: mistake detection utility of question sets
+            # VLM score: mistake detection effectiveness of question sets
             # (questions should together successfully classify mistake or success in frame)
             frame_vqa_examples = [
                 FrameVQAMistakeDetectionExample(
@@ -365,16 +365,16 @@ def main():
                     candidate_question_sets=[vqg_output],
                 ) for example, prompt, vqg_output in zip([dataset.load_example_from_file(example_dir, load_frames=False) for example_dir in batch['example_dir']], batch['prompt'], vqg_outputs)
             ]
-            utility = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
-            utility = utility.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
+            effectiveness = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
+            effectiveness = effectiveness.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
             # TODO: calculate rewards for ref model and log them?
             # TODO: make VLM generate a caption first?
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
             # TODO: add a third NLI score for whether questions contradict each other or are redundant?
 
-            assert relevance.shape == informativeness.shape == utility.shape, f"Relevance, informativeness, and utility shapes should be equal: {relevance.shape}, {informativeness.shape}, {utility.shape}"
-            reward = (relevance + informativeness + utility) / 3.0
+            assert relevance.shape == informativeness.shape == effectiveness.shape, f"Relevance, informativeness, and effectiveness shapes should be equal: {relevance.shape}, {informativeness.shape}, {effectiveness.shape}"
+            reward = (relevance + informativeness + effectiveness) / 3.0
 
             # Find the indices to apply rewards at (at the first 2 newlines, i.e., where each question is done being generated)
             reward_indices = [(response_tensor == newline_token_id).nonzero()[:2].squeeze(1).cpu() + qt_length for qt_length, response_tensor in zip(query_lengths, response_tensors)]
@@ -387,7 +387,7 @@ def main():
                 pprint("Rewards:")
                 print("relevance =", relevance[0])
                 print("informativeness =", informativeness[0])
-                print("utility =", utility[0])
+                print("effectiveness =", effectiveness[0])
                 print("combined =", reward[0, :])
                 print("reward indices =", reward_indices[0, :])
                 reward_indices_for_response = [reward_indices[i] - query_lengths[i] for i in range(this_batch_size)]
@@ -402,7 +402,7 @@ def main():
                 wandb.log(global_stats | {"ppo/epoch": epoch, 
                                           "rewards/relevance": np.mean(relevance.cpu().numpy()),
                                           "rewards/informativeness": np.mean(informativeness.cpu().numpy()),
-                                          "rewards/utility": np.mean(utility.cpu().numpy()),
+                                          "rewards/effectiveness": np.mean(effectiveness.cpu().numpy()),
                                           "rewards/combined": np.mean(torch.tensor(reward).cpu().numpy())})
 
             #### Save model

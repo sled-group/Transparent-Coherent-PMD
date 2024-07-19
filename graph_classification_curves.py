@@ -109,6 +109,26 @@ for results_fnames, results_names, output_fname_prefix in [
         ],
         "spatial_intensity_blur_val"
     ),
+    (
+        # Graph 6: Introducing caption
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/SuccessVQA_ego4d_debug500_llava-1.5-7b-hf_20240712182848/metrics_heuristic_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/SuccessVQA_ego4d_debug500_llava-1.5-7b-hf_caption_20240717104130/metrics_heuristic_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_20240713191222/metrics_nli_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_caption_20240717103812/metrics_nli_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_20240713191244/metrics_nli_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug500/llava-1.5-7b-hf/VQG2VQA_ego4d_debug500_llava-1.5-7b-hf_spatial_norephrase1.0_caption_20240717103844/metrics_nli_val.json",
+        ],
+        [
+            "SuccessVQA",
+            "SuccessVQA + Caption",
+            "VQG2VQA",
+            "VQG2VQA + Caption",
+            "VQG2VQA + Spatial",
+            "VQG2VQA + Caption + Spatial"
+        ],
+        "caption_val"
+    )
 ]:
 
     metrics = [{float(k): v for k, v in json.load(open(fname, "r")).items() if k not in ["best_metrics", "best_threshold"]} for fname in results_fnames]
