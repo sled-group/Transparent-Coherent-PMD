@@ -257,7 +257,7 @@ def main():
         for batch in tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch"):
             this_batch_size = len(batch["procedure_description"])
 
-            if args.debug:
+            if args.verbose:
                 print("\nPrompts:")
                 pprint(batch['prompt'][0])
                 pprint(batch["query_tensors"][0].shape)
@@ -292,7 +292,7 @@ def main():
             response_texts = tokenizer.batch_decode(response_tensors)
             response_texts = [text.replace("Љ", "").strip() for text in response_texts] # Hack: sometimes output from LLaMA 2 starts with Љ and whitespace characters
             if args.verbose:
-                print("\nResponses:")
+                print("\nResponses (model and ref):")
                 pprint(response_texts[0])
                 ref_response_texts = tokenizer.batch_decode(ref_response_tensors)
                 pprint(ref_response_texts[0])
@@ -383,7 +383,7 @@ def main():
                 reward[bad_idxs] == -1.0
             assert reward_indices.shape == (this_batch_size, 2)
 
-            if args.debug:
+            if args.verbose:
                 pprint("Rewards:")
                 print("relevance =", relevance[0])
                 print("informativeness =", informativeness[0])
