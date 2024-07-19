@@ -72,10 +72,11 @@ def main():
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--n_demonstrations", type=int, default=20, choices=range(0, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
-    parser.add_argument("--lora_r", type=int, default=64, help="LoRA r (matrix dimension).")
-    parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha (weight update scaling coefficient).")
+    parser.add_argument("--lora_r", type=int, default=256, help="LoRA r (matrix dimension).")
+    parser.add_argument("--lora_alpha", type=int, default=256, help="LoRA alpha (weight update scaling coefficient).")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
     parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
+    parser.add_argument("--verbose", action="store_true", help="Pass this argument to display prompts and generations on every batch.")
     parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
     args = parser.parse_args()
 
@@ -130,10 +131,12 @@ def main():
     #     "top_p": None if args.temperature == 0.0 else args.top_p,
     #     "max_new_tokens": 64,
     # }
+    model = model.bfloat16().cuda()
     generation_kwargs = {
         "min_length": -1, # don't ignore the EOS token (see above)
         "top_k": 0.0, # no top-k sampling
         "top_p": 1.0, # no nucleus sampling
+        "temperature": 1.0,
         "do_sample": True, # yes, we want to sample
         "pad_token_id": tokenizer.eos_token_id, # most decoder models don't have a padding token - use EOS token instead
         "max_new_tokens": 64, # specify how many tokens you want to generate at most
@@ -195,9 +198,9 @@ def main():
                                            mismatch_augmentation=True,
                                            multi_frame=False,
                                            debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-    dataset_path = os.path.join(DATA_CACHE_DIR, "ppo_training_dataset.hf")
+    dataset_path = os.path.join(DATA_CACHE_DIR, "ppo_training_dataset")
     if args.debug:
-        dataset_path = dataset_path.replace(".hf", f"_debug{args.debug_n_examples}.hf")
+        dataset_path += f"_debug{args.debug_n_examples}"
     if not os.path.exists(dataset_path):
         ppo_dataset = []
         for example_dir in tqdm(dataset.example_dirs, desc="Preparing data"):
@@ -261,23 +264,37 @@ def main():
 
             # Generate and parse questions
             query_tensors = batch["query_tensors"]
-            response_tensors, ref_response_tensors = ppo_trainer.generate(
-                query_tensors,
-                return_prompt=False,
-                generate_ref_response=True,
-                **generation_kwargs
-            )
+            if not args.verbose:
+                try:
+                    response_tensors = ppo_trainer.generate(
+                        query_tensors,
+                        return_prompt=False,
+                        generate_ref_response=False,
+                        **generation_kwargs
+                    )
+                except Exception as e:
+                    # If we have an error (e.g., nans during generation), skip to the next batch
+                    print("Warning: Encountered error during generation!")
+                    pprint(e)
+                    continue
+            else:
+                response_tensors, ref_response_tensors = ppo_trainer.generate(
+                    query_tensors,
+                    return_prompt=False,
+                    generate_ref_response=True,
+                    **generation_kwargs
+                )                
             # response_tensors = lm.generate(
             #     pad_and_stack(query_tensors, tokenizer.pad_token_id).to(lm.pretrained_model.device),
             #     **generation_kwargs,
             # )
             query_lengths = [q.shape[-1] for q in query_tensors]
             response_texts = tokenizer.batch_decode(response_tensors)
-            ref_response_texts = tokenizer.batch_decode(ref_response_tensors)
             response_texts = [text.replace("Љ", "").strip() for text in response_texts] # Hack: sometimes output from LLaMA 2 starts with Љ and whitespace characters
-            if args.debug:
+            if args.verbose:
                 print("\nResponses:")
                 pprint(response_texts[0])
+                ref_response_texts = tokenizer.batch_decode(ref_response_tensors)
                 pprint(ref_response_texts[0])
                 pprint(response_tensors[0].shape)
             vqg_outputs = []
