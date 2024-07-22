@@ -72,8 +72,8 @@ def main():
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--n_demonstrations", type=int, default=20, choices=range(0, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
-    parser.add_argument("--lora_r", type=int, default=64, help="LoRA r (matrix dimension).")
-    parser.add_argument("--lora_alpha", type=int, default=64, help="LoRA alpha (weight update scaling coefficient).")
+    parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
+    parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha (weight update scaling coefficient).")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
     parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
     parser.add_argument("--verbose", action="store_true", help="Pass this argument to display prompts and generations on every batch.")
@@ -113,14 +113,14 @@ def main():
                             inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
                             r=args.lora_r,                           # dimension of low-rank matrices
                             lora_alpha=args.lora_alpha,                  # scaling coefficient of weight update
-                            target_modules="all-linear",
-                            lora_dropout=0.1,               # dropout regularization on LoRA weights
+                            # target_modules="all-linear",
+                            # lora_dropout=0.1,               # dropout regularization on LoRA weights
                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
     device_map = {"": Accelerator().local_process_index}
     lm = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, 
                                                            device_map=device_map,
                                                            peft_config=peft_config, 
-                                                           quantization_config=bnb_config, 
+                                                        #    quantization_config=bnb_config, 
                                                            trust_remote_code=True,
                                                            token=HF_TOKEN)
     # pprint(lm.__dict__)
@@ -185,7 +185,7 @@ def main():
         wandb.log({
             # "hyperparameters/temperature": args.temperature,
             # "hyperparameters/top_p": args.top_p,
-            "hyperparameters/visual_filter_strength": args.visual_filter_strength,
+            "hyperparameters/visual_filter_strength": args.visual_filter_strength if args.visual_filter_mode is not None else 0.0,
             "hyperparameters/batch_size": args.train_batch_size,
             "hyperparameters/learning_rate": args.learning_rate,
             "hyperparameters/n_demonstrations": args.n_demonstrations,
@@ -245,6 +245,7 @@ def main():
     )
     ppo_trainer = PPOTrainer(
         model=lm,
+        ref_model=None,
         config=ppo_config,
         dataset=ppo_dataset,
         tokenizer=tokenizer,
