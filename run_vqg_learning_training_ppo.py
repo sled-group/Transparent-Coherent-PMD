@@ -61,8 +61,8 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--lm_name", type=str, default="meta-llama/Llama-2-7b-hf", help="Name or path to Hugging Face model for LM. Can be a fine-tuned LM for VQG.")
-    parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
-    parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
+    # parser.add_argument("--temperature", type=float, default=0.4, help="Temperature for language generation, i.e., degree of randomness to use in sampling words.")
+    # parser.add_argument("--top_p", type=float, default=0.9, help="top_p for language generation, i.e., top percentage of words to consider in terms of likelihood.")
     parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
     parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
     parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
@@ -72,17 +72,13 @@ def main():
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--n_demonstrations", type=int, default=20, choices=range(0, len(VQG_DEMONSTRATIONS) + 1), help="Number of demonstrations of VQG for in-context learning. Must be <= the number of demonstrations available in travel.model.vqg.VQG_DEMONSTRATIONS.")
-    parser.add_argument("--lora_r", type=int, default=256, help="LoRA r (matrix dimension).")
-    parser.add_argument("--lora_alpha", type=int, default=256, help="LoRA alpha (weight update scaling coefficient).")
+    parser.add_argument("--lora_r", type=int, default=64, help="LoRA r (matrix dimension).")
+    parser.add_argument("--lora_alpha", type=int, default=64, help="LoRA alpha (weight update scaling coefficient).")
     parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
     parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
     parser.add_argument("--verbose", action="store_true", help="Pass this argument to display prompts and generations on every batch.")
     parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
     args = parser.parse_args()
-
-    # Initialize DDP
-    # assert torch.cuda.device_count() == 2, "PPO must be run with 2 GPUs per process!"
-    dist.init_process_group(backend='gloo')
 
     # Load local rank from torchrun if we have it (for debugging purpose)
     local_rank = int(os.environ["LOCAL_RANK"]) if "LOCAL_RANK" in os.environ else 0
@@ -96,6 +92,11 @@ def main():
     print("Global rank:", global_rank)
     print("Devices:", torch.cuda.device_count())
     
+    # Initialize DDP
+    # assert torch.cuda.device_count() == 2, "PPO must be run with 2 GPUs per process!"
+    if world_size > 1:
+        dist.init_process_group(backend='gloo')
+
     # Set up LM for training
     print(f"({global_rank}) Loading LM and feedback models...")
     bnb_config = BitsAndBytesConfig(
@@ -116,13 +117,13 @@ def main():
                             lora_dropout=0.1,               # dropout regularization on LoRA weights
                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
     device_map = {"": Accelerator().local_process_index}
-    torch.cuda.set_device(0)
     lm = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, 
                                                            device_map=device_map,
                                                            peft_config=peft_config, 
                                                            quantization_config=bnb_config, 
                                                            trust_remote_code=True,
                                                            token=HF_TOKEN)
+    # pprint(lm.__dict__)
     # lm.pretrained_model = prepare_model_for_kbit_training(lm.pretrained_model)
     # generation_kwargs = {
     #     "min_length": -1,
@@ -131,15 +132,15 @@ def main():
     #     "top_p": None if args.temperature == 0.0 else args.top_p,
     #     "max_new_tokens": 64,
     # }
-    model = model.bfloat16().cuda()
+    # lm = lm.bfloat16().cuda()
     generation_kwargs = {
         "min_length": -1, # don't ignore the EOS token (see above)
-        "top_k": 0.0, # no top-k sampling
-        "top_p": 1.0, # no nucleus sampling
-        "temperature": 1.0,
-        "do_sample": True, # yes, we want to sample
+        # "top_k": 0.0, # no top-k sampling
+        # "top_p": 1.0, # no nucleus sampling
+        # "temperature": 1.0,
+        "do_sample": False, # yes, we want to sample
         "pad_token_id": tokenizer.eos_token_id, # most decoder models don't have a padding token - use EOS token instead
-        "max_new_tokens": 64, # specify how many tokens you want to generate at most
+        "max_new_tokens": 40, # specify how many tokens you want to generate at most
     }    
 
     # Set up online sources of feedback: NLI model and VLM (possibly with visual filter)
@@ -182,8 +183,8 @@ def main():
     if global_rank == 0:
         wandb.init(name=wandb_run_name)
         wandb.log({
-            "hyperparameters/temperature": args.temperature,
-            "hyperparameters/top_p": args.top_p,
+            # "hyperparameters/temperature": args.temperature,
+            # "hyperparameters/top_p": args.top_p,
             "hyperparameters/visual_filter_strength": args.visual_filter_strength,
             "hyperparameters/batch_size": args.train_batch_size,
             "hyperparameters/learning_rate": args.learning_rate,
@@ -235,11 +236,12 @@ def main():
         model_name=args.lm_name,
         learning_rate=args.learning_rate,
         batch_size=args.train_batch_size,
-        mini_batch_size=args.train_batch_size // 4,
-        gradient_accumulation_steps=4,
+        mini_batch_size=args.train_batch_size // 2,
+        gradient_accumulation_steps=2,
         remove_unused_columns=False,
         optimize_cuda_cache=True,
-        early_stopping=True
+        early_stopping=True,
+        is_peft_model=True
     )
     ppo_trainer = PPOTrainer(
         model=lm,
@@ -251,7 +253,6 @@ def main():
     if not ppo_trainer.is_peft_model:
         raise ValueError("PEFT model did not successfully get loaded by PPO trainer!")
 
-    lm.train()
     newline_token_id = tokenizer.encode("\n", add_special_tokens=False)[1] # this should be 13 for LLaMA 2
     for epoch in tqdm(range(args.n_epochs), f"({global_rank}) epoch"):
         for batch in tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch"):
@@ -264,26 +265,26 @@ def main():
 
             # Generate and parse questions
             query_tensors = batch["query_tensors"]
-            if not args.verbose:
-                try:
+            try:
+                if not args.verbose:
                     response_tensors = ppo_trainer.generate(
                         query_tensors,
                         return_prompt=False,
                         generate_ref_response=False,
                         **generation_kwargs
                     )
-                except Exception as e:
-                    # If we have an error (e.g., nans during generation), skip to the next batch
-                    print("Warning: Encountered error during generation!")
-                    pprint(e)
-                    continue
-            else:
-                response_tensors, ref_response_tensors = ppo_trainer.generate(
-                    query_tensors,
-                    return_prompt=False,
-                    generate_ref_response=True,
-                    **generation_kwargs
-                )                
+                else:
+                    response_tensors, ref_response_tensors = ppo_trainer.generate(
+                        query_tensors,
+                        return_prompt=False,
+                        generate_ref_response=True,
+                        **generation_kwargs
+                    )
+            except Exception as e:
+                # If we have an error (e.g., nans during generation), skip to the next batch
+                print("Warning: Encountered error during generation!")
+                pprint(e)
+                continue
             # response_tensors = lm.generate(
             #     pad_and_stack(query_tensors, tokenizer.pad_token_id).to(lm.pretrained_model.device),
             #     **generation_kwargs,
@@ -365,7 +366,8 @@ def main():
                     candidate_question_sets=[vqg_output],
                 ) for example, prompt, vqg_output in zip([dataset.load_example_from_file(example_dir, load_frames=False) for example_dir in batch['example_dir']], batch['prompt'], vqg_outputs)
             ]
-            effectiveness = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
+            with torch.no_grad():
+                effectiveness = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
             effectiveness = effectiveness.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
             # TODO: calculate rewards for ref model and log them?
@@ -391,15 +393,16 @@ def main():
                 print("combined =", reward[0, :])
                 print("reward indices =", reward_indices[0, :])
                 reward_indices_for_response = [reward_indices[i] - query_lengths[i] for i in range(this_batch_size)]
-                tokens_at_reward_indices = [response_tensors[i][reward_indices_for_response[i].long()] for i in range(this_batch_size)]
+                tokens_at_reward_indices = [response_tensors[i][reward_indices_for_response[i].long()] if torch.min(reward_indices_for_response[i]) > 0 else torch.tensor([-1, -1]) for i in range(this_batch_size)]
                 print("tokens at reward indices =", tokens_at_reward_indices[0])
                 
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, reward, reward_indices)
-            global_stats = ppo_trainer.gather_stats(stats)
+            # reward = [torch.mean(reward[i, :]) for i in range(reward.shape[0])]
+            # stats = ppo_trainer.step(query_tensors, response_tensors, reward)
             ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
             if global_rank == 0:
-                wandb.log(global_stats | {"ppo/epoch": epoch, 
+                wandb.log(stats | {"ppo/epoch": epoch, 
                                           "rewards/relevance": np.mean(relevance.cpu().numpy()),
                                           "rewards/informativeness": np.mean(informativeness.cpu().numpy()),
                                           "rewards/effectiveness": np.mean(effectiveness.cpu().numpy()),
