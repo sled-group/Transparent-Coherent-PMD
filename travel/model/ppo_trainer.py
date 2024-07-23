@@ -325,6 +325,8 @@ class PerTokenPPOTrainer(PPOTrainer):
                     model_inputs,
                     return_logits=full_kl_penalty,
                 )
+        # pprint(all_logprobs[0])
+        # pprint(ref_logprobs[0])
 
         timing["time/ppo/forward_pass"] = time.time() - t
 
@@ -498,6 +500,7 @@ class PerTokenPPOTrainer(PPOTrainer):
             # reward is preference model score + KL penalty
             # Add scores from reward model at specified indices
             last_non_masked_index = mask.nonzero()[-1]
+            score_idxs[score_idxs != -1] -= 1 # Score is only calculated starting at second query token so push back the indices
             score_idxs[score_idxs == -1] = last_non_masked_index
             reward[score_idxs] += score
 

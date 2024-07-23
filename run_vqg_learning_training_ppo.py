@@ -18,7 +18,7 @@ from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForSequence
 from trl import PPOConfig, AutoModelForCausalLMWithValueHead
 import wandb
 
-from travel.constants import HF_TOKEN, RESULTS_DIR, DATA_CACHE_DIR
+from travel.constants import HF_TOKEN, RESULTS_DIR, DATA_CACHE_DIR, RANDOM_SEED
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import NLI_HYPOTHESIS_COMPLETION_TEMPLATE, MistakeDetectionTasks
 from travel.data.vqa import VQAResponse
@@ -120,7 +120,7 @@ def main():
     lm = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, 
                                                            device_map=device_map,
                                                            peft_config=peft_config, 
-                                                        #    quantization_config=bnb_config, 
+                                                           quantization_config=bnb_config, 
                                                            trust_remote_code=True,
                                                            token=HF_TOKEN)
     # pprint(lm.__dict__)
@@ -241,7 +241,8 @@ def main():
         remove_unused_columns=False,
         optimize_cuda_cache=True,
         early_stopping=True,
-        is_peft_model=True
+        is_peft_model=True,
+        seed=RANDOM_SEED,
     )
     ppo_trainer = PPOTrainer(
         model=lm,
@@ -256,7 +257,12 @@ def main():
 
     newline_token_id = tokenizer.encode("\n", add_special_tokens=False)[1] # this should be 13 for LLaMA 2
     for epoch in tqdm(range(args.n_epochs), f"({global_rank}) epoch"):
-        for batch in tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch"):
+        for batch_idx, batch in enumerate(tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch")):
+            # if batch_idx == 0:
+            #     keep_batch = batch
+            # else:
+            #     batch = keep_batch
+            
             this_batch_size = len(batch["procedure_description"])
 
             if args.verbose:
@@ -303,7 +309,6 @@ def main():
             bad_idxs = []
             for text_idx, text in enumerate(response_texts):
                 try:
-                    # TODO: generations can never be parsed
                     vqg_output = parse_vqg_outputs(
                         generated_language=text,
                         procedure_id=batch['procedure_id'][text_idx],
@@ -318,6 +323,7 @@ def main():
                         questions=["Is it?", "Is it?"],
                         answers_str=["Yes", "Yes"],
                     )
+                    print("Warning: could not parse generated questions!")
                 vqg_outputs.append(vqg_output)
             bad_idxs = torch.tensor(bad_idxs)
 
@@ -371,10 +377,13 @@ def main():
                 effectiveness = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
             effectiveness = effectiveness.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
+            # TODO: assign rewards for every token in each question?
+            # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
+            # TODO: ref model generation is always generating the same thing as the main model; need to fix this (forward pass seems fine though)
             # TODO: calculate rewards for ref model and log them?
-            # TODO: make VLM generate a caption first?
+            # TODO: remove (yes/no) from VQG prompt
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
-            # TODO: add a third NLI score for whether questions contradict each other or are redundant?
+            # TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)?
 
             assert relevance.shape == informativeness.shape == effectiveness.shape, f"Relevance, informativeness, and effectiveness shapes should be equal: {relevance.shape}, {informativeness.shape}, {effectiveness.shape}"
             reward = (relevance + informativeness + effectiveness) / 3.0

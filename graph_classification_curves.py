@@ -128,6 +128,22 @@ for results_fnames, results_names, output_fname_prefix in [
             "VQG2VQA + Caption + Spatial"
         ],
         "caption_val"
+    ),
+    (
+        # Graph 7: Introducing "sequential VQA"
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240701113527/metrics_heuristic_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_caption_20240722155838/metrics_heuristic_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA2SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_20240722153521/metrics_heuristic_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_debug250/llava-1.5-7b-hf/VQG2VQA2SuccessVQA_ego4d_debug250_llava-1.5-7b-hf_spatial_norephrase1.0_20240722155446/metrics_heuristic_val.json"
+        ],
+        [
+            "SuccessVQA",
+            "Caption -> SuccessVQA",
+            "VQG2VQA -> SuccessVQA",
+            "VQG2VQA + Spatial -> SuccessVQA",
+        ],
+        "sequential_val"   
     )
 ]:
 
