@@ -142,6 +142,7 @@ def main():
         "pad_token_id": tokenizer.eos_token_id, # most decoder models don't have a padding token - use EOS token instead
         "max_new_tokens": 40, # specify how many tokens you want to generate at most
     }    
+    # TODO: play around with this more?
 
     # Set up online sources of feedback: NLI model and VLM (possibly with visual filter)
 
@@ -377,11 +378,11 @@ def main():
                 effectiveness = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
             effectiveness = effectiveness.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
-            # TODO: assign rewards for every token in each question?
+            # TODO: double check calculation of reward - seems like we're not penalizing model for making malformed outputs
+            # TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens
             # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
             # TODO: ref model generation is always generating the same thing as the main model; need to fix this (forward pass seems fine though)
             # TODO: calculate rewards for ref model and log them?
-            # TODO: remove (yes/no) from VQG prompt
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
             # TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)?
 
@@ -412,11 +413,15 @@ def main():
             # stats = ppo_trainer.step(query_tensors, response_tensors, reward)
             ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
             if global_rank == 0:
-                wandb.log(stats | {"ppo/epoch": epoch, 
-                                          "rewards/relevance": np.mean(relevance.cpu().numpy()),
-                                          "rewards/informativeness": np.mean(informativeness.cpu().numpy()),
-                                          "rewards/effectiveness": np.mean(effectiveness.cpu().numpy()),
-                                          "rewards/combined": np.mean(torch.tensor(reward).cpu().numpy())})
+                try:
+                    wandb.log(stats | {"ppo/epoch": epoch, 
+                                            "rewards/relevance": np.mean(relevance.cpu().numpy()),
+                                            "rewards/informativeness": np.mean(informativeness.cpu().numpy()),
+                                            "rewards/effectiveness": np.mean(effectiveness.cpu().numpy()),
+                                            "rewards/combined": np.mean(torch.tensor(reward).cpu().numpy())})
+                except Exception as e:
+                    print("Warning: failed to log to wandb!")
+                    pprint(e)
 
             #### Save model
             if epoch % 5 == 0 and global_rank == 0 and args.save_strategy == "epoch":
