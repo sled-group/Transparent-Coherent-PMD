@@ -18,6 +18,7 @@ from travel.data.captaincook4d.constants import RECIPE_STEPS
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.utils import split_list_into_partitions
 from travel.model.mistake_detection import NLI_MODEL_PATH
+from travel.model.metrics import consistency_metrics
 from travel.model.vqg import run_vqg, correct_vqg_outputs_with_nli
 
 parser = argparse.ArgumentParser()
@@ -151,90 +152,93 @@ else:
 prompts = [p for p in prompts if p.procedure_id not in vqg_outputs]
 prompt_ids = [p.procedure_id for p in prompts]
 
-if len(prompts) == 0 and not args.correct_with_nli:
-    raise ValueError(f"The passed --resume_dir {args.resume_dir} already has all VQG outputs for {args.partition} partition!")
+if not(len(prompts) == 0 and not args.correct_with_nli):
 
-# Run prompts through LM to generate visual questions (and save VQG outputs)
-if n_workers == 1:
-    print("Running VQG sequentially...")
-    if len(prompts) > 0:
-        vqg_outputs = run_vqg(
-            lm,
-            prompts,
-            prompt_ids,
-            batch_size=args.batch_size,
-            save_path=os.path.join(this_results_dir, vqg_outputs_fname),
-            vqg_outputs=vqg_outputs # Will send in partly completed VQG outputs if we have them
-        )
+    # Run prompts through LM to generate visual questions (and save VQG outputs)
+    if n_workers == 1:
+        print("Running VQG sequentially...")
+        if len(prompts) > 0:
+            vqg_outputs = run_vqg(
+                lm,
+                prompts,
+                prompt_ids,
+                batch_size=args.batch_size,
+                save_path=os.path.join(this_results_dir, vqg_outputs_fname),
+                vqg_outputs=vqg_outputs # Will send in partly completed VQG outputs if we have them
+            )
 
-    # If passed --correct_with_nli, use a pre-trained NLI to correct LM's proposed answers (completely replaces them, later can just make LM only generate questions)
-    if args.correct_with_nli:
-        print("Correcting VQG outputs with NLI model...")
-        del lm
-        nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
-        nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
-        vqg_outputs = correct_vqg_outputs_with_nli(vqg_outputs, nli_model, nli_tokenizer)
-        del nli_model, nli_tokenizer
+        # If passed --correct_with_nli, use a pre-trained NLI to correct LM's proposed answers (completely replaces them, later can just make LM only generate questions)
+        if args.correct_with_nli:
+            print("Correcting VQG outputs with NLI model...")
+            del lm
+            nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
+            nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
+            vqg_outputs = correct_vqg_outputs_with_nli(vqg_outputs, nli_model, nli_tokenizer)
+            del nli_model, nli_tokenizer
 
-        # Save corrected VQG outputs (and a copy of the uncorrected ones)
-        shutil.copy(os.path.join(this_results_dir, vqg_outputs_fname), os.path.join(this_results_dir, vqg_outputs_fname.replace(".json", "_uncorrected.json")))
+            # Save corrected VQG outputs (and a copy of the uncorrected ones)
+            shutil.copy(os.path.join(this_results_dir, vqg_outputs_fname), os.path.join(this_results_dir, vqg_outputs_fname.replace(".json", "_uncorrected.json")))
+            save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
+
+    else:
+        # Split up remaining prompts and prompt IDs by GPU
+        prompts_split = split_list_into_partitions(prompts, n_workers)
+        prompt_ids_split = split_list_into_partitions(prompt_ids, n_workers)
+
+        # Then gather up any existing VQG outputs and exclude them from prompts and prompt IDs
+        all_worker_vqg_outputs = []
+        all_worker_prompt_ids = []
+        all_worker_prompts = []
+        worker_vqg_outputs_paths = [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(n_workers)]
+        for i in range(n_workers):
+            worker_vqg_outputs = load_vqg_outputs(worker_vqg_outputs_paths[i])
+            worker_prompt_ids = [pid for pid in prompt_ids_split[i] if pid not in worker_vqg_outputs]
+            worker_prompts = [prompt for pid, prompt in zip(prompt_ids_split[i], prompts_split[i]) if pid not in worker_vqg_outputs]
+
+            all_worker_vqg_outputs.append(worker_vqg_outputs)
+            all_worker_prompt_ids += worker_prompt_ids
+            all_worker_prompts += worker_prompts
+
+        # Combine VQG outputs we have so far and save
+        for vqgo in all_worker_vqg_outputs:
+            vqg_outputs |= vqgo
         save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
 
-else:
-    # Split up remaining prompts and prompt IDs by GPU
-    prompts_split = split_list_into_partitions(prompts, n_workers)
-    prompt_ids_split = split_list_into_partitions(prompt_ids, n_workers)
+        # Redistribute prompts across workers in case one GPU ran slower than others in the previous run
+        assert len(all_worker_prompt_ids) == len(all_worker_prompts), "Size issue with collecting prompts and prompt IDs from earlier run workers!"
+        all_worker_prompts = split_list_into_partitions(all_worker_prompts, n_workers)
+        all_worker_prompt_ids = split_list_into_partitions(all_worker_prompt_ids, n_workers)
 
-    # Then gather up any existing VQG outputs and exclude them from prompts and prompt IDs
-    all_worker_vqg_outputs = []
-    all_worker_prompt_ids = []
-    all_worker_prompts = []
-    worker_vqg_outputs_paths = [os.path.join(this_results_dir, vqg_outputs_fname).replace(".json", f"_{i}.json") for i in range(n_workers)]
-    for i in range(n_workers):
-        worker_vqg_outputs = load_vqg_outputs(worker_vqg_outputs_paths[i])
-        worker_prompt_ids = [pid for pid in prompt_ids_split[i] if pid not in worker_vqg_outputs]
-        worker_prompts = [prompt for pid, prompt in zip(prompt_ids_split[i], prompts_split[i]) if pid not in worker_vqg_outputs]
+        print(f"Loaded prompts split across {n_workers} GPUs: " + ", ".join([str(len(p)) for p in all_worker_prompts]))
 
-        all_worker_vqg_outputs.append(worker_vqg_outputs)
-        all_worker_prompt_ids += worker_prompt_ids
-        all_worker_prompts += worker_prompts
+        if not all(len(p) == 0 for p in all_worker_prompts):
+            # Parallelize across GPUs
+            print(f"Parallelizing VQG across {n_workers} GPUs...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:
+                partitions = list(executor.map(run_vqg, 
+                                            lms,
+                                            all_worker_prompts,
+                                            all_worker_prompt_ids,
+                                            [args.batch_size for _ in range(n_workers)],
+                                            worker_vqg_outputs_paths,
+                                            [{} for _ in range(n_workers)]
+                                            )
+                )
+        else:
+            partitions = worker_vqg_outputs
 
-    # Combine VQG outputs we have so far and save
-    for vqgo in all_worker_vqg_outputs:
-        vqg_outputs |= vqgo
-    save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
+        # Combine all VQG outputs from workers
+        for p in partitions:
+            vqg_outputs |= p
 
-    # Redistribute prompts across workers in case one GPU ran slower than others in the previous run
-    assert len(all_worker_prompt_ids) == len(all_worker_prompts), "Size issue with collecting prompts and prompt IDs from earlier run workers!"
-    all_worker_prompts = split_list_into_partitions(all_worker_prompts, n_workers)
-    all_worker_prompt_ids = split_list_into_partitions(all_worker_prompt_ids, n_workers)
-
-    print(f"Loaded prompts split across {n_workers} GPUs: " + ", ".join([str(len(p)) for p in all_worker_prompts]))
-
-    if not all(len(p) == 0 for p in all_worker_prompts):
-        # Parallelize across GPUs
-        print(f"Parallelizing VQG across {n_workers} GPUs...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:
-            partitions = list(executor.map(run_vqg, 
-                                           lms,
-                                           all_worker_prompts,
-                                           all_worker_prompt_ids,
-                                           [args.batch_size for _ in range(n_workers)],
-                                           worker_vqg_outputs_paths,
-                                           [{} for _ in range(n_workers)]
-                                          )
-            )
-    else:
-        partitions = worker_vqg_outputs
-
-    # Combine all VQG outputs from workers
-    for p in partitions:
-        vqg_outputs |= p
-
-    # Save combined VQG outputs
-    save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
+        # Save combined VQG outputs
+        save_vqg_outputs(vqg_outputs, os.path.join(this_results_dir, vqg_outputs_fname))
 
 print(f"{len(vqg_outputs)} VQG outputs generated!")
+
+# Calculate consistency metrics for generated questions
+metrics = consistency_metrics(vqg_outputs)
+json.dump(metrics, open(os.path.join(this_results_dir, "metrics_consistency.json"), "w"), indent=4)
 
 # Save config and args
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))

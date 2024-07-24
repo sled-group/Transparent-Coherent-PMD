@@ -14,7 +14,7 @@ from pprint import pprint
 import torch
 import torch.distributed as dist
 from tqdm import tqdm
-from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, AutoModelForCausalLM
 from trl import PPOConfig, AutoModelForCausalLMWithValueHead
 import wandb
 
@@ -26,20 +26,10 @@ from travel.data.vqg import generate_vqg_prompt_icl, VQG_DEMONSTRATIONS, VQGOutp
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample
 from travel.model.grounding import VisualFilterTypes
 from travel.model.mistake_detection import NLI_MODEL_PATH
+from travel.model.nli import run_nli
 from travel.model.ppo_trainer import PerTokenPPOTrainer as PPOTrainer
 from travel.model.vqg import parse_vqg_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
-
-def run_nli(nli_tokenizer, nli_model, premise_hypothesis_pairs):
-    with torch.no_grad():
-        x = nli_tokenizer.batch_encode_plus(premise_hypothesis_pairs, 
-                                                return_tensors='pt',
-                                                padding="longest",
-                                                truncation='only_first')
-        logits = nli_model(**x.to(nli_model.device))[0]
-        logits = logits.cpu()
-        logits = logits[:,[0,2]] # Take logits for contradiction and entailment only
-    return logits.softmax(dim=1)
 
 def pad_and_stack(tensors, pad_value):
     # Determine the maximum length of the tensors
@@ -117,12 +107,21 @@ def main():
                             # lora_dropout=0.1,               # dropout regularization on LoRA weights
                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
     device_map = {"": Accelerator().local_process_index}
+    torch.cuda.set_device(0)
     lm = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, 
                                                            device_map=device_map,
                                                            peft_config=peft_config, 
                                                            quantization_config=bnb_config, 
                                                            trust_remote_code=True,
                                                            token=HF_TOKEN)
+    
+    # Ref model is just a copy of the same LM
+    ref_lm = AutoModelForCausalLM.from_pretrained(args.lm_name,
+                                                  quantization_config=bnb_config,
+                                                  trust_remote_code=True,
+                                                  token=HF_TOKEN)
+    ref_lm.eval()
+
     # pprint(lm.__dict__)
     # lm.pretrained_model = prepare_model_for_kbit_training(lm.pretrained_model)
     # generation_kwargs = {
@@ -157,6 +156,12 @@ def main():
                                             visual_filter_strength=args.visual_filter_strength,
                                             vlm_device=0,
                                             visual_filter_device=0 if args.visual_filter_mode is not None else None)
+
+    print("\nMODULE DEVICES:")
+    print("lm:", lm.pretrained_model.device)
+    print("ref_lm:", ref_lm.device)
+    print("nli_model:", nli_model.device)
+    print("vlm:", scorer.vlm.device)
 
     # Set up output directory, training args, and wandb
     if args.resume_dir is None:
@@ -247,7 +252,7 @@ def main():
     )
     ppo_trainer = PPOTrainer(
         model=lm,
-        ref_model=None,
+        ref_model=ref_lm,
         config=ppo_config,
         dataset=ppo_dataset,
         tokenizer=tokenizer,
@@ -357,6 +362,9 @@ def main():
             informativeness = (probs_expected[:, 1] + probs_not_expected[:, 0]) / 2.0 # TODO: think about whether there's a better way to calculate besides averaging
             informativeness = informativeness.view(this_batch_size, 2).cpu().float()
 
+            # Multiply relevance and informativeness to define combined "consistency" of generated questions
+            consistency = relevance * informativeness
+
             # VLM score: mistake detection effectiveness of question sets
             # (questions should together successfully classify mistake or success in frame)
             frame_vqa_examples = [
@@ -378,32 +386,35 @@ def main():
                 effectiveness = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
             effectiveness = effectiveness.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
+            # Verifiability is just effectiveness of questions
+            verifiability = effectiveness
+
+            # TODO: train model by procedure ID rather than randomly shuffling all examples?
             # TODO: balance positive and negative mistake detection examples
-            # TODO: double check calculation of reward - seems like we're not penalizing model for making malformed outputs
             # TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens
             # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
             # TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?
-            # TODO: ref model generation is always generating the same thing as the main model; need to fix this (forward pass seems fine though)
-            # -> the model adapter is disabled for both generating response and ref response - why is that?
             # TODO: calculate rewards for ref model and log them?
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
-            # TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)?
+            # TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)? - currently, LM seems to learn that we can maximize effectiveness by generating the same question twice with yes and no as answers
 
-            assert relevance.shape == informativeness.shape == effectiveness.shape, f"Relevance, informativeness, and effectiveness shapes should be equal: {relevance.shape}, {informativeness.shape}, {effectiveness.shape}"
-            reward = (relevance + informativeness + effectiveness) / 3.0
+            assert consistency.shape == verifiability.shape, f"Consistency and verifiability shapes should be equal: {consistency.shape}, {effectiveness.shape}"
+            reward = 0.5 * consistency + 0.5 * verifiability # equal weighting
 
             # Find the indices to apply rewards at (at the first 2 newlines, i.e., where each question is done being generated)
             reward_indices = [(response_tensor == newline_token_id).nonzero()[:2].squeeze(1).cpu() + qt_length for qt_length, response_tensor in zip(query_lengths, response_tensors)]
             reward_indices = torch.stack([torch.tensor([-1, -1]) if ri.shape[0] != 2 else ri for ri in reward_indices]).long() # TODO: make sure this is correct
             if bad_idxs.shape[0] > 0:
-                reward[bad_idxs] == -1.0
+                reward[bad_idxs] = -1.0
             assert reward_indices.shape == (this_batch_size, 2)
 
             if args.verbose:
                 pprint("Rewards:")
                 print("relevance =", relevance[0])
                 print("informativeness =", informativeness[0])
+                print("consistency =", consistency[0])
                 print("effectiveness =", effectiveness[0])
+                print("verifiability =", verifiability[0])
                 print("combined =", reward[0, :])
                 print("reward indices =", reward_indices[0, :])
                 reward_indices_for_response = [reward_indices[i] - query_lengths[i] for i in range(this_batch_size)]
@@ -412,15 +423,15 @@ def main():
                 
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, reward, reward_indices)
-            # reward = [torch.mean(reward[i, :]) for i in range(reward.shape[0])]
-            # stats = ppo_trainer.step(query_tensors, response_tensors, reward)
             ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
             if global_rank == 0:
                 try:
                     wandb.log(stats | {"ppo/epoch": epoch, 
                                             "rewards/relevance": np.mean(relevance.cpu().numpy()),
                                             "rewards/informativeness": np.mean(informativeness.cpu().numpy()),
+                                            "rewards/consistency": np.mean(consistency.cpu().numpy()),
                                             "rewards/effectiveness": np.mean(effectiveness.cpu().numpy()),
+                                            "rewards/verifiability": np.mean(verifiability.cpu().numpy()),
                                             "rewards/combined": np.mean(torch.tensor(reward).cpu().numpy())})
                 except Exception as e:
                     print("Warning: failed to log to wandb!")

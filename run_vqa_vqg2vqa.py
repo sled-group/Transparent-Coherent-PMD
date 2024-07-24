@@ -23,7 +23,8 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQA_PROMPT_TEMPLATES, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter, ImageMaskTypes
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
+from travel.model.metrics import generate_det_curve
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
@@ -31,7 +32,7 @@ parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired vqg_outputs.json is stored.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
-parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
+parser.add_argument("--mistake_detection_strategy", nargs='+', type=str, default=["heuristic", "nli"], choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
@@ -220,24 +221,25 @@ for eval_partition in args.eval_partitions:
                                                     cache_frames=args.cache_vqa_frames,
                                                     caption_first=args.caption_first)
 
-    print("Evaluating and saving results...")
-    evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
-    mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
-    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
-    pprint(metrics['best_metrics'])
+    for mistake_detection_strategy in args.mistake_detection_strategy:
+        print("Evaluating and saving results...")
+        evaluator = MISTAKE_DETECTION_STRATEGIES[mistake_detection_strategy](eval_datasets[0], vqa_outputs)
+        mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
+        print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
+        pprint(metrics['best_metrics'])
 
-    # Compile preds per mistake detection example
-    preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
+        # Compile preds per mistake detection example
+        preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
 
-    # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
-    metrics_filename = f"metrics_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
-    json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
+        # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
+        metrics_filename = f"metrics_{mistake_detection_strategy}{'rerun' if mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
+        json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
-    preds_filename = f"preds_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
-    json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
+        preds_filename = f"preds_{mistake_detection_strategy}{'rerun' if mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
+        json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
 
-    det_filename = f"det_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
-    generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
+        det_filename = f"det_{mistake_detection_strategy}{'rerun' if mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
+        generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
