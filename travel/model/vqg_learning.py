@@ -6,7 +6,7 @@ from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConf
 from typing import Optional, Union
 
 from travel.constants import DATA_CACHE_DIR
-from travel.data.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
+from travel.data.vqa import VQAOutputs, VQAResponse, VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, ImageMaskTypes
@@ -101,7 +101,8 @@ class FrameVQAMistakeDetectionScorer:
                  return_vqa_outputs: bool=False,
                  batch_size: int=1,
                  cache_path: Optional[str]=None,
-                 memory_tracker: Optional[SummaryTracker]=None) -> Union[torch.FloatTensor, list[VQAOutputs]]:
+                 memory_tracker: Optional[SummaryTracker]=None,
+                 return_scores_only: bool=False) -> Union[torch.FloatTensor, list[VQAOutputs]]:
         """
         Score visual questions when posed on individual video frames to a VLM.
         
@@ -145,7 +146,7 @@ class FrameVQAMistakeDetectionScorer:
         # Then delete these pre-loaded logits
         del logits 
 
-        prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
+        prompt_template = VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
         
         response_tokens = get_vqa_response_token_ids(self.processor.tokenizer)
@@ -209,6 +210,9 @@ class FrameVQAMistakeDetectionScorer:
                 vqa_outputs.append(this_vqa_outputs)
         
         answer_probs, scores = self.get_scores(mistake_labels, vqa_outputs)
+        if return_scores_only:
+            return scores
+
         vqg_training_examples = [
             VQGTrainingExample(
                 task_name=MistakeDetectionTasks.Ego4D,

@@ -1,6 +1,7 @@
 from dataclasses import dataclass, asdict
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from pprint import pprint
 from scipy.special import softmax
 from scipy.stats import norm
@@ -645,6 +646,8 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
 
     # Save to files
     for save_path in save_paths:
+        if not os.path.exists("/".join(save_path.split("/")[:-1])):
+            os.makedirs("/".join(save_path.split("/")[:-1]))
         plt.savefig(save_path)
 
 
@@ -709,6 +712,8 @@ def generate_roc_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
 
     # Save to files
     for save_path in save_paths:
+        if not os.path.exists("/".join(save_path.split("/")[:-1])):
+            os.makedirs("/".join(save_path.split("/")[:-1]))
         plt.savefig(save_path)
         with open(save_path.replace(".pdf", ".txt"), "w") as f:
             f.write("\n".join([f"{result_name}: {auc_metric}\n" for auc_metric, result_name in zip(aurocs, curve_names)]))

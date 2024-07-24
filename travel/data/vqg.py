@@ -401,7 +401,7 @@ N_GENERATED_QUESTIONS = len(VQG_DEMONSTRATIONS[0].questions)
 VQG_PROMPT_TEMPLATE = 'The instructions say "{instruction_step}". To visually verify that this procedure is complete, what are {n_questions} questions we could ask about an image of the scene and their expected answers?\n'
 VQG_EXAMPLE_TEMPLATE = VQG_PROMPT_TEMPLATE + \
                        "{question_list}"
-VQG_QUESTION_TEMPLATE = "{question_number}. {question} (yes/no) {answer}"
+VQG_QUESTION_TEMPLATE = "{question_number}. {question} {answer}"
 
 def generate_vqg_prompt(instruction_step: str) -> str:
     """
@@ -475,7 +475,7 @@ def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_desc
     :param procedure_description: Procedure description in text (e.g., recipe or instruction step text).
     :return: VQGOutputs parsed from generated language.
     """
-    questions_answers = [(q_a.split("? (yes/no)")[0].strip() + "?", q_a.split("(yes/no)")[1].strip()) for q_a in generated_language.split("\n")[0:2]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
+    questions_answers = [(q_a.split("?")[0].strip() + "?", q_a.split("?")[1].strip()) for q_a in generated_language.split("\n")[0:2]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
     questions = [q[2:].strip() for q, _ in questions_answers]          
     answers = [a for _, a in questions_answers]
     output = VQGOutputs(procedure_id=procedure_id,

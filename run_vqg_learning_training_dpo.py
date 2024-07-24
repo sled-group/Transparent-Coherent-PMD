@@ -61,6 +61,7 @@ def main():
 
     # Initialize DDP
     if args.training_mode == "PPO":
+        print("Warning: PPO training mode is not finished. Use `run_vqg_learning_training_ppo.py` instead.")
         dist.init_process_group(backend='gloo')
 
     # Load local rank from torchrun if we have it (for debugging purpose)
