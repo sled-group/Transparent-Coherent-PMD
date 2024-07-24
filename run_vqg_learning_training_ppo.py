@@ -384,6 +384,7 @@ def main():
             # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
             # TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?
             # TODO: ref model generation is always generating the same thing as the main model; need to fix this (forward pass seems fine though)
+            # -> the model adapter is disabled for both generating response and ref response - why is that?
             # TODO: calculate rewards for ref model and log them?
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
             # TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)?

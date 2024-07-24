@@ -27,6 +27,7 @@ class PerTokenPPOTrainer(PPOTrainer):
         return_prompt: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         remove_padding: bool = True,
+        disable_peft_adapter: bool = False,
         **generation_kwargs,
     ):
         outputs = []
@@ -57,7 +58,7 @@ class PerTokenPPOTrainer(PPOTrainer):
                 return_tensors="pt",
             ).to(self.current_device)
 
-            with unwrap_model_for_generation(model, self.accelerator, is_peft_model=self.is_peft_model) as unwrapped_model:
+            with unwrap_model_for_generation(model, self.accelerator, is_peft_model=disable_peft_adapter and self.is_peft_model) as unwrapped_model:
                 generations = unwrapped_model.generate(**padded_inputs, **generation_kwargs)
 
             for generation, mask in zip(generations, padded_inputs["attention_mask"]):
@@ -127,6 +128,7 @@ class PerTokenPPOTrainer(PPOTrainer):
                     length_sampler=length_sampler,
                     batch_size=batch_size,
                     return_prompt=return_prompt,
+                    disable_peft_adapter=True,
                     **generation_kwargs,
                 )
 
