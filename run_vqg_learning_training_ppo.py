@@ -378,9 +378,11 @@ def main():
                 effectiveness = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
             effectiveness = effectiveness.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
+            # TODO: balance positive and negative mistake detection examples
             # TODO: double check calculation of reward - seems like we're not penalizing model for making malformed outputs
             # TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens
             # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
+            # TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?
             # TODO: ref model generation is always generating the same thing as the main model; need to fix this (forward pass seems fine though)
             # TODO: calculate rewards for ref model and log them?
             # TODO: add another score to check whether generated questions mention objects not in procedure description?
