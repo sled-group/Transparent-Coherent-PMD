@@ -35,8 +35,9 @@ def effectiveness(is_mistake: bool, mistake_probs: Union[list[float], list[list[
     :param mistake_probs: List of mistake probabilities for each question used to detect a mistake.
     """
     return_one = False
-    if type(mistake_probs[0]) == float:
-        mistake_probs = [mistake_probs]
+    mistake_probs = np.array(mistake_probs)
+    if len(mistake_probs.shape) == 1:
+        mistake_probs = np.expand_dims(mistake_probs, axis=0)
         return_one = True
 
     effectiveness = []

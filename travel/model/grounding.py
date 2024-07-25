@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import os
 from PIL import Image
-from pprint import pprint
 import spacy
 from spacy.lang.en import English
 import torch
@@ -318,7 +317,7 @@ class ImageMaskTypes(Enum):
 class SpatialVisualFilter(AdaptiveVisualFilter):
 
     """Visual attention filter that masks/crops an image based on spatial dependencies in a visual question."""
-    def __init__(self, rephrase_questions: bool=True, mask_strength: float=1.0, mask_type: ImageMaskTypes=ImageMaskTypes.Darkness,  **kwargs: dict[str, Any]):
+    def __init__(self, rephrase_questions: bool=True, mask_strength: float=1.0, mask_type: ImageMaskTypes=ImageMaskTypes.Darkness, **kwargs: dict[str, Any]):
         """
         Initializes `SpatialVisualFilter`.
 
@@ -716,10 +715,73 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
         return new_frames
 
 
+class VisualContrastiveFilter(AdaptiveVisualFilter):
+    def __init__(self, alpha: float=1.0, **kwargs: dict[str, Any]):
+        """
+        Initializes `VisualContrastiveFilter`.
+
+        :param alpha: Alpha hyperparameter of VCD (controls the impact of noise image on logits, defaults to 1.0).
+        """        
+        self.alpha = alpha
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def add_diffusion_noise(image: Image.Image, noise_step: int=500) -> Image.Image:
+        """
+        Add diffusion noise to a PIL Image. Adapted from VCD repo: https://github.com/DAMO-NLP-SG/VCD.
+        
+        :param image: The input image to which noise will be added.
+        :param noise_step: The diffusion step to determine the noise level.
+        
+        :return: The image with added diffusion noise.
+        """
+        
+        # Convert the image to a NumPy array and then to a PyTorch tensor
+        image_array = np.array(image).astype(np.float32) / 255.0
+        image_tensor = torch.tensor(image_array).permute(2, 0, 1).unsqueeze(0)  # Shape: (1, C, H, W)
+
+        num_steps = 1000  # Number of diffusion steps
+
+        # Decide beta in each step
+        betas = torch.linspace(-6, 6, num_steps)
+        betas = torch.sigmoid(betas) * (0.5e-2 - 1e-5) + 1e-5
+
+        # Decide alphas in each step
+        alphas = 1 - betas
+        alphas_prod = torch.cumprod(alphas, dim=0)
+        alphas_prod_p = torch.cat([torch.tensor([1.0]), alphas_prod[:-1]], 0)  # p for previous
+        alphas_bar_sqrt = torch.sqrt(alphas_prod)
+        one_minus_alphas_bar_sqrt = torch.sqrt(1 - alphas_prod)
+
+        def q_x(x_0, t):
+            noise = torch.randn_like(x_0)
+            alphas_t = alphas_bar_sqrt[t]
+            alphas_1_m_t = one_minus_alphas_bar_sqrt[t]
+            return alphas_t * x_0 + alphas_1_m_t * noise
+
+        # Apply noise at the specified noise step
+        noisy_image_tensor = q_x(image_tensor, noise_step).squeeze(0).permute(1, 2, 0)  # Shape: (H, W, C)
+
+        # Convert the noisy image tensor back to a NumPy array
+        noisy_image_array = (noisy_image_tensor.numpy() * 255.0).clip(0, 255).astype(np.uint8)
+
+        # Convert the NumPy array back to a PIL Image
+        noisy_image = Image.fromarray(noisy_image_array)
+
+        return noisy_image
+
+    def __call__(self, frames: list[Image.Image]) -> list[Image.Image]:
+
+        # Add diffusion noise to images
+        new_frames = [VisualContrastiveFilter.add_diffusion_noise(frame, noise_step=500) for frame in frames]
+
+        return new_frames
+
 class VisualFilterTypes(Enum):
     Spatial = "spatial" # Default spatial filter that crops and masks images in black based on target objects and spatial relations mentioned in questions, then rephrases questions based on the information that has been abstracted away
     Spatial_NoRephrase = "spatial_norephrase" # Same spatial filter but does not rephrase questions
     Spatial_Blur = "spatial_blur" # Spatial filter that blurs rather than blacks out unimportant regions (also doesn't crop images or rephrase questions)
     Contrastive_Region = "contrastive_region" # Contrastive region guidance https://contrastive-region-guidance.github.io/
+    Visual_Contrastive = "visual_contrastive" # Visual contrastive decoding https://arxiv.org/pdf/2311.16922
     Target_Object_Counter = "target_object_counter" # Filter that identifies objects mentioned in visual questions and counts their occurrences in frames
     # Don't include target object counter here because it won't be used in the same way as other filters

@@ -22,7 +22,7 @@ from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQA_PROMPT_TEMPLATES, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter, ImageMaskTypes
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter, ImageMaskTypes
 from travel.model.metrics import generate_det_curve
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
@@ -34,7 +34,7 @@ parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "t
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--mistake_detection_strategy", nargs='+', type=str, default=["heuristic", "nli"], choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
-parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
+parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness, a Gaussian blur kernel size, or other hyperparameter for visual filter.")
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -87,6 +87,10 @@ for worker_index in range(n_workers):
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
+        elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
+            # Visual filter strength interpreted as alpha hyperparameter for VCD            
+            visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength)
+            nlp = None
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Target_Object_Counter:
             visual_filter = TargetObjectCounterFilter(device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')      
@@ -225,8 +229,8 @@ for eval_partition in args.eval_partitions:
         print("Evaluating and saving results...")
         evaluator = MISTAKE_DETECTION_STRATEGIES[mistake_detection_strategy](eval_datasets[0], vqa_outputs)
         mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
-        print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
-        pprint(metrics['best_metrics'])
+        print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
+        pprint(metrics['accuracy']['best_metrics'])
 
         # Compile preds per mistake detection example
         preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
@@ -239,7 +243,7 @@ for eval_partition in args.eval_partitions:
         json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
 
         det_filename = f"det_{mistake_detection_strategy}{'rerun' if mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
-        generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
+        generate_det_curve(metrics['accuracy'], os.path.join(this_results_dir, det_filename))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

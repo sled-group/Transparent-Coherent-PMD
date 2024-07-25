@@ -254,5 +254,3 @@ class MistakeDetectionDataset:
             if example.procedure_id not in already_seen:
                 yield (example.procedure_id, example.procedure_description)
                 already_seen.append(example.procedure_id) 
-
-NLI_HYPOTHESIS_COMPLETION_TEMPLATE = 'The procedure "{procedure}" has been successfully completed.'

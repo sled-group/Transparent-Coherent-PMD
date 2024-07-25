@@ -20,7 +20,7 @@ from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
-from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter
+from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
 from travel.model.metrics import generate_det_curve
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
@@ -73,6 +73,9 @@ for worker_index in range(n_workers):
         if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
+            visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength, device=f"cuda:{worker_index}")
+            nlp = spacy.load('en_core_web_lg')            
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Target_Object_Counter:
             visual_filter = TargetObjectCounterFilter(device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')      
@@ -198,8 +201,8 @@ for eval_partition in args.eval_partitions:
 
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
-    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
-    pprint(metrics[metrics['best_threshold']])
+    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
+    pprint(metrics[metrics['accuracy']['best_threshold']])
 
     # Compile preds per mistake detection example
     preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
@@ -212,7 +215,7 @@ for eval_partition in args.eval_partitions:
     json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
 
     det_filename = f"det_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
-    generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
+    generate_det_curve(metrics['accuracy'], os.path.join(this_results_dir, det_filename))
 
 shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

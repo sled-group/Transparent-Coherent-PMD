@@ -60,6 +60,8 @@ class FrameVQAMistakeDetectionScorer:
         elif visual_filter_type == VisualFilterTypes.Contrastive_Region:
             self.visual_filter = ContrastiveRegionFilter(mask_strength=visual_filter_strength, device=visual_filter_device)
         else:
+            if visual_filter_type is not None:
+                print(f"Warning: {visual_filter_type} visual filter not supported in VQA scoring!")
             self.visual_filter = None
         self.visual_filter_type = visual_filter_type
         self.nlp = spacy.load('en_core_web_lg')

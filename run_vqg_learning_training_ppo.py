@@ -11,6 +11,7 @@ from peft import LoraConfig
 import pickle
 from PIL import Image
 from pprint import pprint
+import random
 import torch
 import torch.distributed as dist
 from tqdm import tqdm
@@ -20,13 +21,13 @@ import wandb
 
 from travel.constants import HF_TOKEN, RESULTS_DIR, DATA_CACHE_DIR, RANDOM_SEED
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
-from travel.data.mistake_detection import NLI_HYPOTHESIS_COMPLETION_TEMPLATE, MistakeDetectionTasks
+from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse
 from travel.data.vqg import generate_vqg_prompt_icl, VQG_DEMONSTRATIONS, VQGOutputs
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample
 from travel.model.grounding import VisualFilterTypes
 from travel.model.mistake_detection import NLI_MODEL_PATH
-from travel.model.nli import run_nli
+from travel.model.nli import run_nli, NLI_HYPOTHESIS_TEMPLATE
 from travel.model.ppo_trainer import PerTokenPPOTrainer as PPOTrainer
 from travel.model.vqg import parse_vqg_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
@@ -230,6 +231,14 @@ def main():
         ppo_dataset.save_to_disk(dataset_path=dataset_path) 
     else:
         ppo_dataset = Dataset.load_from_disk(dataset_path=dataset_path)
+
+    # Upsample positive class if we have more negative examples
+    positive_examples = [example for example in ppo_dataset if "pos" in example['example_id']]
+    negative_count = len(ppo_dataset) - len(positive_examples)
+    if len(positive_examples) > negative_count:
+        print(f"Upsampling {negative_count - len(positive_examples)} more positive examples.")
+        ppo_dataset += random.sample(positive_examples, negative_count - len(positive_examples))
+
     print(f"train data partition: {len(ppo_dataset)} examples")
 
     print(f"({global_rank}) {len(dataset)} Ego4D mistake detection examples loaded from train partition")
@@ -338,7 +347,7 @@ def main():
             premise_questions_not_expected = [[f"{question} {VQAResponse(1 - answer.value).name}" for question, answer in zip(vqg_output.questions, vqg_output.answers)] for vqg_output in vqg_outputs]
             premise_questions_no = [[f"{question} No" for question in vqg_output.questions] for vqg_output in vqg_outputs]
             premise_questions_yes = [[f"{question} Yes" for question in vqg_output.questions] for vqg_output in vqg_outputs]
-            hypothesis_completion = [NLI_HYPOTHESIS_COMPLETION_TEMPLATE.format(procedure=procedure) for procedure in batch['procedure_description']]
+            hypothesis_completion = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in batch['procedure_description']]
 
             # NLI score 1: relevance for each question 
             # (calculated by how much entailment probability of action success changes based on the answer to each question)
@@ -390,7 +399,6 @@ def main():
             verifiability = effectiveness
 
             # TODO: train model by procedure ID rather than randomly shuffling all examples?
-            # TODO: balance positive and negative mistake detection examples
             # TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens
             # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
             # TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?

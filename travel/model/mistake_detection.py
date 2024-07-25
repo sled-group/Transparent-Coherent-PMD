@@ -1,9 +1,7 @@
+from collections import defaultdict
 from dataclasses import dataclass, asdict
-import matplotlib.pyplot as plt
 import numpy as np
-import os
 from pprint import pprint
-from scipy.special import softmax
 from scipy.stats import norm
 import torch
 from tqdm import tqdm
@@ -90,7 +88,7 @@ class MistakeDetectionEvaluator:
         labels = [example.mistake for example in self.examples]
         
         combined_preds = {}
-        metrics = {}
+        accuracy_metrics = {}
         best_metrics = None
         best_threshold = None
         for threshold in MISTAKE_DETECTION_THRESHOLDS:
@@ -99,31 +97,46 @@ class MistakeDetectionEvaluator:
 
             this_metrics = mistake_detection_metrics(labels, preds)
             combined_preds[threshold] = pred_objects
-            metrics[threshold] = this_metrics
-
-            # Calculate effectiveness and get the mean using an exponential moving aveage for each example
-            effectiveness_metrics = [
-                [round(float(e), 3) for e in effectiveness(example.mistake, pred.mistake_probs)] for pred, example in zip(pred_objects, self.examples)
-            ]
-            mean_effectiveness = []
-            for e, example in zip(effectiveness_metrics, self.examples):
-                example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
-                mean_effectiveness.append(time_based_exponential_moving_average(e, example.frame_times, tau=EMA_TAU))
-            mean_effectiveness = round(float(np.mean(mean_effectiveness), 3))
-
-            # Add verifiability metrics
-            metrics['verifiability'] = {
-                "effectiveness": effectiveness_metrics,
-                "effectiveness_mean": mean_effectiveness
-            }
+            accuracy_metrics[threshold] = this_metrics
 
             # Save best metrics based on which threshold minimizes FPR and FNR
             if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
                 best_metrics = this_metrics
                 best_threshold = threshold
 
-        metrics['best_metrics'] = best_metrics
-        metrics['best_threshold'] = best_threshold
+        accuracy_metrics['best_metrics'] = best_metrics
+        accuracy_metrics['best_threshold'] = best_threshold
+
+        # Calculate effectiveness and get the mean using an exponential moving aveage for each example
+        effectiveness_metrics = [
+            [round(float(e), 3) for e in effectiveness(example.mistake, pred.mistake_probs)] for pred, example in zip(pred_objects, self.examples)
+        ]
+        effectiveness_by_example = []
+        for e, example in zip(effectiveness_metrics, self.examples):
+            example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
+            effectiveness_by_example.append(time_based_exponential_moving_average(e, example.frame_times, tau=EMA_TAU)[-1]) # just take the last smoothed probability
+        mean_effectiveness_by_example = round(float(np.mean(effectiveness_by_example)), 3)
+
+        effectiveness_by_procedure = defaultdict(list)
+        for me, example in zip(effectiveness_by_example, self.examples):
+            effectiveness_by_procedure[example.procedure_id].append(me)
+        mean_effectiveness_by_procedure = round(float(np.mean([np.mean(v) for k, v in effectiveness_by_procedure.items()])), 3)
+        var_effectiveness_by_procedure = round(float(np.mean([np.var(v) for k, v in effectiveness_by_procedure.items()])), 3)
+
+        # Add verifiability metrics to results
+        metrics = {}
+        metrics['accuracy'] = accuracy_metrics
+        metrics['verifiability'] = {
+            "effectiveness": {
+                "mean_by_example": mean_effectiveness_by_example,
+                "mean_by_procedure": mean_effectiveness_by_procedure,
+                "var_by_procedure": var_effectiveness_by_procedure,
+                "all": effectiveness_metrics,
+                "all_by_example": {ex.example_id: ef for ex, ef in zip(self.examples, effectiveness_by_example)},
+                "all_by_procedure": effectiveness_by_procedure
+            },
+        }
+
         return combined_preds, metrics
 
 def aggregate_mistake_probs_over_frames(mistake_prob: list[list[float]], frame_times: list[float], confidence_threshold: Optional[float]=None, verbose: bool=False) -> float:
@@ -290,7 +303,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
                     batch_procedure_descriptions = procedure_descriptions[i:i+NLI_BATCH_SIZE]
                     batch_premises = premises[i:i+NLI_BATCH_SIZE]
                     
-                    hypothesis = [f'The procedure "{procedure}" has been successfully completed.' for procedure in batch_procedure_descriptions]
+                    hypothesis = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in batch_procedure_descriptions]
 
                     # Run premise through NLI model
                     x = self.nli_tokenizer.batch_encode_plus(list(zip(batch_premises, hypothesis)),
