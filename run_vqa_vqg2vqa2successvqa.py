@@ -3,6 +3,7 @@ init_travel()
 
 import argparse
 from collections import defaultdict
+import concurrent.futures
 from copy import deepcopy
 import datetime
 import json
@@ -24,6 +25,7 @@ from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTI
 from travel.data.vqg import VQGOutputs
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
 from travel.model.mistake_detection import aggregate_mistake_probs_over_frames, DETECTION_FRAMES_PROPORTION, MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, generate_det_curve
+from travel.model.nli import NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
@@ -167,7 +169,7 @@ for eval_partition in args.eval_partitions:
     vqg_outputs = {}
     vqa_answer_probs = defaultdict(list)
 
-    # Gather up VQG2VQA preds
+    # Gather up VQG2VQA preds, including VQG outputs they were based on
     for pred in tqdm(preds_vqg2vqa.values()):
             
         example_id = pred['example']['example_id']
@@ -201,51 +203,78 @@ for eval_partition in args.eval_partitions:
                 
             vqa_answer_probs[example.example_id].append(this_answer_probs)
                 
-
-    dataset = Ego4DMistakeDetectionDataset(data_split=eval_partition, 
-                                                        mismatch_augmentation=True,
-                                                        multi_frame=True,
-                                                        debug_n_examples_per_class=None)
-    print(f"{len(dataset.example_dirs)} examples")
-
-    vqa_outputs = run_vqa_for_mistake_detection(eval_dataset=dataset,
-                                                vlm=vlm,
-                                                vlm_processor=vlm_processor,
-                                                generate_prompts=generate_prompts,
-                                                n_prompts_per_frame=1,
-                                                visual_filter_mode=args.visual_filter_mode if visual_filter is not None else None,
-                                                visual_filter=visual_filter,
-                                                nlp=nlp if visual_filter is not None else None,
-                                                cache_dir=this_results_dir,
-                                                n_workers=1,
-                                                worker_index=0,
-                                                vqa_batch_size=4)
-
+    if torch.cuda.device_count() >= 2: 
+        print(f"Running VQA in parallel across {torch.cuda.device_count()} GPUs...")
+        with concurrent.futures.ThreadPoolExecutor() as executor:   
+            partitions = list(executor.map(run_vqa_for_mistake_detection, 
+                                           eval_datasets,
+                                           vlms,
+                                           vlm_processors,
+                                           [generate_prompts] * n_workers,
+                                           [1] * n_workers,
+                                           [None if args.visual_filter_mode is None else VisualFilterTypes(args.visual_filter_mode)] * n_workers,
+                                           visual_filters,
+                                           nlps,
+                                           [this_results_dir] * n_workers,
+                                           [n_workers] * n_workers,
+                                           list(range(n_workers)),
+                                           [args.batch_size] * n_workers,
+                                           [args.cache_vqa_frames] * n_workers,
+                                           [args.caption_first] * n_workers)
+                             )
+        # Compile processed data from partitions
+        vqa_outputs = []
+        for this_vqa_outputs in partitions:
+            vqa_outputs += this_vqa_outputs        
+    else:
+        print("Running VQA sequentially...")
+        vqa_outputs = run_vqa_for_mistake_detection(eval_dataset=eval_datasets[0],
+                                                    vlm=vlms[0],
+                                                    vlm_processor=vlm_processors[0],
+                                                    generate_prompts=generate_prompts,
+                                                    n_prompts_per_frame=1,
+                                                    visual_filter_mode=None if args.visual_filter_mode is None else VisualFilterTypes(args.visual_filter_mode),
+                                                    visual_filter=visual_filters[0],
+                                                    nlp=nlps[0],
+                                                    cache_dir=this_results_dir,
+                                                    n_workers=1,
+                                                    worker_index=0,
+                                                    vqa_batch_size=args.batch_size,
+                                                    cache_frames=args.cache_vqa_frames,
+                                                    caption_first=args.caption_first)
+    
+    print("Combining VQG2VQA and SuccessVQA outputs...")
     new_vqa_outputs = deepcopy(vqa_outputs)
     for example_idx in tqdm(range(len(new_vqa_outputs))):
         for frame_idx in range(len(new_vqa_outputs[example_idx])):
+            # Take the probability of most likely answer for each question in VQG2VQA
             this_probs = []
             for question_probs in vqa_answer_probs[vqa_outputs[example_idx][frame_idx][0].example_id][frame_idx]:
                 this_probs.append(max(question_probs.values()))
+
+            # Average SuccessVQA probability with the probabilities of those answers included from VQG2VQA outputs
             new_yes_prob = new_vqa_outputs[example_idx][frame_idx][0].answer_probs[VQAResponse.Yes]
             for p in this_probs:
                 new_yes_prob += p
             new_yes_prob /= 3.0
             answer_probs = {VQAResponse.Yes: new_yes_prob, VQAResponse.No: 1.0 - new_yes_prob}
             new_vqa_outputs[example_idx][frame_idx][0].answer_probs = answer_probs
-        
-    evaluator = MISTAKE_DETECTION_STRATEGIES["heuristic"](dataset, new_vqa_outputs)
+
+    print("Evaluating and saving results...")        
+    evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
-    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
-    pprint(metrics[metrics['best_threshold']])
+    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
+    pprint(metrics[metrics['accuracy']['best_threshold']])
 
+    # Compile preds per mistake detection example
+    preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
 
-    metrics_filename = f"metrics_heuristic_{eval_partition}.json"
+    # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
+    metrics_filename = f"metrics_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
     json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
-    preds = compile_mistake_detection_preds(dataset, vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
-    preds_filename = f"preds_heuristic_{eval_partition}.json"
+    preds_filename = f"preds_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
     json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
 
-    det_filename = f"det_heuristic_{eval_partition}.pdf"
-    generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
+    det_filename = f"det_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
+    generate_det_curve(metrics['accuracy'], os.path.join(this_results_dir, det_filename))

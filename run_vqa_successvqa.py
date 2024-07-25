@@ -22,7 +22,8 @@ from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectio
 from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
 from travel.model.metrics import generate_det_curve
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds
+from travel.model.nli import NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
