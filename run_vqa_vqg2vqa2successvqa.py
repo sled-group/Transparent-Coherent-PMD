@@ -92,14 +92,24 @@ for worker_index in range(n_workers):
         visual_filters.append(None)
         nlps.append(None)
 
-timestamp = datetime.datetime.now()
-this_results_dir = os.path.join("ego4d_debug250", args.vlm_name.split("/")[-1], f"VQG2VQA2SuccessVQA_ego4d_debug250")
-this_results_dir += f"_{args.vlm_name.split('/')[-1]}"
-if visual_filter is not None:
-    this_results_dir += f"_spatial_norephrase1.0"
-this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
-this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
-os.makedirs(this_results_dir)
+# Configure results directory
+if args.resume_dir is None:
+    timestamp = datetime.datetime.now()
+    vlm_name = args.vlm_name.split('/')[-1]
+    task_name = args.task
+    if args.debug:
+        task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
+    this_results_dir = os.path.join(task_name, vlm_name, f"VQG2VQA2SuccessVQA_{task_name}")
+    this_results_dir += f"_{vlm_name}"
+    if args.visual_filter_mode is not None:
+        this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
+    if args.caption_first:
+        this_results_dir += "_caption"        
+    this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
+    os.makedirs(this_results_dir)
+else:
+    this_results_dir = args.resume_dir
 
 vqa_prompt_template = VQA_PROMPT_TEMPLATES[type(vlm)]
 successvqa_question_template = SUCCESSVQA_QUESTION_TEMPLATE
