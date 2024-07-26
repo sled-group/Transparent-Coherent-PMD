@@ -24,16 +24,17 @@ from travel.data.mistake_detection import MistakeDetectionExample, get_cutoff_ti
 from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES, VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids, VQAOutputs
 from travel.data.vqg import VQGOutputs
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
-from travel.model.mistake_detection import aggregate_mistake_probs_over_frames, DETECTION_FRAMES_PROPORTION, MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, generate_det_curve
+from travel.model.metrics import generate_det_curve
+from travel.model.mistake_detection import aggregate_mistake_probs_over_frames, DETECTION_FRAMES_PROPORTION, MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds
 from travel.model.nli import NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val"])
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--vqg2vqa_preds_path", type=str, help="Path to output directory for previous run of VQG2VQA. The VQA outputs from this run will be used to condition VLM before prompting it for SuccessVQA. Directory must contain a preds_<eval_partition>_heuristic.json file for every partition passed in --eval_partitions.")
-parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
 parser.add_argument("--batch_size", type=int, default=10, help="Batch size for VQA inference.")
@@ -41,7 +42,6 @@ parser.add_argument("--resume_dir", type=str, help="Path to results directory fo
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
-parser.add_argument("--caption_first", action="store_true", help="Pass this argument to first have the VLM generate a caption of the frame before answering a question.")
 args = parser.parse_args()
 
 # Load VLM(s), processors, visual filters, etc. - if multiple GPUs available, use them
@@ -99,14 +99,11 @@ if args.resume_dir is None:
     task_name = args.task
     if args.debug:
         task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
-    this_results_dir = os.path.join(task_name, vlm_name, f"VQG2VQA2SuccessVQA_{task_name}")
+    this_results_dir = os.path.join(args.vqg2vqa_preds_path, f"VQG2VQA2SuccessVQA_{task_name}")
     this_results_dir += f"_{vlm_name}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
-    if args.caption_first:
-        this_results_dir += "_caption"        
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
-    this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     os.makedirs(this_results_dir)
 else:
     this_results_dir = args.resume_dir
@@ -230,7 +227,7 @@ for eval_partition in args.eval_partitions:
                                            list(range(n_workers)),
                                            [args.batch_size] * n_workers,
                                            [args.cache_vqa_frames] * n_workers,
-                                           [args.caption_first] * n_workers)
+                                           [False] * n_workers)
                              )
         # Compile processed data from partitions
         vqa_outputs = []
@@ -251,7 +248,7 @@ for eval_partition in args.eval_partitions:
                                                     worker_index=0,
                                                     vqa_batch_size=args.batch_size,
                                                     cache_frames=args.cache_vqa_frames,
-                                                    caption_first=args.caption_first)
+                                                    caption_first=False)
     
     print("Combining VQG2VQA and SuccessVQA outputs...")
     new_vqa_outputs = deepcopy(vqa_outputs)
@@ -274,7 +271,7 @@ for eval_partition in args.eval_partitions:
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
     print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
-    pprint(metrics[metrics['accuracy']['best_threshold']])
+    pprint(metrics['accuracy'][metrics['accuracy']['best_threshold']])
 
     # Compile preds per mistake detection example
     preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)

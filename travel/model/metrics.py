@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, auc
+import spacy
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
 from typing import Union
@@ -58,7 +59,7 @@ def effectiveness(is_mistake: bool, mistake_probs: Union[list[float], list[list[
     else:
         return effectiveness[0]
 
-def consistency_metrics(vqg_outputs: dict[Union[str, int], VQGOutputs]):
+def consistency_metrics_vqg(vqg_outputs: dict[Union[str, int], VQGOutputs]):
     """
     Calculates NLI-based consistency metrics for generated questions, including relevance and informativeness of questions.
     """
@@ -73,10 +74,6 @@ def consistency_metrics(vqg_outputs: dict[Union[str, int], VQGOutputs]):
 
     nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
     nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
-
-    all_nli_mistake_probs = torch.zeros((0, 1)).float()
-    all_relevance = torch.zeros((0, 1)).float()
-    all_informativeness = torch.zeros((0, 1)).float()
 
     procedure_descriptions = [vqg_output.procedure_description for vqg_output in vqg_outputs.values() for _ in vqg_output.questions]
     hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
@@ -113,6 +110,76 @@ def consistency_metrics(vqg_outputs: dict[Union[str, int], VQGOutputs]):
         "consistency": mean_consistency,
         "metrics_by_output": metrics_by_output,
     }
+
+def consistency_metrics_caption(captions: list[str], procedure_descriptions: list[str], mistake_labels: list[bool], procedure_ids: list[int]):
+    """
+    Calculates NLI-based consistency metrics for generated captions, including relevance and informativeness of captions.
+    """
+    assert len(captions) == len(procedure_descriptions) == len(mistake_labels) == len(procedure_ids), "All inputs to consistency_metrics_caption must be the same length!"
+
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        llm_int8_threshold=6.0,
+        llm_int8_has_fp16_weight=False,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+    )
+
+    nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
+    nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
+    nlp = spacy.load("en_core_web_lg")
+    
+    hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
+    premises_expected = captions
+    # Create "unexpected" premises by masking out all nouns # TODO: is this the right way to do this?
+    premises_unexpected = []
+    for caption in captions:
+        nouns = []
+        for token in nlp(caption):
+            if token.pos_.startswith("N") or (token.pos_.startswith("V") and token.text != "is"):
+                nouns.append(token.text)
+        for noun in nouns:
+            caption = caption.replace(noun, nli_tokenizer.mask_token)
+        premises_unexpected.append(caption)
+    
+    # premises_unexpected = [caption.replace(" is ", " is not ") for caption in captions]
+
+    print(premises_unexpected)
+
+    probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
+    probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))
+
+    # Relevance: how much mistake probability changes based on information in caption
+    relevance = torch.abs(probs_expected[:, 0].unsqueeze(1) - probs_unexpected[:, 0].unsqueeze(1)).numpy()
+
+    # Informativeness: actual success probability based on the caption 
+    # (we want this to be high for success examples, low for mistake examples, so look at entailment probability for success and contradiction probability for mistakes)
+    # TODO: is this comparable to VQG metric for informativeness? can we make the VQG metric more comparable?
+    entailment_prob_indices = torch.tensor([0 if l else 1 for l in mistake_labels])
+    informativeness = probs_expected[torch.arange(len(captions)), entailment_prob_indices].unsqueeze(1).numpy()
+
+    # Combine by multiplying to form a "consistency" metric
+    consistency = relevance * informativeness
+
+    mean_relevance, mean_informativeness, mean_consistency = round(float(np.mean(relevance)), 3), round(float(np.mean(informativeness)), 3), round(float(np.mean(consistency)), 3)
+    metrics_by_output = {}
+    parallel_idx = 0
+    for procedure_id in procedure_ids:
+        metrics_by_output[procedure_id] = {
+            "relevance": round(float(relevance[parallel_idx]), 3),
+            "informativeness": round(float(informativeness[parallel_idx]), 3),
+            "consistency": round(float(consistency[parallel_idx]), 3),
+        }
+        parallel_idx += 1
+
+    return {
+        "relevance": mean_relevance,
+        "informativeness": mean_informativeness,
+        "consistency": mean_consistency,
+        "metrics_by_output": metrics_by_output,
+    }
+
 
 def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_path: str):
     """

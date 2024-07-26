@@ -32,6 +32,16 @@ from travel.model.ppo_trainer import PerTokenPPOTrainer as PPOTrainer
 from travel.model.vqg import parse_vqg_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
+# TODO: play around with generation kwargs more?
+# TODO: train model by procedure ID rather than randomly shuffling all examples?
+# TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens
+# TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
+# TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?
+# TODO: calculate rewards for ref model and log them?
+# TODO: add another score to check whether generated questions mention objects not in procedure description?
+# TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)? - currently, LM seems to learn that we can maximize effectiveness by generating the same question twice with yes and no as answers
+# TODO: can we also optimize VLM in this training loop?
+
 def pad_and_stack(tensors, pad_value):
     # Determine the maximum length of the tensors
     max_length = max(tensor.size(0) for tensor in tensors)
@@ -142,7 +152,6 @@ def main():
         "pad_token_id": tokenizer.eos_token_id, # most decoder models don't have a padding token - use EOS token instead
         "max_new_tokens": 40, # specify how many tokens you want to generate at most
     }    
-    # TODO: play around with this more?
 
     # Set up online sources of feedback: NLI model and VLM (possibly with visual filter)
 
@@ -397,14 +406,6 @@ def main():
 
             # Verifiability is just effectiveness of questions
             verifiability = effectiveness
-
-            # TODO: train model by procedure ID rather than randomly shuffling all examples?
-            # TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens
-            # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
-            # TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?
-            # TODO: calculate rewards for ref model and log them?
-            # TODO: add another score to check whether generated questions mention objects not in procedure description?
-            # TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)? - currently, LM seems to learn that we can maximize effectiveness by generating the same question twice with yes and no as answers
 
             assert consistency.shape == verifiability.shape, f"Consistency and verifiability shapes should be equal: {consistency.shape}, {effectiveness.shape}"
             reward = 0.5 * consistency + 0.5 * verifiability # equal weighting

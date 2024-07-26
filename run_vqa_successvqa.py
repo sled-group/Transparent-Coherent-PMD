@@ -203,7 +203,7 @@ for eval_partition in args.eval_partitions:
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
     print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
-    pprint(metrics[metrics['accuracy']['best_threshold']])
+    pprint(metrics['accuracy'][metrics['accuracy']['best_threshold']])
 
     # Compile preds per mistake detection example
     preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)

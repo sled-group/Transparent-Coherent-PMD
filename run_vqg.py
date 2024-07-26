@@ -18,7 +18,7 @@ from travel.data.captaincook4d.constants import RECIPE_STEPS
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.utils import split_list_into_partitions
 from travel.model.mistake_detection import NLI_MODEL_PATH
-from travel.model.metrics import consistency_metrics
+from travel.model.metrics import consistency_metrics_vqg
 from travel.model.vqg import run_vqg, correct_vqg_outputs_with_nli
 
 parser = argparse.ArgumentParser()
@@ -237,7 +237,7 @@ if not(len(prompts) == 0 and not args.correct_with_nli):
 print(f"{len(vqg_outputs)} VQG outputs generated!")
 
 # Calculate consistency metrics for generated questions
-metrics = consistency_metrics(vqg_outputs)
+metrics = consistency_metrics_vqg(vqg_outputs)
 json.dump(metrics, open(os.path.join(this_results_dir, "metrics_consistency.json"), "w"), indent=4)
 
 # Save config and args
