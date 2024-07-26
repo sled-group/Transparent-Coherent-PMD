@@ -44,6 +44,8 @@ parser.add_argument("--caption_first", action="store_true", help="Pass this argu
 args = parser.parse_args()
 
 assert args.task in args.vqg_directory, f"VQG outputs should be generated from the {args.task} dataset!"
+if args.caption_first:
+    print("Warning: coherence metrics for captions are not yet implemented in VQG2VQA.")
 
 # Load VLM(s), processors, visual filters, etc. - if multiple GPUs available, use them
 print("Setting up VLMs and visual filters...")

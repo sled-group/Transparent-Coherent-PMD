@@ -21,7 +21,7 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
-from travel.model.metrics import generate_det_curve
+from travel.model.metrics import generate_det_curve, consistency_metrics_caption
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds
 from travel.model.nli import NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
@@ -177,7 +177,7 @@ for eval_partition in args.eval_partitions:
             vqa_outputs += this_vqa_outputs        
     else:
         print("Running VQA sequentially...")
-        vqa_outputs = run_vqa_for_mistake_detection(eval_dataset=eval_datasets[0],
+        outputs = run_vqa_for_mistake_detection(eval_dataset=eval_datasets[0],
                                                     vlm=vlms[0],
                                                     vlm_processor=vlm_processors[0],
                                                     generate_prompts=generate_prompts,
@@ -191,6 +191,10 @@ for eval_partition in args.eval_partitions:
                                                     vqa_batch_size=args.batch_size,
                                                     cache_frames=args.cache_vqa_frames,
                                                     caption_first=args.caption_first)
+        if not args.caption_first:
+            vqa_outputs = outputs
+        else:
+            vqa_outputs, captions = outputs
     
     print("Evaluating and saving results...")
 
@@ -202,6 +206,20 @@ for eval_partition in args.eval_partitions:
 
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
+    if args.caption_first:
+        # Add metrics for generated captions
+        labels = []
+        procedure_descriptions = []
+        procedure_ids = []
+        for example in eval_datasets[0].get_batches(1, load_frames=False):
+            labels.append(example.mistake)
+            procedure_descriptions.append(example.procedure_description)
+            procedure_ids.append(example.procedure_id)
+        metrics['consistency'] = consistency_metrics_caption(captions, 
+                                                             procedure_descriptions=procedure_descriptions,
+                                                             mistake_labels=labels,
+                                                             procedure_ids=procedure_ids)
+
     print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
     pprint(metrics['accuracy'][metrics['accuracy']['best_threshold']])
 

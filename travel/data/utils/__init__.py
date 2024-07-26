@@ -7,6 +7,7 @@ import shutil
 import torch
 from tqdm import tqdm
 from typing import Iterator, Sized, Optional, Any, Callable
+import yaml
 
 def generate_float_series(start: float, end: float, step: float) -> list[float]:
     """
@@ -233,11 +234,18 @@ class ResumableParallelSequentialSampler(torch.utils.data.Sampler):
             data = self.element_id_fn(data)
         return data in self.completed_elements
     
-def time_based_exponential_moving_average(probabilities, timestamps, tau):
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+EMA_TAU = float(config["mistake_detection_strategies"]["ema_tau"])
+
+def time_based_exponential_moving_average(probabilities, timestamps, tau=EMA_TAU):
+    if len(probabilities) == 1:
+        return probabilities    
+    
     smoothed_probabilities = [probabilities[0]]
     ema = probabilities[0]
     last_timestamp = timestamps[0]
-    
+
     for prob, timestamp in zip(probabilities[1:], timestamps[1:]):
         time_diff = timestamp - last_timestamp
         alpha = 1 - np.exp(-time_diff / tau)

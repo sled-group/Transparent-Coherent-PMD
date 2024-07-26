@@ -13,6 +13,7 @@ from typing import Optional, Any, Union
 import yaml
 
 from travel.data.mistake_detection import MistakeDetectionDataset
+from travel.data.utils import time_based_exponential_moving_average
 from travel.data.utils.image import get_preprocessed_image, BoundingBoxCluster, BoundingBox
 from travel.data.utils.text import get_compound_noun
 from travel.data.vqg import VQGOutputs

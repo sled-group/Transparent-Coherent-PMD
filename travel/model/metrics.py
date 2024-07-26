@@ -1,12 +1,15 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from pprint import pprint
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, auc
 import spacy
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
-from typing import Union
+from typing import Union, Optional, Any
 
+from travel.data.mistake_detection import MistakeDetectionExample
+from travel.data.utils import time_based_exponential_moving_average
 from travel.data.vqa import VQAResponse
 from travel.data.vqg import VQGOutputs
 from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE
@@ -59,6 +62,15 @@ def effectiveness(is_mistake: bool, mistake_probs: Union[list[float], list[list[
     else:
         return effectiveness[0]
 
+def mask_verbs_and_nouns(text, nlp, mask_token):
+    nouns = []
+    for token in nlp(text):
+        if token.pos_.startswith("N") or (token.pos_.startswith("V") and token.text != "is"):
+            nouns.append(token.text)
+    for noun in nouns:
+        text = text.replace(noun, mask_token)
+    return text
+
 def consistency_metrics_vqg(vqg_outputs: dict[Union[str, int], VQGOutputs]):
     """
     Calculates NLI-based consistency metrics for generated questions, including relevance and informativeness of questions.
@@ -74,11 +86,14 @@ def consistency_metrics_vqg(vqg_outputs: dict[Union[str, int], VQGOutputs]):
 
     nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
     nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
+    nlp = spacy.load("en_core_web_lg")
 
+    # This is just an evaluation at VQG time - base it on each individual procedure
     procedure_descriptions = [vqg_output.procedure_description for vqg_output in vqg_outputs.values() for _ in vqg_output.questions]
     hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
     premises_expected = [f"{question} {answer.name}" for vqg_output in vqg_outputs.values() for question, answer in zip(vqg_output.questions, vqg_output.answers)]
-    premises_unexpected = [f"{question} {VQAResponse(1-answer.value).name}" for vqg_output in vqg_outputs.values() for question, answer in zip(vqg_output.questions, vqg_output.answers)]    
+    # premises_unexpected = [f"{question} {VQAResponse(1-answer.value).name}" for vqg_output in vqg_outputs.values() for question, answer in zip(vqg_output.questions, vqg_output.answers)]    
+    premises_unexpected = [mask_verbs_and_nouns(question, nlp, nli_tokenizer.mask_token) + " " + nli_tokenizer.mask_token for output in vqg_outputs.values() for question, answer in zip(output.questions, output.answers)] # Create "unexpected" premises by masking out all nouns
 
     probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
     probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))
@@ -92,17 +107,18 @@ def consistency_metrics_vqg(vqg_outputs: dict[Union[str, int], VQGOutputs]):
     # Combine by multiplying to form a "consistency" metric
     consistency = relevance * informativeness
 
+    # Take mean informativeness for each question set
     mean_relevance, mean_informativeness, mean_consistency = round(float(np.mean(relevance)), 3), round(float(np.mean(informativeness)), 3), round(float(np.mean(consistency)), 3)
+
     metrics_by_output = {}
     parallel_idx = 0
     for key, vqg_output in vqg_outputs.items():
-        for _ in vqg_output.questions:
-            metrics_by_output[key] = {
-                "relevance": round(float(relevance[parallel_idx]), 3),
-                "informativeness": round(float(informativeness[parallel_idx]), 3),
-                "consistency": round(float(consistency[parallel_idx]), 3),
-            }
-            parallel_idx += 1
+        metrics_by_output[key] = {
+            "relevance": [round(float(relevance[parallel_idx]), 3), round(float(relevance[parallel_idx + 1]), 3)],
+            "informativeness": [round(float(informativeness[parallel_idx]), 3), round(float(informativeness[parallel_idx + 1]), 3)],
+            "consistency": [round(float(consistency[parallel_idx]), 3), round(float(consistency[parallel_idx + 1]), 3)],
+        }
+        parallel_idx += 2
 
     return {
         "relevance": mean_relevance,
@@ -111,11 +127,80 @@ def consistency_metrics_vqg(vqg_outputs: dict[Union[str, int], VQGOutputs]):
         "metrics_by_output": metrics_by_output,
     }
 
-def consistency_metrics_caption(captions: list[str], procedure_descriptions: list[str], mistake_labels: list[bool], procedure_ids: list[int]):
+def consistency_metrics_vqg2vqa(vqg_outputs: dict[Union[str, int], VQGOutputs], mistake_labels: list[bool], procedure_ids: list[Any]):
+    """
+    Calculates NLI-based consistency metrics for generated questions, including relevance and informativeness of questions.
+    """
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        llm_int8_threshold=6.0,
+        llm_int8_has_fp16_weight=False,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+    )
+
+    nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
+    nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
+    nlp = spacy.load("en_core_web_lg")
+
+    # This is an evaluation at VQA inference time - incorporate mistake detection labels in informativeness
+    # TODO: should we also use predicted yes/no answers to judge this? This would require an overhaul as we'd have to average predictions over frames
+    procedure_descriptions = [vqg_outputs[procedure_id].procedure_description for procedure_id in procedure_ids for _ in range(2)]
+    hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
+    premises_expected = [f"{question} {answer.name}" for procedure_id in procedure_ids for question, answer in zip(vqg_outputs[procedure_id].questions, vqg_outputs[procedure_id].answers)]
+    premises_unexpected = [mask_verbs_and_nouns(question, nlp, nli_tokenizer.mask_token) + " " + nli_tokenizer.mask_token for procedure_id in procedure_ids for question, answer in zip(vqg_outputs[procedure_id].questions, vqg_outputs[procedure_id].answers)] # Create "unexpected" premises by masking out all nouns
+    premises_negated = [f"{question} {VQAResponse(1-answer.value).name}" for procedure_id in procedure_ids for question, answer in zip(vqg_outputs[procedure_id].questions, vqg_outputs[procedure_id].answers)]
+
+    probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
+    probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))
+    if mistake_labels is not None:
+        probs_negated = run_nli(nli_tokenizer, nli_model, list(zip(premises_negated, hypotheses)))
+
+    # Relevance: how much mistake probability changes based on answer to question (according to NLI model)
+    relevance = torch.abs(probs_expected[:, 0].unsqueeze(1) - probs_unexpected[:, 0].unsqueeze(1)).numpy()
+
+    # Informativeness: actual success probability for expected answer to question (according to NLI model)
+    # If mistake_labels were passed, calculate informativeness based on them;
+    # if a success example, we want high entailment probability from the expected answers,
+    # but if a mistake example, we want high contradiction probability from the unexpected answers
+    entailment_prob_indices = torch.tensor([0 if l else 1 for l in mistake_labels for _ in range(2)])
+    probs_expected_mask = torch.tensor([0 if l else 1 for l in mistake_labels for _ in range(2)])
+    probs_negated_mask = torch.tensor([1 if l else 0 for l in mistake_labels for _ in range(2)])
+    informativeness = probs_expected[torch.arange(2 * len(mistake_labels)), entailment_prob_indices] * probs_expected_mask + probs_negated[torch.arange(2 * len(mistake_labels)), entailment_prob_indices] * probs_negated_mask
+    informativeness = informativeness.unsqueeze(1).numpy()
+
+    # Combine by multiplying to form a "consistency" metric
+    consistency = relevance * informativeness
+
+    # Take max informativeness for each question set
+    mean_relevance = round(float(np.mean(np.max(relevance, axis=-1))), 3)
+    mean_informativeness = round(float(np.mean(np.max(informativeness, axis=-1))), 3)
+    mean_consistency = round(float(np.mean(np.max(consistency, axis=-1))), 3)
+
+    metrics_by_output = {}
+    parallel_idx = 0
+    for key, vqg_output in vqg_outputs.items():
+        metrics_by_output[key] = {
+            "relevance": [round(float(relevance[parallel_idx]), 3), round(float(relevance[parallel_idx + 1]), 3)],
+            "informativeness": [round(float(informativeness[parallel_idx]), 3), round(float(informativeness[parallel_idx + 1]), 3)],
+            "consistency": [round(float(consistency[parallel_idx]), 3), round(float(consistency[parallel_idx + 1]), 3)],
+        }
+        parallel_idx += 2
+
+    return {
+        "relevance": mean_relevance,
+        "informativeness": mean_informativeness,
+        "consistency": mean_consistency,
+        "metrics_by_output": metrics_by_output,
+    }
+
+
+def consistency_metrics_caption(captions: list[list[str]], procedure_descriptions: list[str], mistake_labels: list[bool], example_ids: list[int], frame_times: list[list[float]]):
     """
     Calculates NLI-based consistency metrics for generated captions, including relevance and informativeness of captions.
     """
-    assert len(captions) == len(procedure_descriptions) == len(mistake_labels) == len(procedure_ids), "All inputs to consistency_metrics_caption must be the same length!"
+    assert len(captions) == len(procedure_descriptions) == len(mistake_labels) == len(example_ids) == len(frame_times), f"All inputs to consistency_metrics_caption must be the same length! (got {len(captions)} captions, {len(procedure_descriptions)} procedures, {len(mistake_labels)} labels, {len(example_ids)} example IDs, and {len(frame_times)} frame times lists)"
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -130,19 +215,9 @@ def consistency_metrics_caption(captions: list[str], procedure_descriptions: lis
     nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
     nlp = spacy.load("en_core_web_lg")
     
-    hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
-    premises_expected = captions
-    # Create "unexpected" premises by masking out all nouns # TODO: is this the right way to do this?
-    premises_unexpected = []
-    for caption in captions:
-        nouns = []
-        for token in nlp(caption):
-            if token.pos_.startswith("N") or (token.pos_.startswith("V") and token.text != "is"):
-                nouns.append(token.text)
-        for noun in nouns:
-            caption = caption.replace(noun, nli_tokenizer.mask_token)
-        premises_unexpected.append(caption)
-    
+    hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure_idx, procedure in enumerate(procedure_descriptions) for _ in range(len(captions[procedure_idx]))]
+    premises_expected = [caption for frames_captions in captions for caption in frames_captions]
+    premises_unexpected = [mask_verbs_and_nouns(caption, nlp, nli_tokenizer.mask_token) for frames_captions in captions for caption in frames_captions] # Create "unexpected" premises by masking out all nouns 
     # premises_unexpected = [caption.replace(" is ", " is not ") for caption in captions]
 
     print(premises_unexpected)
@@ -162,24 +237,38 @@ def consistency_metrics_caption(captions: list[str], procedure_descriptions: lis
     # Combine by multiplying to form a "consistency" metric
     consistency = relevance * informativeness
 
-    mean_relevance, mean_informativeness, mean_consistency = round(float(np.mean(relevance)), 3), round(float(np.mean(informativeness)), 3), round(float(np.mean(consistency)), 3)
-    metrics_by_output = {}
+    # Aggregate metrics across frames in each example, using an exponential moving average to ensure earlier frames do not count as much
+    mean_relevance, mean_informativeness, mean_consistency = [], [], []
+    metrics_by_example = {}
     parallel_idx = 0
-    for procedure_id in procedure_ids:
-        metrics_by_output[procedure_id] = {
-            "relevance": round(float(relevance[parallel_idx]), 3),
-            "informativeness": round(float(informativeness[parallel_idx]), 3),
-            "consistency": round(float(consistency[parallel_idx]), 3),
+    for example_idx, example_id in enumerate(example_ids):
+        this_relevance = []
+        this_informativeness = []
+        this_consistency = []
+        for frame_time in frame_times[example_idx]:
+            this_relevance.append(relevance[parallel_idx])
+            this_informativeness.append(informativeness[parallel_idx])
+            this_consistency.append(consistency[parallel_idx])
+            parallel_idx += 1
+        mean_relevance.append(time_based_exponential_moving_average(this_relevance, frame_times[example_idx]))
+        mean_informativeness.append(time_based_exponential_moving_average(this_informativeness, frame_times[example_idx]))
+        mean_consistency.append(time_based_exponential_moving_average(this_consistency, frame_times[example_idx]))
+
+        metrics_by_example[example_id] = {
+            "relevance": this_relevance,
+            "informativeness": this_informativeness,
+            "consistency": this_consistency,
         }
-        parallel_idx += 1
+    mean_relevance = round(float(np.mean(mean_relevance)), 3)
+    mean_informativeness = round(float(np.mean(mean_informativeness)), 3)
+    mean_consistency = round(float(np.mean(mean_consistency)), 3)
 
     return {
         "relevance": mean_relevance,
         "informativeness": mean_informativeness,
         "consistency": mean_consistency,
-        "metrics_by_output": metrics_by_output,
+        "metrics_by_example": metrics_by_example,
     }
-
 
 def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_path: str):
     """

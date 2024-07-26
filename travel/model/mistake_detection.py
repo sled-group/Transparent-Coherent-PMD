@@ -11,13 +11,12 @@ import yaml
 
 from travel.model.metrics import mistake_detection_metrics, effectiveness
 from travel.data.mistake_detection import MistakeDetectionDataset
-from travel.data.utils import generate_float_series, time_based_exponential_moving_average
+from travel.data.utils import generate_float_series, time_based_exponential_moving_average, EMA_TAU
 from travel.data.vqa import VQAOutputs, VQAResponse
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE, NLI_RELEVANCE_DELTA, NLI_REPLACE_PROBS, NLI_RERUN_ON_RELEVANT_EVIDENCE, NLI_HYPOTHESIS_TEMPLATE, run_nli
 
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
-EMA_TAU = float(config["mistake_detection_strategies"]["ema_tau"])
 DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
 
@@ -292,6 +291,7 @@ class NLIMistakeDetectionEvaluator(MistakeDetectionEvaluator):
 
     def run_nli(self, procedure_descriptions: list[str], premises: list[str], premises_negated: Optional[list[str]]=None) -> tuple[list[str], list[float], list[float]]:
         # TODO: use run_nli method here
+        # TODO: use new mask-based definition of relevance here?
         if (premises_negated and self.mistake_probs is None or self.relevance_probs is None) or (not premises_negated and self.final_mistake_probs is None):
             with torch.no_grad():
                 all_mistake_probs = torch.zeros((0, 1)).float()
