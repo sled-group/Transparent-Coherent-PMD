@@ -209,7 +209,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
     response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
     vqa_outputs = []
-    all_captions = []
+    all_captions_collated = []
     for chunk_idx, dataset_chunk in enumerate(tqdm(eval_dataset.get_batches(IMAGES_CHUNK_SIZE,
                                                                        n_workers=n_workers, 
                                                                        worker_index=worker_index), 
@@ -275,7 +275,6 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                                       frames=frames,
                                       batch_size=vqa_batch_size,
                                       cache_path=os.path.join(worker_cache_dir, f"chunk{chunk_idx}_captions"))
-            all_captions += captions
             prompts = [prompt.format(caption=caption) for prompt, caption in zip(prompts, captions)]
 
         if torch.cuda.is_available():
@@ -313,8 +312,14 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             outputs_by_id[eid].append((output_index, frame, question, prompt, answer, visible_target_objects[output_index] if visible_target_objects is not None else None))
 
         # Gather up VQA outputs in the correct structure for a MistakeDetectionEvaluator
+        if caption_first:
+            caption_idx = 0
         for example in tqdm(dataset_chunk, desc=f"gathering VQA outputs ({vlm.device})"):
             
+            if caption_first:
+                all_captions_collated.append(captions[caption_idx:caption_idx + len(example.frames)])
+                caption_idx += len(example.frames)
+
             step_id = example.procedure_id
             example_vqa_outputs = []
 
@@ -366,7 +371,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
     if not caption_first:
         return vqa_outputs
     else:
-        return vqa_outputs, all_captions
+        return vqa_outputs, all_captions_collated
 
 def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str, partition: str):
     """

@@ -23,9 +23,9 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQA_PROMPT_TEMPLATES, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter, ImageMaskTypes
-from travel.model.metrics import generate_det_curve
+from travel.model.metrics import generate_det_curve, consistency_metrics_vqg2vqa
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
-from travel.model.vqa import run_vqa_for_mistake_detection
+from travel.model.vqa import run_vqa_for_mistake_detection, DETECTION_FRAMES_PROPORTION
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
@@ -227,10 +227,27 @@ for eval_partition in args.eval_partitions:
                                                     cache_frames=args.cache_vqa_frames,
                                                     caption_first=args.caption_first)
 
+    # Calculate consistency metrics (which are based on VQG outputs that we have access to here)
+    labels = []
+    frame_times = []
+    for example in eval_datasets[0].get_batches(1, load_frames=False):
+        example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
+        labels.append(example.mistake)
+        frame_times.append(example.frame_times)
+
+    # Save them in their own file
+    metrics_consistency = consistency_metrics_vqg2vqa(
+        vqg_outputs=vqg_outputs,
+        mistake_labels=labels,
+        vqa_outputs=vqa_outputs,
+        frame_times=frame_times
+    )
+
     for mistake_detection_strategy in args.mistake_detection_strategy:
         print("Evaluating and saving results...")
         evaluator = MISTAKE_DETECTION_STRATEGIES[mistake_detection_strategy](eval_datasets[0], vqa_outputs)
         mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
+        metrics['consistency'] = metrics_consistency
         print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
         pprint(metrics['accuracy']['best_metrics'])
 

@@ -10,7 +10,7 @@ from typing import Union, Optional, Any
 
 from travel.data.mistake_detection import MistakeDetectionExample
 from travel.data.utils import time_based_exponential_moving_average
-from travel.data.vqa import VQAResponse
+from travel.data.vqa import VQAResponse, VQAOutputs
 from travel.data.vqg import VQGOutputs
 from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE
 
@@ -127,10 +127,11 @@ def consistency_metrics_vqg(vqg_outputs: dict[Union[str, int], VQGOutputs]):
         "metrics_by_output": metrics_by_output,
     }
 
-def consistency_metrics_vqg2vqa(vqg_outputs: dict[Union[str, int], VQGOutputs], mistake_labels: list[bool], procedure_ids: list[Any]):
+def consistency_metrics_vqg2vqa(vqg_outputs: dict[Union[str, int], VQGOutputs], mistake_labels: list[bool], vqa_outputs: list[list[list[VQAOutputs]]], frame_times: list[list[float]]):
     """
     Calculates NLI-based consistency metrics for generated questions, including relevance and informativeness of questions.
     """
+    # TODO: use actual mistake probabilities from VQA rather than vqa_outputs? This would allow using adjusted probabilities from mistake detection strategies
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         llm_int8_threshold=6.0,
@@ -146,16 +147,14 @@ def consistency_metrics_vqg2vqa(vqg_outputs: dict[Union[str, int], VQGOutputs], 
 
     # This is an evaluation at VQA inference time - incorporate mistake detection labels in informativeness
     # TODO: should we also use predicted yes/no answers to judge this? This would require an overhaul as we'd have to average predictions over frames
-    procedure_descriptions = [vqg_outputs[procedure_id].procedure_description for procedure_id in procedure_ids for _ in range(2)]
+    procedure_descriptions = [vqg_outputs[question_output.procedure_id].procedure_description for example_outputs in vqa_outputs for frame_outputs in example_outputs for question_output in frame_outputs]
     hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
-    premises_expected = [f"{question} {answer.name}" for procedure_id in procedure_ids for question, answer in zip(vqg_outputs[procedure_id].questions, vqg_outputs[procedure_id].answers)]
-    premises_unexpected = [mask_verbs_and_nouns(question, nlp, nli_tokenizer.mask_token) + " " + nli_tokenizer.mask_token for procedure_id in procedure_ids for question, answer in zip(vqg_outputs[procedure_id].questions, vqg_outputs[procedure_id].answers)] # Create "unexpected" premises by masking out all nouns
-    premises_negated = [f"{question} {VQAResponse(1-answer.value).name}" for procedure_id in procedure_ids for question, answer in zip(vqg_outputs[procedure_id].questions, vqg_outputs[procedure_id].answers)]
+    premises_expected = [f"{question_output.question} {question_output.predicted_answer.name}" for example_outputs in vqa_outputs for frame_outputs in example_outputs for question_output in frame_outputs]
+    premises_unexpected = [mask_verbs_and_nouns(question_output.question, nlp, nli_tokenizer.mask_token) + " " + nli_tokenizer.mask_token for example_outputs in vqa_outputs for frame_outputs in example_outputs for question_output in frame_outputs] # Create "unexpected" premises by masking out all nouns
+    premises_negated = [f"{question_output.question} {VQAResponse(1-question_output.predicted_answer.value).name}" for example_outputs in vqa_outputs for frame_outputs in example_outputs for question_output in frame_outputs]
 
     probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
     probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))
-    if mistake_labels is not None:
-        probs_negated = run_nli(nli_tokenizer, nli_model, list(zip(premises_negated, hypotheses)))
 
     # Relevance: how much mistake probability changes based on answer to question (according to NLI model)
     relevance = torch.abs(probs_expected[:, 0].unsqueeze(1) - probs_unexpected[:, 0].unsqueeze(1)).numpy()
@@ -164,35 +163,75 @@ def consistency_metrics_vqg2vqa(vqg_outputs: dict[Union[str, int], VQGOutputs], 
     # If mistake_labels were passed, calculate informativeness based on them;
     # if a success example, we want high entailment probability from the expected answers,
     # but if a mistake example, we want high contradiction probability from the unexpected answers
-    entailment_prob_indices = torch.tensor([0 if l else 1 for l in mistake_labels for _ in range(2)])
-    probs_expected_mask = torch.tensor([0 if l else 1 for l in mistake_labels for _ in range(2)])
-    probs_negated_mask = torch.tensor([1 if l else 0 for l in mistake_labels for _ in range(2)])
-    informativeness = probs_expected[torch.arange(2 * len(mistake_labels)), entailment_prob_indices] * probs_expected_mask + probs_negated[torch.arange(2 * len(mistake_labels)), entailment_prob_indices] * probs_negated_mask
+    entailment_prob_indices = torch.tensor([0 if l else 1 for li, l in enumerate(mistake_labels) for _ in range(len(vqa_outputs[li])) for _ in range(2)])
+    informativeness = probs_expected[torch.arange(len([li for li, l in enumerate(mistake_labels) for _ in range(len(vqa_outputs[li])) for _ in range(2)])), entailment_prob_indices]
     informativeness = informativeness.unsqueeze(1).numpy()
 
     # Combine by multiplying to form a "consistency" metric
     consistency = relevance * informativeness
 
-    # Take max informativeness for each question set
-    mean_relevance = round(float(np.mean(np.max(relevance, axis=-1))), 3)
-    mean_informativeness = round(float(np.mean(np.max(informativeness, axis=-1))), 3)
-    mean_consistency = round(float(np.mean(np.max(consistency, axis=-1))), 3)
-
-    metrics_by_output = {}
+    # Aggregate metrics across frames in each example, using an exponential moving average to ensure earlier frames do not count as much
+    mean_relevance, mean_informativeness, mean_consistency = [], [], []
+    metrics_by_example = {}
     parallel_idx = 0
-    for key, vqg_output in vqg_outputs.items():
-        metrics_by_output[key] = {
-            "relevance": [round(float(relevance[parallel_idx]), 3), round(float(relevance[parallel_idx + 1]), 3)],
-            "informativeness": [round(float(informativeness[parallel_idx]), 3), round(float(informativeness[parallel_idx + 1]), 3)],
-            "consistency": [round(float(consistency[parallel_idx]), 3), round(float(consistency[parallel_idx + 1]), 3)],
-        }
-        parallel_idx += 2
 
+    mean_relevance = []
+    mean_informativeness = []
+    mean_consistency = []
+    for example_idx, example_outputs in enumerate(vqa_outputs):
+        example_relevance = []
+        example_informativeness = []
+        example_consistency = []
+        example_frame_times = frame_times[example_idx]
+        
+        for frame_outputs in example_outputs:
+            frame_relevance = []
+            frame_informativeness = []
+            frame_consistency = []
+            for question_output in frame_outputs:
+                frame_relevance.append(round(float(relevance[parallel_idx]), 3))
+                frame_informativeness.append(round(float(informativeness[parallel_idx]), 3))
+                frame_consistency.append(round(float(consistency[parallel_idx]), 3))
+                parallel_idx += 1
+
+            example_relevance.append(frame_relevance)
+            example_informativeness.append(frame_informativeness)
+            example_consistency.append(frame_consistency)
+        
+        metrics_by_example[example_outputs[0][0].example_id] = {
+            "relevance": example_relevance,
+            "informativeness": example_informativeness,
+            "consistency": example_consistency,
+        }
+
+        mean_relevance.append(
+            time_based_exponential_moving_average(
+                [max(frame_relevance) for frame_relevance in example_relevance], 
+                frame_times[example_idx]
+            )[-1]
+        )
+        mean_informativeness.append(
+            time_based_exponential_moving_average(
+                [max(frame_informativeness) for frame_informativeness in example_informativeness], 
+                frame_times[example_idx]
+            )[-1]
+        )
+        mean_consistency.append(
+            time_based_exponential_moving_average(
+                [max(frame_consistency) for frame_consistency in example_consistency], 
+                frame_times[example_idx]
+            )[-1]
+        )
+
+    mean_relevance = np.mean(mean_relevance)
+    mean_informativeness = np.mean(mean_informativeness)
+    mean_consistency = np.mean(mean_consistency)
+            
     return {
         "relevance": mean_relevance,
         "informativeness": mean_informativeness,
         "consistency": mean_consistency,
-        "metrics_by_output": metrics_by_output,
+        "metrics_by_example": metrics_by_example,
     }
 
 
@@ -220,8 +259,6 @@ def consistency_metrics_caption(captions: list[list[str]], procedure_description
     premises_unexpected = [mask_verbs_and_nouns(caption, nlp, nli_tokenizer.mask_token) for frames_captions in captions for caption in frames_captions] # Create "unexpected" premises by masking out all nouns 
     # premises_unexpected = [caption.replace(" is ", " is not ") for caption in captions]
 
-    print(premises_unexpected)
-
     probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
     probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))
 
@@ -231,8 +268,8 @@ def consistency_metrics_caption(captions: list[list[str]], procedure_description
     # Informativeness: actual success probability based on the caption 
     # (we want this to be high for success examples, low for mistake examples, so look at entailment probability for success and contradiction probability for mistakes)
     # TODO: is this comparable to VQG metric for informativeness? can we make the VQG metric more comparable?
-    entailment_prob_indices = torch.tensor([0 if l else 1 for l in mistake_labels])
-    informativeness = probs_expected[torch.arange(len(captions)), entailment_prob_indices].unsqueeze(1).numpy()
+    entailment_prob_indices = torch.tensor([0 if l else 1 for li, l in enumerate(mistake_labels) for _ in captions[li]])
+    informativeness = probs_expected[torch.arange(len(hypotheses)), entailment_prob_indices].unsqueeze(1).numpy()
 
     # Combine by multiplying to form a "consistency" metric
     consistency = relevance * informativeness
@@ -245,14 +282,14 @@ def consistency_metrics_caption(captions: list[list[str]], procedure_description
         this_relevance = []
         this_informativeness = []
         this_consistency = []
-        for frame_time in frame_times[example_idx]:
-            this_relevance.append(relevance[parallel_idx])
-            this_informativeness.append(informativeness[parallel_idx])
-            this_consistency.append(consistency[parallel_idx])
+        for _ in frame_times[example_idx]:
+            this_relevance.append(round(float(relevance[parallel_idx]), 3))
+            this_informativeness.append(round(float(informativeness[parallel_idx]), 3))
+            this_consistency.append(round(float(consistency[parallel_idx]), 3))
             parallel_idx += 1
-        mean_relevance.append(time_based_exponential_moving_average(this_relevance, frame_times[example_idx]))
-        mean_informativeness.append(time_based_exponential_moving_average(this_informativeness, frame_times[example_idx]))
-        mean_consistency.append(time_based_exponential_moving_average(this_consistency, frame_times[example_idx]))
+        mean_relevance.append(time_based_exponential_moving_average(this_relevance, frame_times[example_idx])[-1])
+        mean_informativeness.append(time_based_exponential_moving_average(this_informativeness, frame_times[example_idx])[-1])
+        mean_consistency.append(time_based_exponential_moving_average(this_consistency, frame_times[example_idx])[-1])
 
         metrics_by_example[example_id] = {
             "relevance": this_relevance,

@@ -15,14 +15,14 @@ import torch
 from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
 
-from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
+from travel.constants import RESULTS_DIR
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
 from travel.model.metrics import generate_det_curve, consistency_metrics_caption
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, DETECTION_FRAMES_PROPORTION
 from travel.model.nli import NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
@@ -210,15 +210,19 @@ for eval_partition in args.eval_partitions:
         # Add metrics for generated captions
         labels = []
         procedure_descriptions = []
-        procedure_ids = []
+        example_ids = []
+        frame_times = []
         for example in eval_datasets[0].get_batches(1, load_frames=False):
+            example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
             labels.append(example.mistake)
             procedure_descriptions.append(example.procedure_description)
-            procedure_ids.append(example.procedure_id)
+            example_ids.append(example.example_id)
+            frame_times.append(example.frame_times)
         metrics['consistency'] = consistency_metrics_caption(captions, 
                                                              procedure_descriptions=procedure_descriptions,
                                                              mistake_labels=labels,
-                                                             procedure_ids=procedure_ids)
+                                                             example_ids=example_ids,
+                                                             frame_times=frame_times)
 
     print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
     pprint(metrics['accuracy'][metrics['accuracy']['best_threshold']])
