@@ -9,13 +9,14 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, Bits
 from typing import Union, Any, Optional
 import yaml
 
+from travel.constants import CONFIG_PATH
 from travel.model.metrics import mistake_detection_metrics, effectiveness
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils import generate_float_series, time_based_exponential_moving_average, EMA_TAU
 from travel.data.vqa import VQAOutputs, VQAResponse
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE, NLI_RELEVANCE_DELTA, NLI_REPLACE_PROBS, NLI_RERUN_ON_RELEVANT_EVIDENCE, NLI_HYPOTHESIS_TEMPLATE, run_nli
 
-with open('config.yml', 'r') as file:
+with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
 MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]

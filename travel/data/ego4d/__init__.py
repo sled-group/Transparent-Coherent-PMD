@@ -23,7 +23,7 @@ from typing import Any, TypeVar, Optional
 from tqdm import tqdm
 import yaml
 
-from travel.constants import DATA_CACHE_DIR, RANDOM_SEED
+from travel.constants import DATA_CACHE_DIR, RANDOM_SEED, CONFIG_PATH
 from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS, EGO4D_VIDEO_PATH, \
                                         MISALIGNSRL_PATH
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
@@ -80,7 +80,7 @@ EOS_REGEX = re.compile(r"\<\|eos\|\>$", re.IGNORECASE)
 UNSURE_END_REGEX = re.compile(r"#unsure\.?$", re.IGNORECASE)
 UNSURE_MIDDLE_REGEX = re.compile(r"#unsure", re.IGNORECASE)
 
-with open('config.yml', 'r') as file:
+with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 FRAME_KEEP_FREQUENCY = float(config["data"]["ego4d"]["video_frame_keep_frequency"])
 

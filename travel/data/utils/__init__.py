@@ -9,6 +9,8 @@ from tqdm import tqdm
 from typing import Iterator, Sized, Optional, Any, Callable
 import yaml
 
+from travel.constants import CONFIG_PATH
+
 def generate_float_series(start: float, end: float, step: float) -> list[float]:
     """
     Generates a list of floats including a `start` and `end` point, and intermediate points `step` apart.
@@ -234,7 +236,7 @@ class ResumableParallelSequentialSampler(torch.utils.data.Sampler):
             data = self.element_id_fn(data)
         return data in self.completed_elements
     
-with open('config.yml', 'r') as file:
+with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 EMA_TAU = float(config["mistake_detection_strategies"]["ema_tau"])
 

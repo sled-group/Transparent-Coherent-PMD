@@ -7,7 +7,7 @@ from typing import Optional, Union
 import yaml
 
 from travel import set_random_seed
-from travel.constants import CACHE_FREQUENCY, RANDOM_SEED
+from travel.constants import CACHE_FREQUENCY, RANDOM_SEED, CONFIG_PATH
 from travel.data.vqg import VQGInputs, VQGOutputs, parse_vqg_outputs, save_vqg_outputs
 from travel.model.mistake_detection import NLI_BATCH_SIZE, NLI_RELEVANCE_DELTA
 
@@ -154,7 +154,7 @@ def run_vqg_semi_structured(lm: TextGenerationPipeline, inputs: list[VQGInputs],
     save_vqg_outputs(vqg_outputs, save_path)
     return vqg_outputs
 
-with open('config.yml', 'r') as file:
+with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 NLI_CORRECTION_MINIMUM_CONFIDENCE = config["vqg"]["nli_correction_minimum_confidence"]
 def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs], nli_model, nli_tokenizer) -> dict[Union[str, int], VQGOutputs]:

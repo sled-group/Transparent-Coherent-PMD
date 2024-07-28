@@ -2,7 +2,9 @@ import torch
 from tqdm import tqdm
 import yaml
 
-with open('config.yml', 'r') as file:
+from travel.constants import CONFIG_PATH
+
+with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 NLI_MODEL_PATH = config["mistake_detection_strategies"]["nli_model_path"]
 NLI_BATCH_SIZE = int(config["mistake_detection_strategies"]["nli_batch_size"])

@@ -12,13 +12,14 @@ from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesCo
 from typing import Optional, Any, Union
 import yaml
 
+from travel.constants import CONFIG_PATH
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils import time_based_exponential_moving_average
 from travel.data.utils.image import get_preprocessed_image, BoundingBoxCluster, BoundingBox
 from travel.data.utils.text import get_compound_noun
 from travel.data.vqg import VQGOutputs
 
-with open('config.yml', 'r') as file:
+with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 
 OWLV2_PATH = config["grounding"]["owlv2_path"]

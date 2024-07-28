@@ -11,7 +11,7 @@ import shutil
 import torch
 from transformers import pipeline, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer
 
-from travel.constants import RESULTS_DIR, HF_TOKEN
+from travel.constants import RESULTS_DIR, HF_TOKEN, CONFIG_PATH
 from travel.data.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d.constants import RECIPE_STEPS
@@ -241,5 +241,5 @@ metrics = consistency_metrics_vqg(vqg_outputs)
 json.dump(metrics, open(os.path.join(this_results_dir, "metrics_consistency.json"), "w"), indent=4)
 
 # Save config and args
-shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
+shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

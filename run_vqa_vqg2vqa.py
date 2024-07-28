@@ -16,7 +16,7 @@ import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
 from typing import Optional
 
-from travel.constants import RESULTS_DIR
+from travel.constants import RESULTS_DIR, CONFIG_PATH
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
@@ -264,5 +264,5 @@ for eval_partition in args.eval_partitions:
         det_filename = f"det_{mistake_detection_strategy}{'rerun' if mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
         generate_det_curve(metrics['accuracy'], os.path.join(this_results_dir, det_filename))
 
-shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
+shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

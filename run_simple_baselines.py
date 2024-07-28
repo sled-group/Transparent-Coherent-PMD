@@ -12,7 +12,7 @@ from random import randint, random
 import shutil
 from tqdm import tqdm
 
-from travel.constants import RESULTS_DIR
+from travel.constants import RESULTS_DIR, CONFIG_PATH
 from travel.model.metrics import generate_det_curve
 from travel.model.mistake_detection import mistake_detection_metrics, MISTAKE_DETECTION_THRESHOLDS
 from travel.data.mistake_detection import MistakeDetectionTasks
@@ -94,5 +94,5 @@ for eval_partition in args.eval_partitions:
     det_filename = f"det_random_probs_{eval_partition}.pdf"
     generate_det_curve(metrics_random_probs, os.path.join(this_results_dir, det_filename))
 
-shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
+shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
