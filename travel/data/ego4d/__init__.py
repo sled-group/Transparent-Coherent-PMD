@@ -33,7 +33,7 @@ from travel.data.utils.video import get_video, extract_frames
 from travel.model.grounding import TargetObjectCounterFilter
 
 # Some verbs would not be expected in the task-oriented mistake detection setting 
-# (don't really cause a meaningful/observable state change toward a task goal), so filter them out
+# (don't really cause a meaningful/observable/fully specifiable state change toward a task goal), so filter them out
 EGO4D_IGNORE_VERBS = [
     'scroll', # Scrolling on phone, tablet, etc.
     'touch', # Touching an object
@@ -55,7 +55,7 @@ EGO4D_IGNORE_VERBS = [
     'feed', # Feeding animals
     'cross', # People crossing over things
     'kick', # Kicking objects with foot - usually not related to any task
-    # "inspect_(check,_look,_examine,_view)", # Check on or look at something, e.g., look at something - doesn't imply a state change
+    "inspect_(check,_look,_examine,_view)", # Check on or look at something, e.g., look at something - doesn't imply a state change
     "adjust_(regulate,_increase/reduce,_change)", # Adjust something (slight position change)
     "turn_(spin,_rotate,_flip,_turn_over)", # Turn something (slight position change)
     "tilt", # Tilt something (slight position change)
@@ -66,13 +66,20 @@ EGO4D_IGNORE_VERBS = [
     "blow", # Blowing air
     "serve", # Serving food
     "stand", # Standing up
-    # "count", # Counting things # TODO: uncomment for next batch of ego4d data
+    "count", # Counting things
+    "clap", # Clapping hands
+    "move_(transfer,_pass,_exchange)", # Move an object
 ] 
 
 # Similarly, some verb noun pairs don't involve meaningful state changes (e.g., put hand)
 EGO4D_IGNORE_VERB_NOUN_PAIRS = [
     ("put_(place,_leave,_drop)", "hand_(finger,_hand,_palm,_thumb)"), # Putting hand on something is the same as touching, which we also ignore
     # ("cut_(trim,_slice,_chop)", "grass"), # Cutting grass 
+]
+
+EGO4D_CORRUPTED_VIDEO_IDS = [
+    "968139e2-987e-4615-a2d4-fa2e683bae8a",
+    "9957a25a-8ef1-4538-a51e-f8c5ab8c2bc4"
 ]
 
 C_REGEX = re.compile(r"^\#C\s+C", re.IGNORECASE)
@@ -83,7 +90,7 @@ UNSURE_MIDDLE_REGEX = re.compile(r"#unsure", re.IGNORECASE)
 with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 FRAME_KEEP_FREQUENCY = float(config["data"]["ego4d"]["video_frame_keep_frequency"])
-
+MIN_BRIGHTNESS = float(config["data"]["ego4d"]["min_brightness"])
 
 class DataCollatorForVideoSeq2Seq(DataCollatorForSeq2Seq):
     def __call__(self, features, return_tensors=None):
@@ -622,10 +629,15 @@ class Ego4dFHOMainDataset:
                     continue
 
                 for clip_index, clip_info in enumerate(video_metadata['narrated_actions']):
+                    if not(clip_info['post_frame'] is not None and clip_info['pre_frame'] is not None and clip_info['narration_timestamp_sec'] is not None):
+                        # Missing the annotations we need to select frames
+                        continue
+
+                    pre_time = clip_info['pre_frame'] / clip_info['fps'] if clip_info['pre_frame'] is not None else None
+                    pnr_time = clip_info['pnr_frame'] / clip_info['fps'] if clip_info['pnr_frame'] is not None else None
+                    post_time = clip_info['post_frame'] / clip_info['fps'] if clip_info['post_frame'] is not None else None
+
                     if not self.multi_frame:
-                        pre_time = clip_info['pre_frame'] / clip_info['fps'] if clip_info['pre_frame'] is not None else None
-                        pnr_time = clip_info['pnr_frame'] / clip_info['fps'] if clip_info['pnr_frame'] is not None else None
-                        post_time = clip_info['post_frame'] / clip_info['fps'] if clip_info['post_frame'] is not None else None
                     
                         pre_frame, pnr_frame, post_frame = extract_frames(video_cap, [pre_time, pnr_time, post_time])
 
@@ -640,44 +652,44 @@ class Ego4dFHOMainDataset:
                                         "post_frame": post_frame}
                     else:
                         # Sample a precondition and effect video clip instead (precondition clip is used to generate a negative example)
-                        if clip_info['post_frame'] is not None and clip_info['pre_frame'] is not None and clip_info['narration_timestamp_sec'] is not None:
-                            # Following SuccessVQA, sample positive example as 8 second clip centered around narration timestamp
-                            narration_time = clip_info['narration_timestamp_sec']
-                            post_start_time = max(narration_time - 4.0, 0.0)
-                            post_end_time = min(narration_time + 4.0, clip_info['video_duration'])
-                            post_frame_times = generate_float_series(post_start_time, post_end_time, 1 / FRAME_KEEP_FREQUENCY)
-                            post_frames = extract_frames(video_cap, post_frame_times)
+                        # Following SuccessVQA, sample positive example as an up to 8 second clip centered around narration timestamp (make sure it doesn't overlap with other clips)
+                        narration_time = clip_info['narration_timestamp_sec']
+                        post_start_time = max(narration_time - 4.0, pre_time)
+                        post_end_time = min(narration_time + 4.0, post_time)
+                        post_frame_times = generate_float_series(post_start_time, post_end_time, 1 / FRAME_KEEP_FREQUENCY)
+                        post_frames = extract_frames(video_cap, post_frame_times)
 
-                            # Following SuccessVQA, sample negative example as an 8 second clip ending at the precondition frame
-                            # (but make sure it doesn't overlap with effect clip)
-                            pre_end_time = min(clip_info['pre_frame'] / clip_info['fps'], post_start_time - 1 / FRAME_KEEP_FREQUENCY)
-                            pre_end_time = max(pre_end_time, 0.0)
-                            pre_start_time = max(pre_end_time - 8.0, 0.0)
-                            pre_frame_times = generate_float_series(pre_start_time, pre_end_time, 1 / FRAME_KEEP_FREQUENCY)
-                            if len(pre_frame_times) > 0 and pre_start_time != pre_end_time:
-                                pre_frames = extract_frames(video_cap, pre_frame_times)
-                            else:
-                                pre_frames = []
-
-                            # Remove any frames that failed to load
-                            pre_frame_times = [ftime for frame, ftime in zip(pre_frames, pre_frame_times) if frame is not None]
-                            pre_frames = [frame for frame in pre_frames if frame is not None]
-                            
-                            # Remove any frames that failed to load
-                            post_frame_times = [ftime for frame, ftime in zip(post_frames, post_frame_times) if frame is not None]
-                            post_frames = [frame for frame in post_frames if frame is not None]
-
-                            yield clip_info | {"video_index": video_index,
-                                            "video_uid": video_metadata["video_uid"],
-                                            "clip_index": clip_index,
-                                            "pre_times": pre_frame_times,
-                                            "pre_frames": pre_frames, 
-                                            "post_times": post_frame_times,
-                                            "post_frames": post_frames}
-
+                        # Following SuccessVQA, sample negative example as an 8 second clip ending at the precondition frame
+                        # (but make sure it doesn't overlap with other clips)
+                        pre_end_time = min(pre_time, post_start_time - 1 / FRAME_KEEP_FREQUENCY)
+                        pre_end_time = max(pre_end_time, 0.0)
+                        pre_start_time = max(pre_end_time - 8.0, pre_time)
+                        pre_frame_times = generate_float_series(pre_start_time, pre_end_time, 1 / FRAME_KEEP_FREQUENCY)
+                        if len(pre_frame_times) > 0 and pre_start_time != pre_end_time:
+                            pre_frames = extract_frames(video_cap, pre_frame_times)
                         else:
-                            # Missing the annotations we need to select clips
+                            pre_frames = []
+
+                        # Remove any frames that failed to load
+                        pre_frame_times = [ftime for frame, ftime in zip(pre_frames, pre_frame_times) if frame is not None]
+                        pre_frames = [frame for frame in pre_frames if frame is not None]
+                        
+                        # Remove any frames that failed to load
+                        post_frame_times = [ftime for frame, ftime in zip(post_frames, post_frame_times) if frame is not None]
+                        post_frames = [frame for frame in post_frames if frame is not None]
+
+                        # If video clip is too dark, omit it
+                        average_brightness = np.mean([np.mean(np.asarray(frame)) for frame in pre_frames + post_frames])
+                        if average_brightness < MIN_BRIGHTNESS:
                             continue
+
+                        yield clip_info | {"video_index": video_index,
+                                        "video_uid": video_metadata["video_uid"],
+                                        "clip_index": clip_index,
+                                        "pre_times": pre_frame_times,
+                                        "pre_frames": pre_frames, 
+                                        "post_times": post_frame_times,
+                                        "post_frames": post_frames}
             finally:
                 video_cap.release()
     
@@ -832,6 +844,10 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                 del example_cache_buffer
                 example_cache_buffer: list[MistakeDetectionExample] = []
 
+            # Check if video is one of the ones we've noticed seems to have corrupted, distorted frames
+            if clip['video_uid'] in EGO4D_CORRUPTED_VIDEO_IDS:
+                continue
+
             # Index procedure based on video and clip index (each narration is unique)
             procedure_id = 1000 * clip['video_index'] + clip['clip_index']
             clip_id = f"{clip['video_uid']}/{clip['clip_index']}"
@@ -842,14 +858,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
 
             # Convert narration text to imperative form to match the sentence structure of recipes and task instructions
             instruction_text = self.ego4d_narration_to_instruction(clip['narration_text'], nlp)
-
-            # For some verbs, e.g., "move", we need to have more than one object argument in order for
-            # there to be an observable state change (e.g., "move tomatoes into bowl" rather than "move tomatoes")
-            if clip['structured_verb'] in ["move_(transfer,_pass,_exchange)"]:
-                mentioned_objects = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, [instruction_text])[0]
-                # TODO: this still may not be enough, e.g., "reposition the water color on the table with your hand" has enough mentioned objects but not in the right places
-                if len(mentioned_objects) < 2:
-                    continue
             
             # clip['video'] shape: (C, # frames, H, W)
             if not multi_frame:
@@ -890,8 +898,9 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             )
             example_cache_buffer.append(positive_example)
             
-            # Generate hard negative example from precondition frame (only do this if precondition and effect clips had enough separation)
-            if not multi_frame or len(precondition_frames) > 0:
+            # Generate hard negative example from precondition frame 
+            # (only do this if precondition and effect clips have enough separation and action is not super fast, as even slight annotation error can impact data quality)
+            if not multi_frame or len(precondition_frames) > 0 and clip['post_time'] - clip['pre_time'] >= 2.0:
                 negative_example_hard = MistakeDetectionExample(
                     task_name="ego4d",
                     video_id=clip['video_uid'],
@@ -922,6 +931,17 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     # Omit V_ARG1 examples in single frame setting, since these will be hard to use for training but
                     # at inference time, we can hopefully catch these examples with target object filter
                     if not multi_frame and "V_ARG1" in misalignsrl_type:
+                        continue
+
+                    # Omit V examples for pick & place verbs, as these verbs are often prerequisite for 
+                    # other object interactions and will happen even in misaligned video
+                    if misalignsrl_type == "MisalignSRL_V" and clip["structured_verb"] in ["carry",
+                                                                                           "take_(pick,_grab,_get)", 
+                                                                                           "put_(place,_leave,_drop)", 
+                                                                                           "hold_(support,_grip,_grasp)",
+                                                                                           "pull",
+                                                                                           "push",
+                                                                                           "remove"]:
                         continue
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
