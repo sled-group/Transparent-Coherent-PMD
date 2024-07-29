@@ -896,35 +896,39 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # NOTE: example IDs intentionally have "/"s in them to ensure there's one directory per video and per clip (enables easy resuming of incomplete runs and inspection of data)
 
             # Generate positive example from effect frame
-            positive_example = MistakeDetectionExample(
-                task_name="ego4d",
-                video_id=clip['video_uid'],
-                procedure_id=procedure_id,
-                example_id=f"{clip_id}/pos",
-                frames=[effect_frame] if not multi_frame else effect_frames,
-                frame_times=[clip['post_time']] if not multi_frame else clip['post_times'],
-                procedure_description=instruction_text,
-                mistake=False,
-                verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
-            )
-            example_cache_buffer.append(positive_example)
+            frames = [effect_frame] if not multi_frame else effect_frames
+            if len(frames) > 0:
+                positive_example = MistakeDetectionExample(
+                    task_name="ego4d",
+                    video_id=clip['video_uid'],
+                    procedure_id=procedure_id,
+                    example_id=f"{clip_id}/pos",
+                    frames=frames,
+                    frame_times=[clip['post_time']] if not multi_frame else clip['post_times'],
+                    procedure_description=instruction_text,
+                    mistake=False,
+                    verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
+                )
+                example_cache_buffer.append(positive_example)
             
             # Generate hard negative example from precondition frame 
             # (only do this if precondition and effect clips have enough separation and action is not super fast, as even slight annotation error can impact data quality)
             if (not multi_frame and clip['post_time'] - clip['pre_time'] >= 2.0) or (multi_frame and max(clip['post_times']) - min(clip['post_times']) >= 2.0):
-                negative_example_hard = MistakeDetectionExample(
-                    task_name="ego4d",
-                    video_id=clip['video_uid'],
-                    procedure_id=procedure_id,
-                    example_id=f"{clip_id}/hardneg",
-                    frames=[precondition_frame] if not multi_frame else precondition_frames,
-                    frame_times=[clip['pre_time']] if not multi_frame else clip['pre_times'],
-                    procedure_description=instruction_text,
-                    mistake=True,
-                    mistake_type="Action Incomplete",
-                    verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
-                )
-                example_cache_buffer.append(negative_example_hard)
+                frames = [precondition_frame] if not multi_frame else precondition_frames
+                if len(frames) > 0:
+                    negative_example_hard = MistakeDetectionExample(
+                        task_name="ego4d",
+                        video_id=clip['video_uid'],
+                        procedure_id=procedure_id,
+                        example_id=f"{clip_id}/hardneg",
+                        frames=frames,
+                        frame_times=[clip['pre_time']] if not multi_frame else clip['pre_times'],
+                        procedure_description=instruction_text,
+                        mistake=True,
+                        mistake_type="Action Incomplete",
+                        verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
+                    )
+                    example_cache_buffer.append(negative_example_hard)
             else:
                 print(f"({worker_index}) Warning: Could not generate a hard negative for clip {clip_id}!")
             
@@ -961,19 +965,21 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     procedure_id = procedure_id
                     
                     # Generate positive example from effect frame
-                    misalignsrl_example = MistakeDetectionExample(
-                        task_name="ego4d",
-                        video_id=video_id,
-                        procedure_id=procedure_id,
-                        example_id=f"{clip_id}/easyneg_{misalignsrl_type}_{video_id}_{frame_time}",
-                        frames=[mismatch_examples[misalignsrl_type]['effect_frame']] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frames'],
-                        frame_times=[frame_time] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frame_times'],
-                        procedure_description=instruction_text,
-                        mistake=True,
-                        mistake_type=misalignsrl_type,
-                        verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
-                    )
-                    example_cache_buffer.append(misalignsrl_example)
+                    frames = [mismatch_examples[misalignsrl_type]['effect_frame']] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frames'],
+                    if len(frames) > 0:
+                        misalignsrl_example = MistakeDetectionExample(
+                            task_name="ego4d",
+                            video_id=video_id,
+                            procedure_id=procedure_id,
+                            example_id=f"{clip_id}/easyneg_{misalignsrl_type}_{video_id}_{frame_time}",
+                            frames=frames,
+                            frame_times=[frame_time] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frame_times'],
+                            procedure_description=instruction_text,
+                            mistake=True,
+                            mistake_type=misalignsrl_type,
+                            verb_noun_pair=(clip["structured_verb"], clip["structured_noun"])
+                        )
+                        example_cache_buffer.append(misalignsrl_example)
                     # print(f"Appended example:")
                     # mismatch_sampler.print_misalignsrl_sample_meta(mismatch_examples[misalignsrl_type], misalignsrl_type)
                 # print(f"===================================")
