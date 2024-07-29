@@ -355,7 +355,7 @@ class PerTokenPPOTrainer(PPOTrainer):
         # add queries, scores and responses on the correct device
         queries = [tensor.to(self.current_device) for tensor in queries]
         responses = [tensor.to(self.current_device) for tensor in responses]
-        # scores = [tensor.to(self.current_device) for tensor in scores]
+        scores = [tensor.to(self.current_device) for tensor in scores]
         masks = [tensor.to(self.current_device) for tensor in masks] if masks is not None else None
 
         # squeeze scores if needed
@@ -372,8 +372,8 @@ class PerTokenPPOTrainer(PPOTrainer):
         self,
         queries: List[torch.LongTensor],
         responses: List[torch.LongTensor],
-        scores: torch.FloatTensor,
-        score_indices: torch.LongTensor,
+        scores: List[torch.FloatTensor],
+        score_indices: List[torch.LongTensor],
         response_masks: Optional[List[torch.LongTensor]] = None,
     ):
         """
@@ -402,7 +402,6 @@ class PerTokenPPOTrainer(PPOTrainer):
         queries, responses, scores, response_masks = self._step_safety_checker(
             bs, queries, responses, scores, response_masks
         )
-        scores = scores.to(self.current_device)
         if self.config.use_score_scaling:
             raise NotImplementedError("Score scaling not implemented.")
         #     # Score scaling

@@ -965,7 +965,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     procedure_id = procedure_id
                     
                     # Generate positive example from effect frame
-                    frames = [mismatch_examples[misalignsrl_type]['effect_frame']] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frames'],
+                    frames = [mismatch_examples[misalignsrl_type]['effect_frame']] if not multi_frame else mismatch_examples[misalignsrl_type]['effect_frames']
                     if len(frames) > 0:
                         misalignsrl_example = MistakeDetectionExample(
                             task_name="ego4d",
