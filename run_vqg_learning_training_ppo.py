@@ -32,6 +32,7 @@ from travel.model.ppo_trainer import PerTokenPPOTrainer as PPOTrainer
 from travel.model.vqg import parse_vqg_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
+# TODO: Omit V_ARG1 examples
 # TODO: play around with generation kwargs more?
 # TODO: train model by procedure ID rather than randomly shuffling all examples?
 # TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens

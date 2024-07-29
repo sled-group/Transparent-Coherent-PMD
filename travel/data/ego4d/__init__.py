@@ -69,6 +69,7 @@ EGO4D_IGNORE_VERBS = [
     "count", # Counting things
     "clap", # Clapping hands
     "move_(transfer,_pass,_exchange)", # Move an object
+    "arrange_(straighten,_sort,_distribute,_align)", # Arrange objects (non-specific movement)
 ] 
 
 # Similarly, some verb noun pairs don't involve meaningful state changes (e.g., put hand)
@@ -90,7 +91,7 @@ UNSURE_MIDDLE_REGEX = re.compile(r"#unsure", re.IGNORECASE)
 with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 FRAME_KEEP_FREQUENCY = float(config["data"]["ego4d"]["video_frame_keep_frequency"])
-MIN_BRIGHTNESS = float(config["data"]["ego4d"]["min_brightness"])
+MIN_BRIGHTNESS = float(config["data"]["ego4d"]["video_frame_min_brightness"])
 
 class DataCollatorForVideoSeq2Seq(DataCollatorForSeq2Seq):
     def __call__(self, features, return_tensors=None):
@@ -663,7 +664,7 @@ class Ego4dFHOMainDataset:
                         # (but make sure it doesn't overlap with other clips)
                         pre_end_time = min(pre_time, post_start_time - 1 / FRAME_KEEP_FREQUENCY)
                         pre_end_time = max(pre_end_time, 0.0)
-                        pre_start_time = max(pre_end_time - 8.0, pre_time)
+                        pre_start_time = max(pre_end_time - 8.0, 0.0)
                         pre_frame_times = generate_float_series(pre_start_time, pre_end_time, 1 / FRAME_KEEP_FREQUENCY)
                         if len(pre_frame_times) > 0 and pre_start_time != pre_end_time:
                             pre_frames = extract_frames(video_cap, pre_frame_times)
@@ -768,7 +769,9 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                                                 ("in your right hand", "in your hand"),
                                                 ("with your left hand", "with your hand"),
                                                 ("with your right hand", "with your hand"),
-                                                ("with both hands", "with your hands")]:
+                                                ("with both hands", "with your hands"),
+                                                ("with left hand", "with your hand"),
+                                                ("with right hand", "with your hand")]:
             if not("left hand" in instruction_text and "right hand" in instruction_text):
                 # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove unneeded mentions of this
                 instruction_text = instruction_text.replace(original_text, replaced_text)
@@ -859,6 +862,14 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # Convert narration text to imperative form to match the sentence structure of recipes and task instructions
             instruction_text = self.ego4d_narration_to_instruction(clip['narration_text'], nlp)
             
+            # For some verbs, e.g., "move", we need to have more than one object argument in order for
+            # there to be an observable state change (e.g., "move tomatoes into bowl" rather than "move tomatoes")
+            if clip['structured_verb'] in ["move_(transfer,_pass,_exchange)"]:
+                mentioned_objects = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, [instruction_text])[0]
+                # TODO: this still may not be enough, e.g., "reposition the water color on the table with your hand" has enough mentioned objects but not in the right places
+                if len(mentioned_objects) < 2:
+                    continue
+
             # clip['video'] shape: (C, # frames, H, W)
             if not multi_frame:
                 precondition_frame_arr, effect_frame_arr = clip['pre_frame'], clip['post_frame']
@@ -900,7 +911,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             
             # Generate hard negative example from precondition frame 
             # (only do this if precondition and effect clips have enough separation and action is not super fast, as even slight annotation error can impact data quality)
-            if not multi_frame or len(precondition_frames) > 0 and clip['post_time'] - clip['pre_time'] >= 2.0:
+            if (not multi_frame and clip['post_time'] - clip['pre_time'] >= 2.0) or (multi_frame and max(clip['post_times']) - min(clip['post_times']) >= 2.0):
                 negative_example_hard = MistakeDetectionExample(
                     task_name="ego4d",
                     video_id=clip['video_uid'],
@@ -928,11 +939,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                     if mismatch_examples[misalignsrl_type] is None:
                         continue
 
-                    # Omit V_ARG1 examples in single frame setting, since these will be hard to use for training but
-                    # at inference time, we can hopefully catch these examples with target object filter
-                    if not multi_frame and "V_ARG1" in misalignsrl_type:
-                        continue
-
                     # Omit V examples for pick & place verbs, as these verbs are often prerequisite for 
                     # other object interactions and will happen even in misaligned video
                     if misalignsrl_type == "MisalignSRL_V" and clip["structured_verb"] in ["carry",
@@ -943,6 +949,10 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                                                                                            "push",
                                                                                            "remove"]:
                         continue
+
+                    # Ensure that whatever we matched on is in line with the structured verb/noun annotation for the clip
+                    # (in rare cases, e.g., "rub paint onto wall", the structured annotation, i.e., paint, will not match 
+                    # the actual verb in the annotation, causing incorrect matches)
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
                     frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']
