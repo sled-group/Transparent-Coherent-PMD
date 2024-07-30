@@ -221,6 +221,8 @@ class AdaptiveVisualFilter:
 
 DO_NOT_PARSE_NOUNS = [
     "image",
+    "picture",
+    "photo",
     "scene",
     "anyone",
     "heat",

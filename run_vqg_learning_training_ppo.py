@@ -465,13 +465,18 @@ def main():
             # Find indices to apply reward
 
             # Find where newlines are to identify token spans for each question
-            reward_indices = [torch.cumsum((response_tensor == newline_token_id).int(), dim=0).cpu() for response_tensor in response_tensors]
-            reward_indices = [torch.cat((torch.zeros((1)).to(reward_idx.device), reward_idx[:-1]), dim=0).long() for reward_idx in reward_indices]
+            
+            reward_indices = [(response_tensor == newline_token_id).long().cpu() for response_tensor in response_tensors]
+            for i in range(len(reward_indices)):
+                reward_indices[i][reward_indices[i] == 1] = torch.cumsum((reward_indices[i] == 1).int(), dim=0)[reward_indices[i] == 1]
+                reward_indices[i][reward_indices[i] == 0] = -1
+                reward_indices[i][reward_indices[i] != -1] -= 1
+            # reward_indices = [torch.cat((torch.zeros((1)).to(reward_idx.device), reward_idx[:-1]), dim=0).long() for reward_idx in reward_indices]
 
             # If response tensor contains more text beyond 2 questions, remove it
             response_tensors = [response_tensor[reward_idx <= 1] for response_tensor, reward_idx in zip(response_tensors, reward_indices)]
             reward_indices = [reward_idx[reward_idx <= 1] for reward_idx in reward_indices]
-            
+
             # Pad reward indices with -1 to account for query tensors
             reward_indices = [torch.cat((torch.tensor([-1] * qt_length).to(reward_idx.device), reward_idx)) for reward_idx, qt_length in zip(reward_indices, query_lengths)]
 
@@ -490,9 +495,8 @@ def main():
                 print("effectiveness =", effectiveness[0])
                 print("verifiability =", verifiability[0])
                 print("combined =", reward[0][:])
-                print("reward indices =", reward_indices[0][reward_indices[0] != -1])
-                reward_indices_for_response = [reward_indices[i][reward_indices[i] != -1] for i in range(this_batch_size)]
-                tokens_at_reward_indices = [[response_tensors[i][reward_indices_for_response[i] == j] for j in range(2)] for i in range(this_batch_size)]
+                print("reward indices =", reward_indices[0])
+                tokens_at_reward_indices = [[torch.cat((query_tensors[i].cpu(), response_tensors[i].cpu()), dim=0)[reward_indices[i] == j] for j in range(2)] for i in range(this_batch_size)]
                 print("tokens at reward indices =", tokens_at_reward_indices[0])
                 
             #### Run PPO step

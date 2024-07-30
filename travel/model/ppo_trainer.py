@@ -662,12 +662,16 @@ class PerTokenPPOTrainer(PPOTrainer):
             non_score_rewards.append(non_score_reward)
             reward = non_score_reward.clone()
 
-            
-
             # reward is preference model score + KL penalty
             # Add scores from reward model at specified indices (take off first index since logprobs start at second query token)
             for i in range(score.shape[0]):
-                reward[score_idxs[1:] == i] += score[i]
+                if (score_idxs[1:] == i).shape[0] > 0:
+                    # If this reward has token indices in the score_indices, apply it at them
+                    reward[score_idxs[1:] == i] += score[i]
+                else:
+                    # Otherwise, apply the reward at the last non-masked index (this will happen when model fails to generate parse-able questions)
+                    last_non_masked_index = mask.nonzero()[-1]
+                    reward[last_non_masked_index] += score
 
             rewards.append(reward)
         return torch.stack(rewards), torch.stack(non_score_rewards), torch.stack(kls)
