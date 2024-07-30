@@ -298,7 +298,7 @@ def main():
         config=ppo_config,
         # dataset=ppo_dataset,
         tokenizer=tokenizer,
-        # data_collator=collator
+        data_collator=collator
     )
     if not ppo_trainer.is_peft_model:
         raise ValueError("PEFT model did not successfully get loaded by PPO trainer!")
@@ -465,20 +465,22 @@ def main():
             # Find indices to apply reward
 
             # Find where newlines are to identify token spans for each question
-            reward_indices = [torch.cumsum((response_tensor == newline_token_id).int(), dim=0) for response_tensor in response_tensors]
-            reward_indices = [torch.cat((torch.zeros((1)), reward_idx[:-1]), dim=0).long() for reward_idx in reward_indices]
+            reward_indices = [torch.cumsum((response_tensor == newline_token_id).int(), dim=0).cpu() for response_tensor in response_tensors]
+            reward_indices = [torch.cat((torch.zeros((1)).to(reward_idx.device), reward_idx[:-1]), dim=0).long() for reward_idx in reward_indices]
 
             # If response tensor contains more text beyond 2 questions, remove it
             response_tensors = [response_tensor[reward_idx <= 1] for response_tensor, reward_idx in zip(response_tensors, reward_indices)]
+            reward_indices = [reward_idx[reward_idx <= 1] for reward_idx in reward_indices]
+            
+            # Pad reward indices with -1 to account for query tensors
+            reward_indices = [torch.cat((torch.tensor([-1] * qt_length).to(reward_idx.device), reward_idx)) for reward_idx, qt_length in zip(reward_indices, query_lengths)]
 
             # Break reward down into a list and set a single -1 reward for all generated tokens when questions could not be parsed
-            reward = [reward[i] for i in range(reward.shape[0])]            
             for bad_idx, question_count in bad_idxs:
-                assert reward[bad_idx].shape[0] == 2
                 if question_count == 0:
-                    reward[bad_idx][:] = -1.0
+                    reward[bad_idx, :] = -1.0
                 elif question_count == 1:
-                    reward[bad_idx][1] = -1.0
+                    reward[bad_idx, 1] = -1.0
 
             if args.verbose:
                 pprint("Rewards:")
@@ -487,10 +489,10 @@ def main():
                 print("consistency =", consistency[0])
                 print("effectiveness =", effectiveness[0])
                 print("verifiability =", verifiability[0])
-                print("combined =", reward[0, :])
-                print("reward indices =", reward_indices[0, :])
-                reward_indices_for_response = [reward_indices[i] - query_lengths[i] for i in range(this_batch_size)]
-                tokens_at_reward_indices = [response_tensors[i][reward_indices_for_response[i].long()] if torch.min(reward_indices_for_response[i]) > 0 else torch.tensor([-1, -1]) for i in range(this_batch_size)]
+                print("combined =", reward[0][:])
+                print("reward indices =", reward_indices[0][reward_indices[0] != -1])
+                reward_indices_for_response = [reward_indices[i][reward_indices[i] != -1] for i in range(this_batch_size)]
+                tokens_at_reward_indices = [[response_tensors[i][reward_indices_for_response[i] == j] for j in range(2)] for i in range(this_batch_size)]
                 print("tokens at reward indices =", tokens_at_reward_indices[0])
                 
             #### Run PPO step

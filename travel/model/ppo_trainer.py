@@ -322,6 +322,7 @@ class PerTokenPPOTrainer(PPOTrainer):
         queries: List[torch.LongTensor],
         responses: List[torch.LongTensor],
         scores: List[torch.FloatTensor],
+        score_indices: List[torch.FloatTensor],
         masks: Optional[List[torch.LongTensor]] = None,
     ):
         """
@@ -341,7 +342,8 @@ class PerTokenPPOTrainer(PPOTrainer):
         Returns:
             `tuple`: The input processed data.
         """
-        assert scores.shape[0] == batch_size
+        assert len(scores) == batch_size
+
         for name, tensor_list in zip(["queries", "responses"], [queries, responses]):
             if not isinstance(tensor_list, list):
                 raise ValueError(f"{name} must be a list of tensors - got {type(tensor_list)}")
@@ -352,10 +354,13 @@ class PerTokenPPOTrainer(PPOTrainer):
                     f"Batch size ({batch_size}) does not match number of examples - but got {len(tensor_list)} for: {name}"
                 )
 
+        for score, score_idxs in zip(scores, score_indices):
+            assert score.shape[0] >= int(torch.max(score_idxs).cpu().numpy()) + 1
+
         # add queries, scores and responses on the correct device
         queries = [tensor.to(self.current_device) for tensor in queries]
         responses = [tensor.to(self.current_device) for tensor in responses]
-        scores = [tensor.to(self.current_device) for tensor in scores]
+        scores = scores.to(self.current_device)
         masks = [tensor.to(self.current_device) for tensor in masks] if masks is not None else None
 
         # squeeze scores if needed
@@ -372,7 +377,7 @@ class PerTokenPPOTrainer(PPOTrainer):
         self,
         queries: List[torch.LongTensor],
         responses: List[torch.LongTensor],
-        scores: List[torch.FloatTensor],
+        scores: torch.FloatTensor,
         score_indices: List[torch.LongTensor],
         response_masks: Optional[List[torch.LongTensor]] = None,
     ):
@@ -400,7 +405,7 @@ class PerTokenPPOTrainer(PPOTrainer):
         bs = self.config.batch_size
 
         queries, responses, scores, response_masks = self._step_safety_checker(
-            bs, queries, responses, scores, response_masks
+            bs, queries, responses, scores, score_indices, response_masks
         )
         if self.config.use_score_scaling:
             raise NotImplementedError("Score scaling not implemented.")
@@ -436,7 +441,6 @@ class PerTokenPPOTrainer(PPOTrainer):
         t = time.time()
 
         model_inputs = self.prepare_model_inputs(queries, responses)
-
         if self.is_distributed:
             pad_first = self.tokenizer.padding_side == "left"
 
@@ -462,8 +466,11 @@ class PerTokenPPOTrainer(PPOTrainer):
                     pad_index=0,
                     pad_first=pad_first,
                 )
-
         model_inputs_names = list(model_inputs.keys())
+
+        # Pad score indices to make sure rewards are aligned correctly
+        score_indices = [(torch.tensor([self.tokenizer.pad_token_id] * (model_inputs['input_ids'].shape[-1] - si.shape[-1])).to(si.device).long(), si) for si in score_indices]
+        score_indices = [torch.cat((pads, si), dim=0) if self.tokenizer.padding_side == "left" else torch.cat((si, pads), dim=0) for pads, si in score_indices]
 
         full_kl_penalty = self.config.kl_penalty == "full"
 
@@ -484,8 +491,6 @@ class PerTokenPPOTrainer(PPOTrainer):
                     model_inputs,
                     return_logits=full_kl_penalty,
                 )
-        # pprint(all_logprobs[0])
-        # pprint(ref_logprobs[0])
 
         timing["time/ppo/forward_pass"] = time.time() - t
 
@@ -624,7 +629,7 @@ class PerTokenPPOTrainer(PPOTrainer):
     def compute_rewards(
         self,
         scores: torch.FloatTensor,
-        score_indices: torch.LongTensor,
+        score_indices: list[torch.LongTensor],
         logprobs: torch.FloatTensor,
         ref_logprobs: torch.FloatTensor,
         masks: torch.LongTensor,
@@ -648,6 +653,7 @@ class PerTokenPPOTrainer(PPOTrainer):
             `torch.FloatTensor`: KL penalty, shape (`batch_size`, `response_length`)
         """
         rewards, non_score_rewards, kls = [], [], []
+
         for score, score_idxs, logprob, ref_logprob, mask in zip(scores, score_indices, logprobs, ref_logprobs, masks):
             # compute KL penalty (from difference in logprobs)
             kl = self._kl_penalty(logprob, ref_logprob)
@@ -656,12 +662,12 @@ class PerTokenPPOTrainer(PPOTrainer):
             non_score_rewards.append(non_score_reward)
             reward = non_score_reward.clone()
 
+            
+
             # reward is preference model score + KL penalty
-            # Add scores from reward model at specified indices
-            last_non_masked_index = mask.nonzero()[-1]
-            score_idxs[score_idxs != -1] -= 1 # Score is only calculated starting at second query token so push back the indices
-            score_idxs[score_idxs == -1] = last_non_masked_index
-            reward[score_idxs] += score
+            # Add scores from reward model at specified indices (take off first index since logprobs start at second query token)
+            for i in range(score.shape[0]):
+                reward[score_idxs[1:] == i] += score[i]
 
             rewards.append(reward)
         return torch.stack(rewards), torch.stack(non_score_rewards), torch.stack(kls)
