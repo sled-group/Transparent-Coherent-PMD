@@ -92,8 +92,8 @@ def consistency_metrics_vqg(vqg_outputs: dict[Union[str, int], VQGOutputs]):
     procedure_descriptions = [vqg_output.procedure_description for vqg_output in vqg_outputs.values() for _ in vqg_output.questions]
     hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
     premises_expected = [f"{question} {answer.name}" for vqg_output in vqg_outputs.values() for question, answer in zip(vqg_output.questions, vqg_output.answers)]
-    # premises_unexpected = [f"{question} {VQAResponse(1-answer.value).name}" for vqg_output in vqg_outputs.values() for question, answer in zip(vqg_output.questions, vqg_output.answers)]    
-    premises_unexpected = [mask_verbs_and_nouns(question, nlp, nli_tokenizer.mask_token) + " " + nli_tokenizer.mask_token for output in vqg_outputs.values() for question, answer in zip(output.questions, output.answers)] # Create "unexpected" premises by masking out all nouns
+    premises_unexpected = [f"{question} {VQAResponse(1-answer.value).name}" for vqg_output in vqg_outputs.values() for question, answer in zip(vqg_output.questions, vqg_output.answers)]    
+    # premises_unexpected = [mask_verbs_and_nouns(question, nlp, nli_tokenizer.mask_token) + " " + nli_tokenizer.mask_token for output in vqg_outputs.values() for question, answer in zip(output.questions, output.answers)] # Create "unexpected" premises by masking out all nouns
 
     probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
     probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))

@@ -37,7 +37,6 @@ from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 # TODO: implement score scaling in PPOTrainer class
 # TODO: if we follow question answers with successvqa, we don't even really need an expected answer... can just use NLI model instead
 # TODO: play around with generation kwargs more?
-# TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens
 # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
 # TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?
 # TODO: calculate rewards for ref model and log them?
@@ -149,10 +148,9 @@ def main():
     # lm = lm.bfloat16().cuda()
     generation_kwargs = {
         "min_length": -1, # don't ignore the EOS token (see above)
-        # "top_k": 0.0, # no top-k sampling
-        # "top_p": 1.0, # no nucleus sampling
-        # "temperature": 1.0,
-        "do_sample": False, # yes, we want to sample
+        "top_k": 0.0,
+        "top_p": 1.0,
+        "do_sample": True, # yes, we want to sample
         "pad_token_id": tokenizer.eos_token_id, # most decoder models don't have a padding token - use EOS token instead
         "max_new_tokens": 40, # specify how many tokens you want to generate at most
     }    
