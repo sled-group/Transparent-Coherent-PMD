@@ -625,6 +625,244 @@ class PerTokenPPOTrainer(PPOTrainer):
             self.lr_scheduler.step()
 
         return stats
+    
+    # @PPODecorators.empty_device_cache()
+    # def step_query_only(
+    #     self,
+    #     queries: List[torch.LongTensor],
+    #     scores: torch.FloatTensor,
+    #     score_indices: List[torch.LongTensor],
+    #     response_masks: Optional[List[torch.LongTensor]] = None,
+    # ):
+    #     """
+    #     Run a PPO optimisation step given a list of queries, model responses, and rewards.
+
+    #     Args:
+    #         queries (List[`torch.LongTensor`]):
+    #             List of tensors containing the encoded queries of shape (`query_length`)
+    #         responses (List[`torch.LongTensor`]):
+    #             List of tensors containing the encoded responses of shape (`response_length`)
+    #         scores (List[`torch.FloatTensor`]):
+    #             Tensors containing the scores to apply to the sequence, shape (`batch_size`, `n`).
+    #         score_indices (`torch.FloatTensor`)):
+    #             Tensor of shape (`batch_size`, `n`) indicating at which response token indices to apply `scores` in rewards.
+    #         response_masks (List[`torch.FloatTensor`], *optional*)):
+    #             List of tensors containing masks of the response tokens.
+
+    #     Returns:
+    #         `dict[str, Any]`: A summary of the training statistics
+    #     """
+    #     if self.ref_model is None:
+    #         raise NotImplementedError("PerTokenPPOTrainer requires a ref_model to be passed, as when the base model is a PEFT model, the PPOTrainer class inadvertently updates the underlying model during training.")
+
+    #     bs = self.config.batch_size
+
+    #     queries = [tensor.to(self.current_device) for tensor in queries]
+    #     scores = scores.to(self.current_device)
+    #     masks = [tensor.to(self.current_device) for tensor in masks] if masks is not None else None
+
+    #     # squeeze scores if needed
+    #     for i, score in enumerate(scores):
+    #         if score.dim() > 1:
+    #             raise ValueError(f"Scores must be 1-dimensional - got {score.dim()} for {score}")
+    #         elif score.dim() == 1:
+    #             scores[i] = score.squeeze()
+
+    #     timing = dict()
+    #     t0 = time.time()
+
+    #     t = time.time()
+
+    #     input_ids = [q for q in queries]
+    #     model_inputs = self.data_collator(
+    #         [{"input_ids": ids, "attention_mask": torch.ones_like(ids)} for ids in input_ids]
+    #     ).to(self.current_device)
+    #     model_inputs.pop("labels", None)  # we don't want to compute LM losses
+
+    #     if self.is_distributed:
+    #         pad_first = self.tokenizer.padding_side == "left"
+
+    #         model_inputs["input_ids"] = self.accelerator.pad_across_processes(
+    #             model_inputs["input_ids"],
+    #             dim=1,
+    #             pad_index=self.tokenizer.pad_token_id,
+    #             pad_first=pad_first,
+    #         )
+    #         model_inputs["attention_mask"] = self.accelerator.pad_across_processes(
+    #             model_inputs["attention_mask"], dim=1, pad_index=0, pad_first=pad_first
+    #         )
+    #         if self.is_encoder_decoder:
+    #             model_inputs["decoder_input_ids"] = self.accelerator.pad_across_processes(
+    #                 model_inputs["decoder_input_ids"],
+    #                 dim=1,
+    #                 pad_index=self.tokenizer.pad_token_id,
+    #                 pad_first=pad_first,
+    #             )
+    #             model_inputs["decoder_attention_mask"] = self.accelerator.pad_across_processes(
+    #                 model_inputs["decoder_attention_mask"],
+    #                 dim=1,
+    #                 pad_index=0,
+    #                 pad_first=pad_first,
+    #             )
+    #     model_inputs_names = list(model_inputs.keys())
+
+    #     # Pad score indices to make sure rewards are aligned correctly
+    #     score_indices = [(torch.tensor([self.tokenizer.pad_token_id] * (model_inputs['input_ids'].shape[-1] - si.shape[-1])).to(si.device).long(), si) for si in score_indices]
+    #     score_indices = [torch.cat((pads, si), dim=0) if self.tokenizer.padding_side == "left" else torch.cat((si, pads), dim=0) for pads, si in score_indices]
+
+    #     full_kl_penalty = self.config.kl_penalty == "full"
+
+    #     with torch.no_grad():
+    #         all_logprobs, logits_or_none, values, masks = self.batched_forward_pass(
+    #             self.model,
+    #             queries,
+    #             responses,
+    #             model_inputs,
+    #             response_masks=response_masks,
+    #             return_logits=full_kl_penalty,
+    #         )
+    #         with self.optional_peft_ctx():
+    #             ref_logprobs, ref_logits_or_none, _, _ = self.batched_forward_pass(
+    #                 self.ref_model,
+    #                 queries,
+    #                 responses,
+    #                 model_inputs,
+    #                 return_logits=full_kl_penalty,
+    #             )
+
+    #     timing["time/ppo/forward_pass"] = time.time() - t
+
+    #     with torch.no_grad():
+    #         t = time.time()
+    #         if full_kl_penalty:
+    #             active_full_logprobs = logprobs_from_logits(logits_or_none, None, gather=False)
+    #             ref_full_logprobs = logprobs_from_logits(ref_logits_or_none, None, gather=False)
+
+    #             rewards, non_score_reward, kls = self.compute_rewards(
+    #                 scores, score_indices, active_full_logprobs, ref_full_logprobs, masks
+    #             )
+    #         else:
+    #             rewards, non_score_reward, kls = self.compute_rewards(scores, score_indices, all_logprobs, ref_logprobs, masks)
+    #         timing["time/ppo/compute_rewards"] = time.time() - t
+
+    #         t = time.time()
+    #         values, advantages, returns = self.compute_advantages(values, rewards, masks)
+    #         timing["time/ppo/compute_advantages"] = time.time() - t
+
+    #     # upcast to float32 to avoid dataset issues
+    #     batch_dict = {
+    #         "queries": queries,
+    #         "responses": responses,
+    #         "logprobs": all_logprobs.to(torch.float32),
+    #         "values": values.to(torch.float32),
+    #         "masks": masks,
+    #         "advantages": advantages,
+    #         "returns": returns,
+    #     }
+    #     batch_dict.update(model_inputs)
+
+    #     t = time.time()
+    #     all_stats = []
+    #     early_stop = False
+    #     for _ in range(self.config.ppo_epochs):
+    #         if early_stop:
+    #             break
+    #         b_inds = np.random.permutation(bs)
+    #         for backward_batch_start in range(0, bs, self.config.backward_batch_size):
+    #             backward_batch_end = backward_batch_start + self.config.backward_batch_size
+    #             backward_batch_inds = b_inds[backward_batch_start:backward_batch_end]
+
+    #             for mini_batch_start in range(0, self.config.backward_batch_size, self.config.mini_batch_size):
+    #                 mini_batch_end = mini_batch_start + self.config.mini_batch_size
+    #                 mini_batch_inds = backward_batch_inds[mini_batch_start:mini_batch_end]
+    #                 mini_batch_dict = {
+    #                     "logprobs": batch_dict["logprobs"][mini_batch_inds],
+    #                     "values": batch_dict["values"][mini_batch_inds],
+    #                     "masks": batch_dict["masks"][mini_batch_inds],
+    #                     # hacks: the queries and responses are ragged.
+    #                     "queries": [batch_dict["queries"][i] for i in mini_batch_inds],
+    #                     "responses": [batch_dict["responses"][i] for i in mini_batch_inds],
+    #                     "advantages": batch_dict["advantages"][mini_batch_inds],
+    #                     "returns": batch_dict["returns"][mini_batch_inds],
+    #                 }
+    #                 for k in model_inputs_names:
+    #                     mini_batch_dict[k] = batch_dict[k][mini_batch_inds]
+    #                 with self.accelerator.accumulate(self.model):
+    #                     model_inputs = {k: mini_batch_dict[k] for k in model_inputs_names}
+
+    #                     logprobs, logits, vpreds, _ = self.batched_forward_pass(
+    #                         self.model,
+    #                         mini_batch_dict["queries"],
+    #                         mini_batch_dict["responses"],
+    #                         model_inputs,
+    #                         return_logits=True,
+    #                     )
+    #                     train_stats = self.train_minibatch(
+    #                         mini_batch_dict["logprobs"],
+    #                         mini_batch_dict["values"],
+    #                         logprobs,
+    #                         logits,
+    #                         vpreds,
+    #                         mini_batch_dict["masks"],
+    #                         mini_batch_dict["advantages"],
+    #                         mini_batch_dict["returns"],
+    #                     )
+    #                     all_stats.append(train_stats)
+
+    #         # typically, early stopping is done at the epoch level
+    #         if self.config.early_stopping:
+    #             policykl = train_stats["policy/policykl"]
+    #             early_stop = self._early_stop(policykl)
+    #             if early_stop:
+    #                 break
+
+    #     timing["time/ppo/optimize_step"] = time.time() - t
+
+    #     t = time.time()
+    #     train_stats = stack_dicts(all_stats)
+
+    #     # reshape advantages/ratios such that they are not averaged.
+    #     train_stats["policy/advantages"] = torch.flatten(train_stats["policy/advantages"]).unsqueeze(0)
+    #     train_stats["policy/advantages"] = torch.nan_to_num(train_stats["policy/advantages"], WANDB_PADDING)
+    #     train_stats["policy/ratio"] = torch.flatten(train_stats["policy/ratio"]).unsqueeze(0)
+
+    #     stats = self.record_step_stats(
+    #         scores=scores,
+    #         logprobs=all_logprobs,
+    #         ref_logprobs=ref_logprobs,
+    #         non_score_reward=non_score_reward,
+    #         train_stats=train_stats,
+    #         kl_coef=self.kl_ctl.value,
+    #         masks=masks,
+    #         queries=queries,
+    #         responses=responses,
+    #         kls=kls,
+    #     )
+    #     # Gather/Reduce stats from all processes
+    #     if self.is_distributed:
+    #         stats = self.gather_stats(stats)
+    #     stats = stats_to_np(stats)
+    #     timing["time/ppo/calc_stats"] = time.time() - t
+    #     stats["ppo/learning_rate"] = self.optimizer.param_groups[0]["lr"]
+
+    #     # Update the KL control - multiply the batch_size by the number of processes
+    #     self.kl_ctl.update(
+    #         stats["objective/kl"],
+    #         self.config.batch_size * self.accelerator.num_processes,
+    #     )
+
+    #     # Log the total ppo time
+    #     timing["time/ppo/total"] = time.time() - t0
+    #     stats.update(timing)
+
+    #     # post-process stats for tensorboard and other loggers
+    #     if self.config.log_with != "wandb":
+    #         stats = convert_to_scalar(stats)
+
+    #     if self.lr_scheduler is not None:
+    #         self.lr_scheduler.step()
+
+    #     return stats
 
     def compute_rewards(
         self,
