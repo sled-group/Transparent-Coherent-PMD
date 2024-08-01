@@ -23,6 +23,7 @@ SUCCESSVQA_PROMPT_TEMPLATES = {
     Kosmos2ForConditionalGeneration: '<grounding> Q: The current goal is "{step}". Has the person successfully finished doing this? A: ',
     LlavaForConditionalGeneration: 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT: ',
     LlavaNextForConditionalGeneration: '[INST] <image>\nThe current goal is "{step}". Has the person successfully finished doing this? [/INST]',
+    'GPT': 'The current goal is "{step}". Has the person successfully finished doing this? (Yes/No)',
 }
 
 VQG2VQA_PROMPT_TEMPLATES = {
