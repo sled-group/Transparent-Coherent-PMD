@@ -31,6 +31,11 @@ CAPTION_VQA_PROMPT_TEMPLATES = {
     LlavaForConditionalGeneration: "USER: <image>\nWhat is happening in this photo? ASSISTANT: {caption} USER: {question} ASSISTANT: ",
 }
 
+VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES = {
+    LlavaForConditionalGeneration: "USER: <image>\n{question1} ASSISTANT: {answer1} USER: {question2} ASSISTANT: {answer2} USER: " + f"{SUCCESSVQA_QUESTION_TEMPLATE} ASSISTANT: "
+}
+
+
 class VQAResponse(int, Enum):
     No = 0
     Yes = 1

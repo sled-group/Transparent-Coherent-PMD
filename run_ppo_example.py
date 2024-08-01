@@ -29,9 +29,10 @@ from datasets import load_dataset
 from peft import LoraConfig
 from pprint import pprint
 from tqdm import tqdm
-from transformers import AutoTokenizer, HfArgumentParser, pipeline
+from transformers import AutoTokenizer, HfArgumentParser, pipeline, BitsAndBytesConfig
 
-from trl import AutoModelForCausalLMWithValueHead, AutoModelForSeq2SeqLMWithValueHead, PPOConfig, PPOTrainer, set_seed
+from trl import AutoModelForCausalLMWithValueHead, AutoModelForSeq2SeqLMWithValueHead, PPOConfig, set_seed
+from travel.model.trl_ppo_trainer import PPOTrainer
 from trl.core import LengthSampler
 from trl.import_utils import is_npu_available, is_xpu_available
 
@@ -46,6 +47,7 @@ class ScriptArguments:
 
     # LoraConfig
     use_peft: bool = field(default=False, metadata={"help": "whether to use peft"})
+    use_bnb: bool = field(default=False, metadata={"help": "whether to use BitsAndBytes for 4bit quantization"})
     lora_alpha: Optional[float] = field(default=16, metadata={"help": "the lora alpha parameter"})
     lora_r: Optional[int] = field(default=16, metadata={"help": "the lora r parameter"})
 
@@ -122,11 +124,18 @@ else:
     # Copy the model to each device
     device_map = {"": Accelerator().local_process_index}
 
+if args.use_bnb:
+    bnb_config = BitsAndBytesConfig(
+        load_in_8bit=True,
+    )
+else:
+    bnb_config = None
 model = trl_model_class.from_pretrained(
     ppo_config.model_name,
     trust_remote_code=args.trust_remote_code,
     device_map=device_map,
     peft_config=peft_config,
+    quantization_config=bnb_config,
 )
 
 
@@ -169,9 +178,7 @@ if sentiment_pipe.model.config.pad_token_id is None:
 # the `generate` function of the trained model.
 generation_kwargs = {
     "min_length": -1,
-    "top_k": 0.0,
-    "top_p": 1.0,
-    "do_sample": True,
+    "do_sample": False,
     "pad_token_id": tokenizer.eos_token_id,
     "max_new_tokens": 32,
 }
@@ -185,8 +192,10 @@ for _epoch, batch in tqdm(enumerate(ppo_trainer.dataloader)):
     )
     batch["response"] = tokenizer.batch_decode(response_tensors)
     batch["ref_response"] = tokenizer.batch_decode(ref_response_tensors)
-    pprint(batch["response"][0])
-    pprint(batch["ref_response"][0])
+
+    print("\n\nPrompt:", batch["query"][0])
+    print("Response:", batch["response"][0])
+    print("Ref response:", batch["ref_response"][0])
 
     # Compute sentiment score
     texts = [q + r for q, r in zip(batch["query"], batch["response"])]

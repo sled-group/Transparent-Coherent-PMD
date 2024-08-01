@@ -1,7 +1,13 @@
 import os
 import yaml
 
-with open('config.yml', 'r') as file:
+# Can configure an alternate config path in os.environ if needed
+if "TRAVEl_config_path" in os.environ:
+    CONFIG_PATH = os.environ["TRAVEl_config_path"]
+else:
+    CONFIG_PATH = "config.yml"
+
+with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 
 DATA_CACHE_DIR = config["cache"]["data_cache_dir"] # Directory to cache model outputs and other temporary data

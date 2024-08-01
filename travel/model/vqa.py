@@ -209,6 +209,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
     response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
     vqa_outputs = []
+    all_captions_collated = []
     for chunk_idx, dataset_chunk in enumerate(tqdm(eval_dataset.get_batches(IMAGES_CHUNK_SIZE,
                                                                        n_workers=n_workers, 
                                                                        worker_index=worker_index), 
@@ -247,12 +248,14 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
         if visual_filter_mode is not None and visual_filter is not None:
             if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
                 frames = visual_filter(nlp, frames, questions)
+            elif visual_filter_mode == VisualFilterTypes.Visual_Contrastive:
+                frames = visual_filter(frames)
             elif visual_filter_mode in [VisualFilterTypes.Spatial, VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
                 spatial_cache_fname = os.path.join(worker_cache_dir, f"spatial_filter_outputs_chunk{chunk_idx}.pkl")
                 if os.path.exists(spatial_cache_fname):
-                    frames, new_questions, visible_target_objects = pickle.load(open(spatial_cache_fname, "rb"))
+                    frames, new_questions = pickle.load(open(spatial_cache_fname, "rb"))
                 else:
-                    frames, new_questions, visible_target_objects = visual_filter(nlp, frames, questions)
+                    frames, new_questions = visual_filter(nlp, frames, questions, return_visible_target_objects=False)
                     pickle.dump((frames, new_questions, visible_target_objects), open(spatial_cache_fname, "wb"))
                 
                 # Replace rephrased questions into prompts, but save original questions for bookkeeping
@@ -287,13 +290,13 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
+        if visual_filter_mode in [VisualFilterTypes.Contrastive_Region, VisualFilterTypes.Visual_Contrastive]:
             original_logits = run_vqa(vlm,
                                       vlm_processor,
                                       prompts,
                                       original_frames,
                                       batch_size=vqa_batch_size,
-                                      cache_path=os.path.join(worker_cache_dir, f"chunk{chunk_idx}_crg_original.pt"))
+                                      cache_path=os.path.join(worker_cache_dir, f"chunk{chunk_idx}_original.pt"))
         else:
             original_logits = None
 
@@ -309,8 +312,14 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             outputs_by_id[eid].append((output_index, frame, question, prompt, answer, visible_target_objects[output_index] if visible_target_objects is not None else None))
 
         # Gather up VQA outputs in the correct structure for a MistakeDetectionEvaluator
+        if caption_first:
+            caption_idx = 0
         for example in tqdm(dataset_chunk, desc=f"gathering VQA outputs ({vlm.device})"):
             
+            if caption_first:
+                all_captions_collated.append(captions[caption_idx:caption_idx + len(example.frames)])
+                caption_idx += len(example.frames)
+
             step_id = example.procedure_id
             example_vqa_outputs = []
 
@@ -319,6 +328,16 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                 frame_vqa_outputs = []
                 for _ in range(n_prompts_per_frame):
                     output_index, frame, question, prompt, answer, target_object_counts = outputs_by_id[example.example_id][parallel_idx]
+
+                    if original_logits is not None:
+                        # If we used a visual filter that involves combining logits from multiple runs, combine them
+                        if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
+                            combined_logits = original_logits[output_index] - logits[output_index]
+                        elif visual_filter_mode == VisualFilterTypes.Visual_Contrastive:
+                            combined_logits = (1 + visual_filter.alpha) * original_logits[output_index] - visual_filter.alpha * logits[output_index]
+                    else:
+                        # Otherwise just use raw VQA logits
+                        combined_logits = logits[output_index]
 
                     frame_vqa_outputs.append(
                         VQAOutputs(
@@ -329,7 +348,7 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
                             prompt,
                             answer,
                             response_token_ids,
-                            original_logits[output_index] - logits[output_index] if original_logits is not None else logits[output_index],        
+                            combined_logits,
                             question=question, # Save original question for NLI mistake detection evaluator
                             target_object_counts=target_object_counts # Save count of target objects if we have it
                         )      
@@ -349,7 +368,10 @@ def run_vqa_for_mistake_detection(eval_dataset: MistakeDetectionDataset,
             
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-    return vqa_outputs
+    if not caption_first:
+        return vqa_outputs
+    else:
+        return vqa_outputs, all_captions_collated
 
 def save_vqa_outputs(vqa_outputs: list[VQAOutputs], path: str, partition: str):
     """

@@ -10,7 +10,7 @@ from pympler.tracker import SummaryTracker
 import shutil
 from tqdm import tqdm
 
-from travel.constants import IMAGES_CHUNK_SIZE
+from travel.constants import IMAGES_CHUNK_SIZE, CONFIG_PATH
 from travel.data.utils import split_list_into_partitions
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAOutputs
@@ -169,7 +169,7 @@ if worker_index == 0:
     # Combine all the generated data
 
 
-    shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
+    shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
     json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
 
     # Delete extra cached logits (each of which take up about 250MB)

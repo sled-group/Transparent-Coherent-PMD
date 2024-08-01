@@ -102,13 +102,10 @@ class MistakeDetectionExample:
         """
         Cuts off example's frames and frame times to the last `proportion`% of frames based on their times.
         """
-        original_length = len(self.frames)
-        min_time = min(self.frame_times)
-        max_time = max(self.frame_times)
+        # if proportion < 1.0: # TODO: add this back - it avoids a floating-point issue that causes a frame to sometimes get removed even with proportion 1.0
         cutoff_time = get_cutoff_time_by_proportion(self.frame_times, proportion)
         self.frames = [f for f, t in zip(self.frames, self.frame_times) if t >= cutoff_time]
         self.frame_times = [t for t in self.frame_times if t >= cutoff_time]
-        new_length = len(self.frames)
         # print(f"{self.example_id}: cut off from {original_length} to {new_length} frames (proportion={proportion}, cutoff time={cutoff_time}, time range={min_time}-{max_time})")
 
 class MistakeDetectionDataset:
@@ -254,5 +251,3 @@ class MistakeDetectionDataset:
             if example.procedure_id not in already_seen:
                 yield (example.procedure_id, example.procedure_description)
                 already_seen.append(example.procedure_id) 
-
-NLI_HYPOTHESIS_COMPLETION_TEMPLATE = 'The procedure "{procedure}" has been successfully completed.'

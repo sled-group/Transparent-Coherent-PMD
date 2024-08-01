@@ -466,7 +466,7 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
     examples += [generate_vqg_prompt(procedure_description)]
     return "\n\n".join(examples)
 
-def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_description: str) -> VQGOutputs:
+def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_description: str, expected_n_questions: int=2) -> VQGOutputs:
     """
     Converts generated questions and answers into a VQGOutputs object.
 
@@ -475,7 +475,7 @@ def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_desc
     :param procedure_description: Procedure description in text (e.g., recipe or instruction step text).
     :return: VQGOutputs parsed from generated language.
     """
-    questions_answers = [(q_a.split("?")[0].strip() + "?", q_a.split("?")[1].strip()) for q_a in generated_language.split("\n")[0:2]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
+    questions_answers = [(q_a.split("?")[0].strip() + "?", q_a.split("?")[1].strip()) for q_a in generated_language.split("\n")[0:expected_n_questions]] # NOTE: only extract k=2 questions and answers; can adjust this as needed later
     questions = [q[2:].strip() for q, _ in questions_answers]          
     answers = [a for _, a in questions_answers]
     output = VQGOutputs(procedure_id=procedure_id,

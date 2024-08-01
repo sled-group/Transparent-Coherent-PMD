@@ -4,6 +4,7 @@ init_travel()
 
 from accelerate import Accelerator
 import argparse
+from collections import Counter, defaultdict
 from datasets import Dataset
 import numpy as np
 import os
@@ -11,35 +12,38 @@ from peft import LoraConfig
 import pickle
 from PIL import Image
 from pprint import pprint
+import random
 import torch
 import torch.distributed as dist
 from tqdm import tqdm
-from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, AutoModelForCausalLM
 from trl import PPOConfig, AutoModelForCausalLMWithValueHead
 import wandb
 
 from travel.constants import HF_TOKEN, RESULTS_DIR, DATA_CACHE_DIR, RANDOM_SEED
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
-from travel.data.mistake_detection import NLI_HYPOTHESIS_COMPLETION_TEMPLATE, MistakeDetectionTasks
+from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse
 from travel.data.vqg import generate_vqg_prompt_icl, VQG_DEMONSTRATIONS, VQGOutputs
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample
 from travel.model.grounding import VisualFilterTypes
 from travel.model.mistake_detection import NLI_MODEL_PATH
+from travel.model.nli import run_nli, NLI_HYPOTHESIS_TEMPLATE
 from travel.model.ppo_trainer import PerTokenPPOTrainer as PPOTrainer
 from travel.model.vqg import parse_vqg_outputs
 from travel.model.vqg_learning import FrameVQAMistakeDetectionScorer
 
-def run_nli(nli_tokenizer, nli_model, premise_hypothesis_pairs):
-    with torch.no_grad():
-        x = nli_tokenizer.batch_encode_plus(premise_hypothesis_pairs, 
-                                                return_tensors='pt',
-                                                padding="longest",
-                                                truncation='only_first')
-        logits = nli_model(**x.to(nli_model.device))[0]
-        logits = logits.cpu()
-        logits = logits[:,[0,2]] # Take logits for contradiction and entailment only
-    return logits.softmax(dim=1)
+
+# TODO: implement score scaling in PPOTrainer class
+# TODO: if we follow question answers with successvqa, we don't even really need an expected answer... can just use NLI model instead
+# TODO: play around with generation kwargs more?
+# TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
+# TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?
+# TODO: calculate rewards for ref model and log them?
+# TODO: add another score to check whether generated questions mention objects not in procedure description?
+# TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)? - currently, LM seems to learn that we can maximize effectiveness by generating the same question twice with yes and no as answers
+# TODO: can we also optimize VLM in this training loop?
+# TODO: (later) bring in EPIC KITCHENS to do curriculum learning - start with easy verb-noun pair examples, then move to more free-form narrated actions in Ego4D... then move to recipes?
 
 def pad_and_stack(tensors, pad_value):
     # Determine the maximum length of the tensors
@@ -117,12 +121,21 @@ def main():
                             # lora_dropout=0.1,               # dropout regularization on LoRA weights
                             bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
     device_map = {"": Accelerator().local_process_index}
+    torch.cuda.set_device(0)
     lm = AutoModelForCausalLMWithValueHead.from_pretrained(args.lm_name, 
                                                            device_map=device_map,
                                                            peft_config=peft_config, 
                                                            quantization_config=bnb_config, 
                                                            trust_remote_code=True,
                                                            token=HF_TOKEN)
+    
+    # Ref model is just a copy of the same LM
+    ref_lm = AutoModelForCausalLM.from_pretrained(args.lm_name,
+                                                  quantization_config=bnb_config,
+                                                  trust_remote_code=True,
+                                                  token=HF_TOKEN)
+    ref_lm.eval()
+
     # pprint(lm.__dict__)
     # lm.pretrained_model = prepare_model_for_kbit_training(lm.pretrained_model)
     # generation_kwargs = {
@@ -135,14 +148,12 @@ def main():
     # lm = lm.bfloat16().cuda()
     generation_kwargs = {
         "min_length": -1, # don't ignore the EOS token (see above)
-        # "top_k": 0.0, # no top-k sampling
-        # "top_p": 1.0, # no nucleus sampling
-        # "temperature": 1.0,
-        "do_sample": False, # yes, we want to sample
+        "top_k": 0.0,
+        "top_p": 1.0,
+        "do_sample": True, # yes, we want to sample
         "pad_token_id": tokenizer.eos_token_id, # most decoder models don't have a padding token - use EOS token instead
         "max_new_tokens": 40, # specify how many tokens you want to generate at most
     }    
-    # TODO: play around with this more?
 
     # Set up online sources of feedback: NLI model and VLM (possibly with visual filter)
 
@@ -157,6 +168,12 @@ def main():
                                             visual_filter_strength=args.visual_filter_strength,
                                             vlm_device=0,
                                             visual_filter_device=0 if args.visual_filter_mode is not None else None)
+
+    print("\nMODULE DEVICES:")
+    print("lm:", lm.pretrained_model.device)
+    print("ref_lm:", ref_lm.device)
+    print("nli_model:", nli_model.device)
+    print("vlm:", scorer.vlm.device)
 
     # Set up output directory, training args, and wandb
     if args.resume_dir is None:
@@ -200,7 +217,7 @@ def main():
                                            mismatch_augmentation=True,
                                            multi_frame=False,
                                            debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-    dataset_path = os.path.join(DATA_CACHE_DIR, "ppo_training_dataset")
+    dataset_path = os.path.join(DATA_CACHE_DIR, f"ppo_training_dataset_icl{args.n_demonstrations}")
     if args.debug:
         dataset_path += f"_debug{args.debug_n_examples}"
     if not os.path.exists(dataset_path):
@@ -208,6 +225,12 @@ def main():
         for example_dir in tqdm(dataset.example_dirs, desc="Preparing data"):
             example = dataset.load_example_from_file(example_dir)
             assert len(example.frames) == 1, "VQG PPO training is only supported for single-frame mistake detection examples."
+
+            # Omit MisalignSRL_V_ARG1 examples to ensure training data only has clips that are at least somewhat related to procedure
+            if example.mistake_type is not None and "V_ARG1" in example.mistake_type:
+                continue
+
+            structured_verb, structured_noun = example.verb_noun_pair
             prompt = generate_vqg_prompt_icl(example.procedure_description, args.n_demonstrations)
             ppo_dataset.append({
                 "example_id": example.example_id,
@@ -215,6 +238,8 @@ def main():
                 "procedure_id": example.procedure_id,
                 "procedure_description": example.procedure_description,
                 "prompt": prompt,
+                "structured_verb": structured_verb,
+                "structured_noun": structured_noun,
             })
         ppo_dataset = Dataset.from_list(ppo_dataset)
         def tokenize(sample):
@@ -225,6 +250,26 @@ def main():
         ppo_dataset.save_to_disk(dataset_path=dataset_path) 
     else:
         ppo_dataset = Dataset.load_from_disk(dataset_path=dataset_path)
+
+    # Get distribution of verbs and nouns
+    verb_dist = Counter()
+    noun_dist = Counter()
+    nouns_by_verb = defaultdict(Counter)
+    for example in tqdm(ppo_dataset, desc="counting verbs and nouns"):
+        verb_dist[example['structured_verb']] += 1
+        noun_dist[example['structured_noun']] += 1
+        nouns_by_verb[example['structured_verb']][example['structured_noun']] += 1
+
+    # Balance mistake/success examples
+    positive_examples = [example for example in ppo_dataset if "pos" in example['example_id']]
+    negative_examples = [example for example in ppo_dataset if "pos" not in example['example_id']]
+    if len(positive_examples) < len(negative_examples):
+        print(f"Upsampling {len(negative_examples) - len(positive_examples)} more positive examples.")
+        ppo_dataset += random.sample(positive_examples, len(negative_examples) - len(positive_examples))
+    elif len(positive_examples) > len(negative_examples):
+        print(f"Upsampling {len(positive_examples) - len(negative_examples)} more negative examples.")
+        ppo_dataset += random.sample(negative_examples, len(positive_examples) - len(negative_examples))
+
     print(f"train data partition: {len(ppo_dataset)} examples")
 
     print(f"({global_rank}) {len(dataset)} Ego4D mistake detection examples loaded from train partition")
@@ -232,13 +277,13 @@ def main():
     # Set up PPO trainer
     print(f"({global_rank}) Beginning PPO training...")
     def collator(data):
-        return {key: [d[key] for d in data] for key in data[0]}    
+        return {key: [d[key] for d in data] for key in data[0]}
     ppo_config = PPOConfig(
         model_name=args.lm_name,
         learning_rate=args.learning_rate,
         batch_size=args.train_batch_size,
-        mini_batch_size=args.train_batch_size // 2,
-        gradient_accumulation_steps=2,
+        mini_batch_size=args.train_batch_size,
+        gradient_accumulation_steps=1,
         remove_unused_columns=False,
         optimize_cuda_cache=True,
         early_stopping=True,
@@ -247,9 +292,9 @@ def main():
     )
     ppo_trainer = PPOTrainer(
         model=lm,
-        ref_model=None,
+        ref_model=ref_lm,
         config=ppo_config,
-        dataset=ppo_dataset,
+        # dataset=ppo_dataset,
         tokenizer=tokenizer,
         data_collator=collator
     )
@@ -257,7 +302,21 @@ def main():
         raise ValueError("PEFT model did not successfully get loaded by PPO trainer!")
 
     newline_token_id = tokenizer.encode("\n", add_special_tokens=False)[1] # this should be 13 for LLaMA 2
+    included_verbs = []
+    n_included_verbs = 0
     for epoch in tqdm(range(args.n_epochs), f"({global_rank}) epoch"):
+        # In each epoch, introduce more verbs into the training dataset
+        added_examples = 0
+        n_included_verbs_before = n_included_verbs
+        while added_examples < 50:
+            n_included_verbs += 1
+            include_verbs = verb_dist.most_common()[n_included_verbs_before:n_included_verbs]
+            included_verbs += [v for v, _ in include_verbs]
+            added_examples += sum([count for _, count in include_verbs])
+        this_ppo_dataset = Dataset.from_list([example for example in ppo_dataset if example['structured_verb'] in included_verbs])
+        this_ppo_dataset.set_format(type="torch")
+        ppo_trainer.dataloader = ppo_trainer.prepare_dataloader(this_ppo_dataset, collator)
+
         for batch_idx, batch in enumerate(tqdm(ppo_trainer.dataloader, desc=f"({global_rank}) batch")):
             # if batch_idx == 0:
             #     keep_batch = batch
@@ -310,30 +369,44 @@ def main():
             bad_idxs = []
             for text_idx, text in enumerate(response_texts):
                 try:
+                    # First try to parse 2 questions
                     vqg_output = parse_vqg_outputs(
                         generated_language=text,
                         procedure_id=batch['procedure_id'][text_idx],
                         procedure_description=batch['procedure_description'][text_idx],
+                        expected_n_questions=2
                     )    
                 except:
-                    # LM generated something we couldn't parse; make a placeholder
-                    bad_idxs.append(text_idx)
-                    vqg_output = VQGOutputs(
-                        procedure_id = batch['procedure_id'][text_idx],
-                        procedure_description=batch['procedure_description'][text_idx],
-                        questions=["Is it?", "Is it?"],
-                        answers_str=["Yes", "Yes"],
-                    )
-                    print("Warning: could not parse generated questions!")
+                    try:
+                        # LM generated something we couldn't parse; try to only get 1 question
+                        vqg_output = parse_vqg_outputs(
+                            generated_language=text,
+                            procedure_id=batch['procedure_id'][text_idx],
+                            procedure_description=batch['procedure_description'][text_idx],
+                            expected_n_questions=1
+                        )
+                        vqg_output.questions += ["Is it?"]
+                        vqg_output.answers += [VQAResponse.Yes]
+                        bad_idxs.append((text_idx, 1))
+                        print("Warning: could only parse one generated question!")
+                    except:
+                        # If all else fails, just create a placeholder
+                        vqg_output = VQGOutputs(
+                            procedure_id = batch['procedure_id'][text_idx],
+                            procedure_description=batch['procedure_description'][text_idx],
+                            questions=["Is it?", "Is it?"],
+                            answers_str=["Yes", "Yes"],
+                        )
+                        bad_idxs.append((text_idx, 0))
+                        print("Warning: could not parse any generated questions!")
                 vqg_outputs.append(vqg_output)
-            bad_idxs = torch.tensor(bad_idxs)
 
             # Calculate rewards using NLI model and VLM
             premise_questions_expected = [[f"{question} {answer.name}" for question, answer in zip(vqg_output.questions, vqg_output.answers)] for vqg_output in vqg_outputs]
             premise_questions_not_expected = [[f"{question} {VQAResponse(1 - answer.value).name}" for question, answer in zip(vqg_output.questions, vqg_output.answers)] for vqg_output in vqg_outputs]
             premise_questions_no = [[f"{question} No" for question in vqg_output.questions] for vqg_output in vqg_outputs]
             premise_questions_yes = [[f"{question} Yes" for question in vqg_output.questions] for vqg_output in vqg_outputs]
-            hypothesis_completion = [NLI_HYPOTHESIS_COMPLETION_TEMPLATE.format(procedure=procedure) for procedure in batch['procedure_description']]
+            hypothesis_completion = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in batch['procedure_description']]
 
             # NLI score 1: relevance for each question 
             # (calculated by how much entailment probability of action success changes based on the answer to each question)
@@ -357,6 +430,9 @@ def main():
             informativeness = (probs_expected[:, 1] + probs_not_expected[:, 0]) / 2.0 # TODO: think about whether there's a better way to calculate besides averaging
             informativeness = informativeness.view(this_batch_size, 2).cpu().float()
 
+            # Multiply relevance and informativeness to define combined "consistency" of generated questions
+            consistency = relevance * informativeness
+
             # VLM score: mistake detection effectiveness of question sets
             # (questions should together successfully classify mistake or success in frame)
             frame_vqa_examples = [
@@ -378,48 +454,60 @@ def main():
                 effectiveness = torch.tensor(scorer(frame_vqa_examples, batch_size=this_batch_size * 2, return_scores_only=True)).view(this_batch_size).float()
             effectiveness = effectiveness.repeat(2, 1).permute(1, 0) # Score from VLM is shared, so assign same value to each question
 
-            # TODO: balance positive and negative mistake detection examples
-            # TODO: double check calculation of reward - seems like we're not penalizing model for making malformed outputs
-            # TODO: assign rewards for every token in each question? Also assign penalty for bad responses for all tokens
-            # TODO: assign effectiveness reward per question to help dig out of poorly prompt engineered questions?
-            # TODO: should we have LM also generate "where to look" for mistake to bring object detector into the loop?
-            # TODO: ref model generation is always generating the same thing as the main model; need to fix this (forward pass seems fine though)
-            # TODO: calculate rewards for ref model and log them?
-            # TODO: add another score to check whether generated questions mention objects not in procedure description?
-            # TODO: add a third NLI score for whether questions contradict each other (or are redundant/duplicate)?
+            # Verifiability is just effectiveness of questions
+            verifiability = effectiveness
 
-            assert relevance.shape == informativeness.shape == effectiveness.shape, f"Relevance, informativeness, and effectiveness shapes should be equal: {relevance.shape}, {informativeness.shape}, {effectiveness.shape}"
-            reward = (relevance + informativeness + effectiveness) / 3.0
+            assert consistency.shape == verifiability.shape, f"Consistency and verifiability shapes should be equal: {consistency.shape}, {effectiveness.shape}"
+            reward = 0.5 * consistency + 0.5 * verifiability # equal weighting
 
-            # Find the indices to apply rewards at (at the first 2 newlines, i.e., where each question is done being generated)
-            reward_indices = [(response_tensor == newline_token_id).nonzero()[:2].squeeze(1).cpu() + qt_length for qt_length, response_tensor in zip(query_lengths, response_tensors)]
-            reward_indices = torch.stack([torch.tensor([-1, -1]) if ri.shape[0] != 2 else ri for ri in reward_indices]).long() # TODO: make sure this is correct
-            if bad_idxs.shape[0] > 0:
-                reward[bad_idxs] == -1.0
-            assert reward_indices.shape == (this_batch_size, 2)
+            # Find indices to apply reward
+
+            # Find where newlines are to identify token spans for each question
+            
+            reward_indices = [(response_tensor == newline_token_id).long().cpu() for response_tensor in response_tensors]
+            for i in range(len(reward_indices)):
+                reward_indices[i][reward_indices[i] == 1] = torch.cumsum((reward_indices[i] == 1).int(), dim=0)[reward_indices[i] == 1]
+                reward_indices[i][reward_indices[i] == 0] = -1
+                reward_indices[i][reward_indices[i] != -1] -= 1
+            # reward_indices = [torch.cat((torch.zeros((1)).to(reward_idx.device), reward_idx[:-1]), dim=0).long() for reward_idx in reward_indices]
+
+            # If response tensor contains more text beyond 2 questions, remove it
+            response_tensors = [response_tensor[reward_idx <= 1] for response_tensor, reward_idx in zip(response_tensors, reward_indices)]
+            reward_indices = [reward_idx[reward_idx <= 1] for reward_idx in reward_indices]
+
+            # Pad reward indices with -1 to account for query tensors
+            reward_indices = [torch.cat((torch.tensor([-1] * qt_length).to(reward_idx.device), reward_idx)) for reward_idx, qt_length in zip(reward_indices, query_lengths)]
+
+            # Break reward down into a list and set a single -1 reward for all generated tokens when questions could not be parsed
+            for bad_idx, question_count in bad_idxs:
+                if question_count == 0:
+                    reward[bad_idx, :] = -1.0
+                elif question_count == 1:
+                    reward[bad_idx, 1] = -1.0
 
             if args.verbose:
                 pprint("Rewards:")
                 print("relevance =", relevance[0])
                 print("informativeness =", informativeness[0])
+                print("consistency =", consistency[0])
                 print("effectiveness =", effectiveness[0])
-                print("combined =", reward[0, :])
-                print("reward indices =", reward_indices[0, :])
-                reward_indices_for_response = [reward_indices[i] - query_lengths[i] for i in range(this_batch_size)]
-                tokens_at_reward_indices = [response_tensors[i][reward_indices_for_response[i].long()] if torch.min(reward_indices_for_response[i]) > 0 else torch.tensor([-1, -1]) for i in range(this_batch_size)]
+                print("verifiability =", verifiability[0])
+                print("combined =", reward[0][:])
+                print("reward indices =", reward_indices[0])
+                tokens_at_reward_indices = [[torch.cat((query_tensors[i].cpu(), response_tensors[i].cpu()), dim=0)[reward_indices[i] == j] for j in range(2)] for i in range(this_batch_size)]
                 print("tokens at reward indices =", tokens_at_reward_indices[0])
                 
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, reward, reward_indices)
-            # reward = [torch.mean(reward[i, :]) for i in range(reward.shape[0])]
-            # stats = ppo_trainer.step(query_tensors, response_tensors, reward)
             ppo_trainer.log_stats(stats, batch, reward, columns_to_log=("prompt", "response"))
             if global_rank == 0:
                 try:
                     wandb.log(stats | {"ppo/epoch": epoch, 
                                             "rewards/relevance": np.mean(relevance.cpu().numpy()),
                                             "rewards/informativeness": np.mean(informativeness.cpu().numpy()),
+                                            "rewards/consistency": np.mean(consistency.cpu().numpy()),
                                             "rewards/effectiveness": np.mean(effectiveness.cpu().numpy()),
+                                            "rewards/verifiability": np.mean(verifiability.cpu().numpy()),
                                             "rewards/combined": np.mean(torch.tensor(reward).cpu().numpy())})
                 except Exception as e:
                     print("Warning: failed to log to wandb!")
