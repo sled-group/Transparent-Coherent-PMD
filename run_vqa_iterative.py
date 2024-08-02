@@ -143,7 +143,7 @@ generation_kwargs = {
     "constraints": question_generation_constraints,
     "begin_suppress_tokens": begin_suppress_tokens,    
     "pad_token_id": tokenizer.eos_token_id,
-} # TODO: only 2 question candidates seems small, but if we ask for too many and beam search can't return them, we get an error... can we fix this? maybe increase num_beams?
+}
 
 # NLI model to score consistency and verifiability
 nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
@@ -218,7 +218,7 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
                                                                         vlm_processor.tokenizer,
                                                                         [prompt.replace("<image>\n", "") for prompt in prompts_q],
                                                                         max_new_tokens=20,
-                                                                        batch_size=args.generation_batch_size // (2 ** question_idx),
+                                                                        batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                                         generation_kwargs=generation_kwargs)
                             
         new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]
@@ -288,7 +288,7 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
 
         # Predict an answer (yes/no)
         prompts_a = [prompt + f'{question} ASSISTANT: A (yes/no): ' for prompt, question in zip(prompts_q, new_questions)]
-        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=args.vqa_batch_size // (2 ** question_idx))
+        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
         new_answers = [
             VQAOutputs(
                 task_name=MistakeDetectionTasks(args.task),
