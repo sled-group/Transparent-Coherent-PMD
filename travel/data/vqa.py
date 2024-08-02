@@ -17,22 +17,24 @@ COMPLETION_PROMPT_TEMPLATES = {
     LlavaNextForConditionalGeneration: '[INST] <image>\nWhat is shown in this image? [/INST] This is a photo of',
 }
 
-SUCCESSVQA_PROMPT_TEMPLATES = {
-    Blip2ForConditionalGeneration: 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
-    InstructBlipForConditionalGeneration: 'Question: The current goal is "{step}". Has the person successfully finished doing this? Answer:',
-    Kosmos2ForConditionalGeneration: '<grounding> Q: The current goal is "{step}". Has the person successfully finished doing this? A: ',
-    LlavaForConditionalGeneration: 'USER: <image>\nThe current goal is "{step}". Has the person successfully finished doing this? ASSISTANT: ',
-    LlavaNextForConditionalGeneration: '[INST] <image>\nThe current goal is "{step}". Has the person successfully finished doing this? [/INST]',
-    'GPT': 'The current goal is "{step}". Has the person successfully finished doing this? (Yes/No)',
-}
+SUCCESSVQA_QUESTION_TEMPLATE = 'The current goal is "{step}". Has the person successfully finished doing this?'
 
-VQG2VQA_PROMPT_TEMPLATES = {
+VQA_PROMPT_TEMPLATES = {
     Blip2ForConditionalGeneration: "Question: {question} Answer:",
-    InstructBlipForConditionalGeneration: "Question: {question}? Answer: ",
+    InstructBlipForConditionalGeneration: "Question: {question} Answer: ",
     Kosmos2ForConditionalGeneration: "<grounding> Question: {question} Answer: ",
     LlavaForConditionalGeneration: "USER: <image>\n{question} ASSISTANT: ",
     LlavaNextForConditionalGeneration: "[INST] <image>\n{question} [/INST]",
 }
+
+CAPTION_VQA_PROMPT_TEMPLATES = {
+    LlavaForConditionalGeneration: "USER: <image>\nWhat is happening in this photo? ASSISTANT: {caption} USER: {question} ASSISTANT: ",
+}
+
+VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES = {
+    LlavaForConditionalGeneration: "USER: <image>\n{question1} ASSISTANT: {answer1} USER: {question2} ASSISTANT: {answer2} USER: " + f"{SUCCESSVQA_QUESTION_TEMPLATE} ASSISTANT: "
+}
+
 
 class VQAResponse(int, Enum):
     No = 0

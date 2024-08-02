@@ -6,10 +6,11 @@ from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConf
 from typing import Optional, Union
 
 from travel.constants import DATA_CACHE_DIR
-from travel.data.vqa import VQAOutputs, VQAResponse, VQG2VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
+from travel.data.vqa import VQAOutputs, VQAResponse, VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
 from travel.data.vqg_learning import FrameVQAMistakeDetectionExample, VQGTrainingExample
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, ImageMaskTypes
+from travel.model.metrics import effectiveness
 from travel.model.vqa import run_vqa
 
 # NOTE: we may need to employ multiple scorers (for several VLM types)
@@ -59,6 +60,8 @@ class FrameVQAMistakeDetectionScorer:
         elif visual_filter_type == VisualFilterTypes.Contrastive_Region:
             self.visual_filter = ContrastiveRegionFilter(mask_strength=visual_filter_strength, device=visual_filter_device)
         else:
+            if visual_filter_type is not None:
+                print(f"Warning: {visual_filter_type} visual filter not supported in VQA scoring!")
             self.visual_filter = None
         self.visual_filter_type = visual_filter_type
         self.nlp = spacy.load('en_core_web_lg')
@@ -82,17 +85,8 @@ class FrameVQAMistakeDetectionScorer:
             
             # VLM probabilities that there's a mistake for each question
             mistake_probs = [1.0 - output.answer_probs[output.expected_answer] for output in example_vqa_outputs]
-
-            # It only takes one question to indicate a mistake, so use the maximum mistake probability to score this questions set
-            max_mistake_prob = max(mistake_probs)
-
-            # For mistake examples, we want the max mistake probability to be close to 1.0
-            if mistake:
-                scores.append(max_mistake_prob)
-
-            # For non-mistake examples, we want the max mistake probability to be 0.0
-            else:
-                scores.append(1.0 - max_mistake_prob)
+            score = effectiveness(mistake, mistake_probs)
+            scores.append(score)
 
         return answer_probs, scores
 
@@ -101,7 +95,8 @@ class FrameVQAMistakeDetectionScorer:
                  return_vqa_outputs: bool=False,
                  batch_size: int=1,
                  cache_path: Optional[str]=None,
-                 memory_tracker: Optional[SummaryTracker]=None) -> Union[torch.FloatTensor, list[VQAOutputs]]:
+                 memory_tracker: Optional[SummaryTracker]=None,
+                 return_scores_only: bool=False) -> Union[torch.FloatTensor, list[VQAOutputs]]:
         """
         Score visual questions when posed on individual video frames to a VLM.
         
@@ -145,7 +140,7 @@ class FrameVQAMistakeDetectionScorer:
         # Then delete these pre-loaded logits
         del logits 
 
-        prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(self.vlm)]
+        prompt_template = VQA_PROMPT_TEMPLATES[type(self.vlm)]
         prompts = [prompt_template.format(question=question) for question in questions]
         
         response_tokens = get_vqa_response_token_ids(self.processor.tokenizer)
@@ -209,6 +204,9 @@ class FrameVQAMistakeDetectionScorer:
                 vqa_outputs.append(this_vqa_outputs)
         
         answer_probs, scores = self.get_scores(mistake_labels, vqa_outputs)
+        if return_scores_only:
+            return scores
+
         vqg_training_examples = [
             VQGTrainingExample(
                 task_name=MistakeDetectionTasks.Ego4D,

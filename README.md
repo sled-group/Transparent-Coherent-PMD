@@ -62,7 +62,7 @@ Before running experiments, be sure to configure the directories in `config.yml`
 
 ### Configuration
 
-Make a copy of `config_sample.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the cache directories).
+Make a copy of `sample_config.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the cache directories). If you ever need multiple config files in the same environment (e.g., to run multiple experiments with different settings at the same time), you can set the environment variable `TRAVEl_config_path` to an appropriate specialized `config_xxx.yml` file before running a script.
 
 ### SuccessVQA Baseline
 

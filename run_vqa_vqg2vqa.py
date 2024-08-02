@@ -14,33 +14,38 @@ import shutil
 import spacy
 import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
+from typing import Optional
 
-from travel.constants import RESULTS_DIR
+from travel.constants import RESULTS_DIR, CONFIG_PATH
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
-from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQG2VQA_PROMPT_TEMPLATES, SUCCESSVQA_PROMPT_TEMPLATES
+from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQA_PROMPT_TEMPLATES, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES
 from travel.data.vqg import load_vqg_outputs, N_GENERATED_QUESTIONS
-from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter, ImageMaskTypes
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
-from travel.model.vqa import run_vqa_for_mistake_detection
+from travel.model.grounding import VisualFilterTypes, SpatialVisualFilter, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter, ImageMaskTypes
+from travel.model.metrics import generate_det_curve, consistency_metrics_vqg2vqa
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
+from travel.model.vqa import run_vqa_for_mistake_detection, DETECTION_FRAMES_PROPORTION
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--vqg_directory", type=str, required=True, help="Directory where desired vqg_outputs.json is stored.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
-parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
+parser.add_argument("--mistake_detection_strategy", nargs='+', type=str, default=["heuristic", "nli"], choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
-parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
+parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness, a Gaussian blur kernel size, or other hyperparameter for visual filter.")
 parser.add_argument("--batch_size", type=int, default=52, help="Batch size for VQA inference. Visual filter batch size is configured in `config.yml`.")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
+parser.add_argument("--caption_first", action="store_true", help="Pass this argument to first have the VLM generate a caption of the frame before answering a question.")
 args = parser.parse_args()
 
 assert args.task in args.vqg_directory, f"VQG outputs should be generated from the {args.task} dataset!"
+if args.caption_first:
+    print("Warning: coherence metrics for captions are not yet implemented in VQG2VQA.")
 
 # Load VLM(s), processors, visual filters, etc. - if multiple GPUs available, use them
 print("Setting up VLMs and visual filters...")
@@ -84,6 +89,10 @@ for worker_index in range(n_workers):
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
+        elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
+            # Visual filter strength interpreted as alpha hyperparameter for VCD            
+            visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength)
+            nlp = None
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Target_Object_Counter:
             visual_filter = TargetObjectCounterFilter(device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')      
@@ -96,8 +105,9 @@ for worker_index in range(n_workers):
         visual_filters.append(None)
         nlps.append(None)
 
-prompt_template = VQG2VQA_PROMPT_TEMPLATES[type(vlm)]
-prompt_template_successvqa = SUCCESSVQA_PROMPT_TEMPLATES[type(vlm)]
+vqa_prompt_template = VQA_PROMPT_TEMPLATES[type(vlm)]
+caption_vqa_prompt_template = CAPTION_VQA_PROMPT_TEMPLATES[type(vlm)]
+successvqa_question_template = SUCCESSVQA_QUESTION_TEMPLATE
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
 # Configure results directory
@@ -111,6 +121,8 @@ if args.resume_dir is None:
     this_results_dir += f"_{vlm_name}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
+    if args.caption_first:
+        this_results_dir += "_caption"
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     os.makedirs(this_results_dir)
@@ -122,7 +134,7 @@ for eval_partition in args.eval_partitions:
     vqg_outputs = load_vqg_outputs(os.path.join(args.vqg_directory, f"vqg_outputs_{eval_partition}.json"))
     pprint(vqg_outputs)
 
-    def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]:
+    def generate_prompts(example: MistakeDetectionExample, add_caption_placeholder: bool=False) -> tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]:
         questions = []
         prompts = []
         answers = []
@@ -132,15 +144,21 @@ for eval_partition in args.eval_partitions:
             for frame in example.frames:
                 for question, answer in zip(vqg_outputs[example.procedure_id].questions, vqg_outputs[example.procedure_id].answers):
                     questions.append(question)
-                    prompts.append(prompt_template.format(question=question.strip()))
+                    if add_caption_placeholder:
+                        prompts.append(caption_vqa_prompt_template.format(caption="{caption}", question=question.strip()))
+                    else:
+                        prompts.append(vqa_prompt_template.format(question=question.strip()))
                     answers.append(answer)
                     frames.append(frame)
         else:
             # Some VQG outputs might be missing because we couldn't parse the text generated by the LM;
             # in this case, fall back to SuccessVQA prompt generation and report it to the console
             print(f"Warning: Could not find procedure {example.procedure_id} in VQG outputs to generate a VQA prompt. Falling back to SuccessVQA prompt generation.")
-            prompt = prompt_template_successvqa.format(step=example.procedure_description)
-            question = prompt
+            question = successvqa_question_template.format(step=example.procedure_description)
+            if add_caption_placeholder:
+                prompt = caption_vqa_prompt_template.format(caption="{caption}", question=question.strip())
+            else:
+                prompt = vqa_prompt_template.format(question=question.strip())
             expected_answer = VQAResponse["Yes"]
             for frame in example.frames:
                 for _ in range(N_GENERATED_QUESTIONS):
@@ -185,7 +203,8 @@ for eval_partition in args.eval_partitions:
                                            [n_workers] * n_workers,
                                            list(range(n_workers)),
                                            [args.batch_size] * n_workers,
-                                           [args.cache_vqa_frames] * n_workers)
+                                           [args.cache_vqa_frames] * n_workers,
+                                           [args.caption_first] * n_workers)
                              )
         # Compile processed data from partitions
         vqa_outputs = []
@@ -205,26 +224,45 @@ for eval_partition in args.eval_partitions:
                                                     n_workers=1,
                                                     worker_index=0,
                                                     vqa_batch_size=args.batch_size,
-                                                    cache_frames=args.cache_vqa_frames)
+                                                    cache_frames=args.cache_vqa_frames,
+                                                    caption_first=args.caption_first)
 
-    print("Evaluating and saving results...")
-    evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
-    mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
-    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
-    pprint(metrics['best_metrics'])
+    # Calculate consistency metrics (which are based on VQG outputs that we have access to here)
+    labels = []
+    frame_times = []
+    for example in eval_datasets[0].get_batches(1, load_frames=False):
+        example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
+        labels.append(example.mistake)
+        frame_times.append(example.frame_times)
 
-    # Compile preds per mistake detection example
-    preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
+    # Save them in their own file
+    metrics_consistency = consistency_metrics_vqg2vqa(
+        vqg_outputs=vqg_outputs,
+        mistake_labels=labels,
+        vqa_outputs=vqa_outputs,
+        frame_times=frame_times
+    )
 
-    # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
-    metrics_filename = f"metrics_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
-    json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
+    for mistake_detection_strategy in args.mistake_detection_strategy:
+        print("Evaluating and saving results...")
+        evaluator = MISTAKE_DETECTION_STRATEGIES[mistake_detection_strategy](eval_datasets[0], vqa_outputs)
+        mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
+        metrics['consistency'] = metrics_consistency
+        print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
+        pprint(metrics['accuracy']['best_metrics'])
 
-    preds_filename = f"preds_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
-    json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
+        # Compile preds per mistake detection example
+        preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
 
-    det_filename = f"det_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
-    generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
+        # Save metrics, preds, DET curve, config file (which may have some parameters that vary over time), and command-line arguments
+        metrics_filename = f"metrics_{mistake_detection_strategy}{'rerun' if mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
+        json.dump(metrics, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
-shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
+        preds_filename = f"preds_{mistake_detection_strategy}{'rerun' if mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.json"
+        json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
+
+        det_filename = f"det_{mistake_detection_strategy}{'rerun' if mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
+        generate_det_curve(metrics['accuracy'], os.path.join(this_results_dir, det_filename))
+
+shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

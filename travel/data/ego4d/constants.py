@@ -2,7 +2,9 @@ import json
 import os
 import yaml
 
-with open('config.yml', 'r') as file:
+from travel.constants import CONFIG_PATH
+
+with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 
 EGO4D_ANNOTATION_PATH = config["data"]["ego4d"]["annotation_path"]

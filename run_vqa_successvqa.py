@@ -15,18 +15,20 @@ import torch
 from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
 
-from travel.constants import DATA_CACHE_DIR, RESULTS_DIR
+from travel.constants import RESULTS_DIR, CONFIG_PATH
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
-from travel.data.vqa import VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
-from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter
-from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
+from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES, get_vqa_response_token_ids
+from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
+from travel.model.metrics import generate_det_curve, consistency_metrics_caption
+from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, DETECTION_FRAMES_PROPORTION
+from travel.model.nli import NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.vqa import run_vqa_for_mistake_detection
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=list(SUCCESSVQA_PROMPT_TEMPLATES.keys()), help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--mistake_detection_strategy", type=str, default="heuristic", choices=list(MISTAKE_DETECTION_STRATEGIES.keys()))
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
@@ -36,6 +38,7 @@ parser.add_argument("--resume_dir", type=str, help="Path to results directory fo
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
+parser.add_argument("--caption_first", action="store_true", help="Pass this argument to first have the VLM generate a caption of the frame before answering a question.")
 args = parser.parse_args()
 
 # Load VLM(s), processors, visual filters, etc. - if multiple GPUs available, use them
@@ -71,6 +74,9 @@ for worker_index in range(n_workers):
         if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
             visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')
+        if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
+            visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength, device=f"cuda:{worker_index}")
+            nlp = spacy.load('en_core_web_lg')            
         elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Target_Object_Counter:
             visual_filter = TargetObjectCounterFilter(device=f"cuda:{worker_index}")
             nlp = spacy.load('en_core_web_lg')      
@@ -83,7 +89,9 @@ for worker_index in range(n_workers):
         visual_filters.append(None)
         nlps.append(None)
 
-prompt_template = SUCCESSVQA_PROMPT_TEMPLATES[type(vlm)]
+vqa_prompt_template = VQA_PROMPT_TEMPLATES[type(vlm)]
+successvqa_question_template = SUCCESSVQA_QUESTION_TEMPLATE
+caption_vqa_prompt_template = CAPTION_VQA_PROMPT_TEMPLATES[type(vlm)]
 response_token_ids = get_vqa_response_token_ids(vlm_processors[0].tokenizer)
 
 # Configure results directory
@@ -97,19 +105,24 @@ if args.resume_dir is None:
     this_results_dir += f"_{vlm_name}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
+    if args.caption_first:
+        this_results_dir += "_caption"        
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     os.makedirs(this_results_dir)
 else:
     this_results_dir = args.resume_dir
 
-def generate_prompts(example: MistakeDetectionExample) -> tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]:
+def generate_prompts(example: MistakeDetectionExample, add_caption_placeholder: bool=False) -> tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]:
     questions = []
     prompts = []
     answers = []
     frames = []
-    prompt = prompt_template.format(step=example.procedure_description)
-    question = prompt
+    question = successvqa_question_template.format(step=example.procedure_description)
+    if add_caption_placeholder:
+        prompt = caption_vqa_prompt_template.format(caption="{caption}", question=question)
+    else:
+        prompt = vqa_prompt_template.format(question=question)
     expected_answer = VQAResponse["Yes"]
 
     for frame in example.frames:
@@ -155,7 +168,8 @@ for eval_partition in args.eval_partitions:
                                            [n_workers] * n_workers,
                                            list(range(n_workers)),
                                            [args.batch_size] * n_workers,
-                                           [args.cache_vqa_frames] * n_workers)
+                                           [args.cache_vqa_frames] * n_workers,
+                                           [args.caption_first] * n_workers)
                              )
         # Compile processed data from partitions
         vqa_outputs = []
@@ -163,7 +177,7 @@ for eval_partition in args.eval_partitions:
             vqa_outputs += this_vqa_outputs        
     else:
         print("Running VQA sequentially...")
-        vqa_outputs = run_vqa_for_mistake_detection(eval_dataset=eval_datasets[0],
+        outputs = run_vqa_for_mistake_detection(eval_dataset=eval_datasets[0],
                                                     vlm=vlms[0],
                                                     vlm_processor=vlm_processors[0],
                                                     generate_prompts=generate_prompts,
@@ -175,7 +189,12 @@ for eval_partition in args.eval_partitions:
                                                     n_workers=1,
                                                     worker_index=0,
                                                     vqa_batch_size=args.batch_size,
-                                                    cache_frames=args.cache_vqa_frames)
+                                                    cache_frames=args.cache_vqa_frames,
+                                                    caption_first=args.caption_first)
+        if not args.caption_first:
+            vqa_outputs = outputs
+        else:
+            vqa_outputs, captions = outputs
     
     print("Evaluating and saving results...")
 
@@ -187,8 +206,26 @@ for eval_partition in args.eval_partitions:
 
     evaluator = MISTAKE_DETECTION_STRATEGIES[args.mistake_detection_strategy](eval_datasets[0], vqa_outputs)
     mistake_detection_preds, metrics = evaluator.evaluate_mistake_detection()
-    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['best_threshold']}):")
-    pprint(metrics[metrics['best_threshold']])
+    if args.caption_first:
+        # Add metrics for generated captions
+        labels = []
+        procedure_descriptions = []
+        example_ids = []
+        frame_times = []
+        for example in eval_datasets[0].get_batches(1, load_frames=False):
+            example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
+            labels.append(example.mistake)
+            procedure_descriptions.append(example.procedure_description)
+            example_ids.append(example.example_id)
+            frame_times.append(example.frame_times)
+        metrics['consistency'] = consistency_metrics_caption(captions, 
+                                                             procedure_descriptions=procedure_descriptions,
+                                                             mistake_labels=labels,
+                                                             example_ids=example_ids,
+                                                             frame_times=frame_times)
+
+    print(f"Mistake Detection Metrics ({eval_partition}, Detection Threshold={metrics['accuracy']['best_threshold']}):")
+    pprint(metrics['accuracy'][metrics['accuracy']['best_threshold']])
 
     # Compile preds per mistake detection example
     preds = compile_mistake_detection_preds(eval_datasets[0], vqa_outputs, mistake_detection_preds, image_base_path=this_results_dir)
@@ -201,7 +238,7 @@ for eval_partition in args.eval_partitions:
     json.dump(preds, open(os.path.join(this_results_dir, preds_filename), "w"), indent=4)
 
     det_filename = f"det_{args.mistake_detection_strategy}{'rerun' if args.mistake_detection_strategy == 'nli' and NLI_RERUN_ON_RELEVANT_EVIDENCE else ''}_{eval_partition}.pdf"
-    generate_det_curve(metrics, os.path.join(this_results_dir, det_filename))
+    generate_det_curve(metrics['accuracy'], os.path.join(this_results_dir, det_filename))
 
-shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
+shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

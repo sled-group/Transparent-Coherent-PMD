@@ -102,13 +102,10 @@ class MistakeDetectionExample:
         """
         Cuts off example's frames and frame times to the last `proportion`% of frames based on their times.
         """
-        original_length = len(self.frames)
-        min_time = min(self.frame_times)
-        max_time = max(self.frame_times)
+        # if proportion < 1.0: # TODO: add this back - it avoids a floating-point issue that causes a frame to sometimes get removed even with proportion 1.0
         cutoff_time = get_cutoff_time_by_proportion(self.frame_times, proportion)
         self.frames = [f for f, t in zip(self.frames, self.frame_times) if t >= cutoff_time]
         self.frame_times = [t for t in self.frame_times if t >= cutoff_time]
-        new_length = len(self.frames)
         # print(f"{self.example_id}: cut off from {original_length} to {new_length} frames (proportion={proportion}, cutoff time={cutoff_time}, time range={min_time}-{max_time})")
 
 class MistakeDetectionDataset:
@@ -143,7 +140,7 @@ class MistakeDetectionDataset:
     def __getitem__(self, index):
         return self.load_example_from_file(self.example_dirs[index])
     
-    def get_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> Iterable[list[MistakeDetectionExample]]:
+    def get_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0, load_frames: bool=True) -> Iterable[list[MistakeDetectionExample]]:
         assert batch_size >= 1, "Batch size must be positive!"
         assert n_workers >= 1, "Number of workers must be positive!"
 
@@ -155,10 +152,10 @@ class MistakeDetectionDataset:
 
         if batch_size > 1:
             for i in range(0, len(example_dirs), batch_size):
-                yield [self.load_example_from_file(d) for d in example_dirs[i : i + batch_size]]
+                yield [self.load_example_from_file(d, load_frames=load_frames) for d in example_dirs[i : i + batch_size]]
         else:
             for d in example_dirs:
-                yield self.load_example_from_file(d)
+                yield self.load_example_from_file(d, load_frames=load_frames)
     
     def count_batches(self, batch_size: int, n_workers: int=1, worker_index: int=0) -> int:
         """

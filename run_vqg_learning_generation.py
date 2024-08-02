@@ -17,7 +17,7 @@ import torch
 from tqdm import tqdm
 from transformers import pipeline, BitsAndBytesConfig
 
-from travel.constants import RESULTS_DIR, HF_TOKEN
+from travel.constants import RESULTS_DIR, HF_TOKEN, CONFIG_PATH
 from travel.data.vqg import VQG_DEMONSTRATIONS, generate_vqg_prompt_icl, VQGInputs, save_vqg_inputs, load_vqg_inputs, load_vqg_outputs, save_vqg_outputs
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
@@ -232,5 +232,5 @@ if worker_index == 0:
     # Save generated data, config, and args
     save_frameVQA_examples(frameVQA_examples, this_results_dir, args.partition)
 
-    shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
+    shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
     json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)

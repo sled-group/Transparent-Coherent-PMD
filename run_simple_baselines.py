@@ -8,12 +8,13 @@ import datetime
 import json
 import os
 from pprint import pprint
-from random import randint
+from random import randint, random
 import shutil
 from tqdm import tqdm
 
-from travel.constants import RESULTS_DIR
-from travel.model.mistake_detection import mistake_detection_metrics
+from travel.constants import RESULTS_DIR, CONFIG_PATH
+from travel.model.metrics import generate_det_curve
+from travel.model.mistake_detection import mistake_detection_metrics, MISTAKE_DETECTION_THRESHOLDS
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
@@ -56,12 +57,23 @@ for eval_partition in args.eval_partitions:
     # Run simple baseline inference
     random_preds = []
     majority_preds = []
+    random_probs = []
     for _ in tqdm(range(len(eval_dataset)), "running inference on clips"):
         random_preds.append(bool(randint(0,1)))
+        random_probs.append(float(random()))
         majority_preds.append(majority_class)
 
     metrics_random = mistake_detection_metrics(labels, random_preds)
     metrics_majority = mistake_detection_metrics(labels, majority_preds)
+    metrics_random_probs = {}
+    for threshold in MISTAKE_DETECTION_THRESHOLDS:
+        random_threshold_preds = []
+        for p in random_probs:
+            if p >= threshold:
+                random_threshold_preds.append(True)
+            else:
+                random_threshold_preds.append(False)
+        metrics_random_probs[threshold] = mistake_detection_metrics(labels, random_threshold_preds)
 
     print("Mistake Detection Metrics (random):")
     pprint(metrics_random)
@@ -76,5 +88,11 @@ for eval_partition in args.eval_partitions:
     metrics_filename = f"metrics_majority_{eval_partition}.json"
     json.dump(metrics_majority, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
 
-shutil.copy("config.yml", os.path.join(this_results_dir, "config.yml"))
+    metrics_filename = f"metrics_random_probs_{eval_partition}.json"
+    json.dump(metrics_random, open(os.path.join(this_results_dir, metrics_filename), "w"), indent=4)
+
+    det_filename = f"det_random_probs_{eval_partition}.pdf"
+    generate_det_curve(metrics_random_probs, os.path.join(this_results_dir, det_filename))
+
+shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
 json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
