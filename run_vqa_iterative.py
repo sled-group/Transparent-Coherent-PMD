@@ -21,7 +21,7 @@ from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
 from travel.model import simple_lm_prompt_beam_search
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
-from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics
+from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa 
@@ -29,7 +29,7 @@ from travel.model.vqg import cleanup_generated_question
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
-parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
+parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "consistency", "verifiability", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
@@ -87,8 +87,7 @@ bnb_config = BitsAndBytesConfig(
 )
 
 # Load VLM
-vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, 
-                                            quantization_config=bnb_config)   
+vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config)   
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
 vlm_processor.tokenizer.padding_side = "left"
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
@@ -116,7 +115,7 @@ if args.visual_filter_mode is not None:
 
 # Shared generation kwargs
 
-# kwargs to force question generations to have a "?" and start with "Is" or "Are"
+# kwargs to force question generations to have a "?" and start with words that would typically begin a yes/no question
 question_generation_constraints = [    
     PhrasalConstraint(
         [vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[-1]]
@@ -124,21 +123,25 @@ question_generation_constraints = [
 ]
 yes_no_q_tokens = [
     vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[0], 
-    vlm_processor.tokenizer("Are they blue?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Was it blue?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Are they blue?", add_special_tokens=False).input_ids[0], 
+    vlm_processor.tokenizer("Were they blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Does it look blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Do they look blue?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
 ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
 
 generation_kwargs = {
     "do_sample": False,
-    "num_beams": 8,
-    "num_beam_groups": 2,
-    "diversity_penality": 1.0,
-    "num_return_sequences": 8,
+    "num_beams": 4,
+    "num_return_sequences": 2,
     "constraints": question_generation_constraints,
     "begin_suppress_tokens": begin_suppress_tokens,    
-}
+    "pad_token_id": tokenizer.eos_token_id,
+} # TODO: only 2 question candidates seems small, but if we ask for too many and beam search can't return them, we get an error... can we fix this? maybe increase num_beams?
 
 # NLI model to score consistency and verifiability
 nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
@@ -178,8 +181,8 @@ if os.path.exists(cache_path):
 for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK_SIZE, 
                                                                     n_workers=n_workers, 
                                                                     worker_index=worker_index,
-                                                                    load_frames=False), 
-                                                desc="running iterative VQA inference")):
+                                                                    load_frames=False)), 
+                                                desc="running iterative VQA inference"):
 
     # If already in cache, skip this batch
     if len(all_questions) > batch_idx:
@@ -210,11 +213,11 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
         # Generate a question
         prompts_q = [prompt + " USER: Q: " for prompt in prompts]
         new_questions, generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
-                                                            vlm_processor.tokenizer,
-                                                            [prompt.replace("<image>\n", "") for prompt in prompts_q],
-                                                            max_new_tokens=20,
-                                                            batch_size=args.generation_batch_size,
-                                                            generation_kwargs=generation_kwargs)
+                                                                        vlm_processor.tokenizer,
+                                                                        [prompt.replace("<image>\n", "") for prompt in prompts_q],
+                                                                        max_new_tokens=20,
+                                                                        batch_size=args.generation_batch_size // (2 ** question_idx),
+                                                                        generation_kwargs=generation_kwargs)
                             
         new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]
         for batch_sub_idx in range(len(candidate_questions)):
@@ -224,6 +227,7 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
 
         if args.question_selection_strategy == "likelihood":
             # Select most likely question (first one in list)
+            # TODO: need to avoid generating a question we already generated
             new_questions = [beam_search_questions[0] for beam_search_questions in new_questions]
             new_scores = [gs[0] for gs in generation_scores]
 
@@ -232,10 +236,13 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
             nli_outputs = question_coherence_metrics(
                 nli_tokenizer, 
                 nli_model,
-                [procedure for procedure, beam_search_questions in zip(batch_procedures, new_questions) for question in beam_search_questions],
+                tokenizer,
+                lm,
+                [procedure for procedure, beam_search_questions in zip(batch_procedures, new_questions) for _ in beam_search_questions],
                 [question for beam_search_questions in new_questions for question in beam_search_questions],
                 [questions],
                 [answers],
+                rephrase_batch_size=args.generation_batch_size
             )
             parallel_idx = 0
 
@@ -279,7 +286,7 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
 
         # Predict an answer (yes/no)
         prompts_a = [prompt + f'{question} ASSISTANT: A (yes/no): ' for prompt, question in zip(prompts_q, new_questions)]
-        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=args.vqa_batch_size)
+        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=args.vqa_batch_size // (2 ** question_idx))
         new_answers = [
             VQAOutputs(
                 task_name=MistakeDetectionTasks(args.task),
@@ -300,7 +307,7 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
             answers[batch_sub_idx].append(new_answers[batch_sub_idx].predicted_answer)
 
         # Update prompts with answers
-        prompts = [prompt + pred.name for prompt, (pred, _) in zip(prompts_a, new_answers)]
+        prompts = [prompt + output.predicted_answer.name for prompt, output in zip(prompts_a, new_answers)]
 
         # Ask VLM probability of success
         prompt_success = [
@@ -314,11 +321,24 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
             batch_frames, 
             batch_size=args.vqa_batch_size
         )
+        success_vqa_outputs = [
+            VQAOutputs(
+                task_name=MistakeDetectionTasks(args.task),
+                example_id=example.example_id,
+                procedure_id=example.procedure_id,
+                frame=example.frames[0],
+                prompt=prompt,
+                expected_answer=None,
+                response_token_ids=response_token_ids,
+                logits=logits,
+                question=question,
+            ) for logits, example, prompt, question in zip(success_vqa_outputs, batch_examples, prompts_a, new_questions)
+        ]
 
         # Save success probability for this turn
         for batch_sub_idx in range(this_batch_size):
             success_probs[batch_sub_idx].append(
-                success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]
+                round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
             )
 
     # Update global lists of tracked outputs
@@ -366,11 +386,12 @@ for questions, candidate_questions, candidate_questions_scores, scores, vqa_outp
                 all_labels), desc="evaluating"):
     
     final_success_prob = None
-    for success_prob_idx, success_prob in enumerate(all_success_probs):
+    for success_prob_idx, success_prob in enumerate(success_probs):
         # Early stopping mechanism: 
         # if success score doesn't change enough over 3 turns, stop incorporating questions
+        # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
         final_success_prob = success_prob
-        if success_prob_idx >= 2:
+        if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
             score_change = 0.0
             for i in range(success_prob_idx - 2, success_prob_idx):
                 score_change += scores[i+1] - scores[i]
@@ -419,40 +440,47 @@ accuracy_metrics['best_metrics'] = best_metrics
 accuracy_metrics['best_threshold'] = best_threshold
 
 json.dump(accuracy_metrics, 
-          open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "wb"),
+          open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
           indent=4)
+
+# Generate DET curve
+generate_det_curve(accuracy_metrics, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
 
 # Calculate coherence metrics of final rollouts
 all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
-all_previous_questions = [[all_results_dicts['questions'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+all_previous_questions = [results_dict['questions'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
 all_predicted_answers = [VQAResponse(answer).name for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
-all_previous_answers = [[all_results_dicts['answers'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+all_previous_answers = [results_dict['answers'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
 all_metrics = question_coherence_metrics(nli_tokenizer,
                                          nli_model,
+                                         tokenizer,
+                                         lm,                                         
                                          [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
                                          all_chosen_questions,
                                          all_predicted_answers,
                                          previous_questions=all_previous_questions,
-                                         previous_answers=all_previous_answers,)
+                                         previous_answers=all_previous_answers,
+                                         rephrase_batch_size=args.generation_batch_size)
 
 parallel_idx = 0
 coherence_metrics_by_example = defaultdict(list)
 coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal']
 for results_dict in all_results_dicts.values():
     for k in coherence_metric_names:
-        this_metrics = []
-        for question_idx in range(results_dict['final_turn'] + 1):
-            this_metrics.append(all_metrics[k][parallel_idx])
-        coherence_metrics_by_example[k].append(round(float(np.mean(this_metrics)), 6))
-        parallel_idx += 1
+        if k in all_metrics:
+            this_metrics = []
+            for question_idx in range(results_dict['final_turn'] + 1):
+                this_metrics.append(all_metrics[k][parallel_idx])
+            coherence_metrics_by_example[k].append(round(float(np.mean(this_metrics)), 6))
+    parallel_idx += 1
 
 coherence_metrics = {
-    float(np.mean(coherence_metrics_by_example[k]), 6) for k in coherence_metric_names
+    k: round(float(np.mean(coherence_metrics_by_example[k])), 6) for k in coherence_metric_names if k in coherence_metrics_by_example
 } | {
     "metrics_by_example": coherence_metrics_by_example,
 }
 json.dump(coherence_metrics, 
-          open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "wb"),
+          open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "w"),
           indent=4)

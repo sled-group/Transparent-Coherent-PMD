@@ -365,23 +365,38 @@ def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], t
         "Question: Is the cabinet closed?\nAnswer: No\nStatement: The cabinet is not closed.",
     ]
     prompts = ["\n\n".join(examples) + f"\n\nQuestion: {question}\nAnswer: {answer.name}\nStatement: " for question, answer in zip(questions, answers)]
-    rephrased_texts = simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=generation_batch_size)
+    rephrased_texts = simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=generation_batch_size, generation_kwargs={"pad_token_id": tokenizer.eos_token_id})
     rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
     return rephrased_texts
 
-def question_coherence_metrics(nli_tokenizer, nli_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]] = None, previous_answers: Optional[list[list[VQAResponse]]] = None):
+def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]] = None, previous_answers: Optional[list[list[VQAResponse]]] = None, rephrase_batch_size=20):
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
     """
     metrics = {}
     
     hypothesis_procedure = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedures]
-    premise_yes = [rephrase_question_answer(question, VQAResponse.Yes) for question in questions]
-    premise_no = [rephrase_question_answer(question, VQAResponse.No) for question in questions]
+    # Rephrase question with a yes and no answer as statements to compare their entailment probability of success
+    rephrased_yes = rephrase_question_answer(
+        questions, 
+        [VQAResponse.Yes] * len(questions),
+        lm_tokenizer, 
+        lm_model, 
+        generation_batch_size=rephrase_batch_size
+    )
+    rephrased_no = rephrase_question_answer(
+        questions, 
+        [VQAResponse.No] * len(questions),
+        lm_tokenizer, 
+        lm_model, 
+        generation_batch_size=rephrase_batch_size
+    )    
+    premise_yes = rephrased_yes
+    premise_no = rephrased_no
     probs_yes = run_nli(nli_tokenizer, nli_model, list(zip(premise_yes, hypothesis_procedure)))
     probs_no = run_nli(nli_tokenizer, nli_model, list(zip(premise_no, hypothesis_procedure)))
     if answers:
-        probs_actual = np.stack([probs_yes[i] if answers[i] == VQAResponse.Yes else probs_no[i] for i in range(len(answers))])
+        probs_actual = torch.stack([probs_yes[i] if answers[i] == VQAResponse.Yes else probs_no[i] for i in range(len(answers))])
 
     # Individual relevance: how much probability of success changes depending on the answer
     relevance = torch.abs(probs_yes[:, 0].unsqueeze(1) - probs_no[:, 0].unsqueeze(1))
@@ -398,14 +413,26 @@ def question_coherence_metrics(nli_tokenizer, nli_model, procedures: list[str], 
     metrics['informativeness'] = informativeness.numpy()
 
     if previous_questions and len(previous_questions[0]) > 0:
-        premise_past = ["\n".join([rephrase_question_answer(question, p_answer) for p_question, p_answer in zip(previous_questions[qi], previous_answers[qi])]) for qi, question in enumerate(questions)]
-        premise_past_yes = [premise + rephrase_question_answer(question, VQAResponse.No) for question, premise in zip(questions, premise_past)]
-        premise_past_no = [premise + rephrase_question_answer(question, VQAResponse.No) for question, premise in zip(questions, premise_past)]
+        # Rephrase past questions and answers into statements, then un-flatten
+        rephrased_past = [
+            rephrase_question_answer(
+                [question for p_questions in previous_questions for question in p_questions],
+                [answer for p_answers in previous_answers for answer in p_answers],
+                lm_tokenizer,
+                lm_model,
+                generation_batch_size=rephrase_batch_size
+            )
+        ]
+        rephrased_past = [rephrased_past[i * previous_questions[0]:(i + 1) * len(previous_questions[0])] for i in range(len(previous_questions))]
+        premise_past = [" ".join(past_qs_rephrased) for past_qs_rephrased in rephrased_past]
+        
+        premise_past_yes = [pp + " " + py for pp, py in zip(premise_past, premise_yes)]
+        premise_past_no = [pp + " " + pn for pp, pn in zip(premise_past, premise_no)]
         # probs_past = run_nli(nli_tokenizer, nli_model, list(zip(premise_past, hypothesis_procedure)))
         probs_past_yes = run_nli(nli_tokenizer, nli_model, list(zip(premise_past_yes, hypothesis_procedure)))
         probs_past_no = run_nli(nli_tokenizer, nli_model, list(zip(premise_past_no, hypothesis_procedure)))
         if answers:
-            probs_past_actual = np.stack([probs_past_yes[i] if answers[i] == VQAResponse.Yes else probs_past_no[i] for i in range(len(answers))])
+            probs_past_actual = torch.stack([probs_past_yes[i] if answers[i] == VQAResponse.Yes else probs_past_no[i] for i in range(len(answers))])
         
         # Marginal relevance: how much probability of success changes depending on the answer AND information we already extracted from the image
         relevance_marginal = torch.abs(probs_past_yes[:, 0].unsqueeze(1) - probs_past_no[:, 0].unsqueeze(1))
@@ -426,7 +453,7 @@ def question_coherence_metrics(nli_tokenizer, nli_model, procedures: list[str], 
 
     # Convert to floats to ensure json serializable
     metrics = {
-        k: round(float(v), 6)
+        k: [round(float(val[0]), 6) for val in v]
         for k, v in metrics.items()
     }
     return metrics

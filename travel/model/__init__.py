@@ -1,14 +1,15 @@
 import numpy as np
+from pprint import pprint
 from tqdm import tqdm
 
 def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batch_size=20, generation_kwargs={}):
     """
     Stripped down, generic LM prompting method. This method is only tested for constrained beam search, and might not work for other generation settings.
     """
-    if lm.generation_config.num_return_sequences:
-        num_seq = lm.generation_config.num_return_sequences
-    elif "num_return_sequences" in generation_kwargs:
+    if "num_return_sequences" in generation_kwargs:
         num_seq = generation_kwargs["num_return_sequences"]
+    elif lm.generation_config.num_return_sequences:
+        num_seq = lm.generation_config.num_return_sequences
     else:
         num_seq = 1
 
@@ -33,12 +34,12 @@ def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batc
     # Collate generated texts and scores from beam search
     all_outputs_collated = []
     all_scores_collated = []
-    for beam_search_idx in range(len(all_outputs) // 4):
+    for beam_search_idx in range(len(all_outputs) // num_seq):
         this_outputs = []
         this_scores = []
         for i in range(num_seq):
-            this_outputs.append(all_outputs[beam_search_idx * len(all_outputs) // 4 + i])
-            this_scores.append(all_scores[beam_search_idx * len(all_outputs) // 4 + i])
+            this_outputs.append(all_outputs[beam_search_idx * num_seq + i])
+            this_scores.append(all_scores[beam_search_idx * num_seq + i])
         all_outputs_collated.append(this_outputs)
         all_scores_collated.append(this_scores)
 
