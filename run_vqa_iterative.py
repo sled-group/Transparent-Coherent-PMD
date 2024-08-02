@@ -9,6 +9,7 @@ import numpy as np
 import os
 import pickle
 from PIL import Image
+from pprint import pprint
 import spacy
 import torch
 from tqdm import tqdm
@@ -66,6 +67,7 @@ if args.resume_dir is None:
         task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
     this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}"
+    this_results_dir += f"_{args.question_selection_strategy}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
@@ -136,8 +138,8 @@ begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_siz
 
 generation_kwargs = {
     "do_sample": False,
-    "num_beams": 4,
-    "num_return_sequences": 2,
+    "num_beams": 8,
+    "num_return_sequences": 4,
     "constraints": question_generation_constraints,
     "begin_suppress_tokens": begin_suppress_tokens,    
     "pad_token_id": tokenizer.eos_token_id,
@@ -240,32 +242,32 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
                 lm,
                 [procedure for procedure, beam_search_questions in zip(batch_procedures, new_questions) for _ in beam_search_questions],
                 [question for beam_search_questions in new_questions for question in beam_search_questions],
-                [questions],
-                [answers],
+                previous_questions=[batch_idx_questions for batch_idx_questions, beam_search_questions in zip(questions, new_questions) for _ in beam_search_questions],
+                previous_answers=[batch_idx_answers for batch_idx_answers, beam_search_questions in zip(answers, new_questions) for _ in beam_search_questions],
                 rephrase_batch_size=args.generation_batch_size
             )
-            parallel_idx = 0
 
             # Select best candidate based on coherence metrics
             selected_questions = []
             new_scores = []
+            parallel_idx = 0
             for batch_sub_idx, beam_search_questions in enumerate(new_questions):
-                this_nli_outputs = nli_outputs[parallel_idx:parallel_idx + len(beam_search_questions)]
+                this_nli_outputs = [{k: round(float(nli_outputs[k][i]), 3) for k in nli_outputs} for i in range(parallel_idx, parallel_idx + len(beam_search_questions))]
                 candidate_questions_scores[batch_sub_idx].append(this_nli_outputs)
                 parallel_idx += len(beam_search_questions)
 
                 # Use marginal relevance (consistency) and/or expected informativeness (verifiability)
                 if args.question_selection_strategy == "consistency":
                     candidate_scores = np.array(
-                        [candidate_metrics['relevance_marginal' if question_idx > 0 else 'relevance'] for candidate_metrics in this_nli_outputs]
+                        [candidate_metrics['relevance_marginal'] for candidate_metrics in this_nli_outputs]
                     )
                 elif args.question_selection_strategy == "verifiability":
                     candidate_scores = np.array(
-                        [candidate_metrics['informativeness_marginal' if question_idx > 0 else 'informativeness'] for candidate_metrics in this_nli_outputs]
+                        [candidate_metrics['informativeness_marginal'] for candidate_metrics in this_nli_outputs]
                     )
                 elif args.question_selection_strategy == "coherence":
                     candidate_scores = np.array(
-                        [candidate_metrics['relevance_marginal' if question_idx > 0 else 'relevance'] * candidate_metrics['informativeness_marginal' if question_idx > 0 else 'informativeness'] for candidate_metrics in this_nli_outputs]
+                        [candidate_metrics['relevance_marginal'] * candidate_metrics['informativeness_marginal'] for candidate_metrics in this_nli_outputs]
                     )
 
                 best_candidate = np.argmax(candidate_scores)
@@ -368,6 +370,7 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
         all_labels,
     ), open(cache_path, "wb"))
 
+# TODO: update to make work with multiple GPUs
 
 print(f"({worker_index}) Gathering results...")
 
@@ -411,7 +414,7 @@ for questions, candidate_questions, candidate_questions_scores, scores, vqa_outp
         "final_turn": success_prob_idx,
         "final_success_prob": final_success_prob,
         "candidate_questions": candidate_questions,
-        "candidate_questions_scores": [[float(score) for score in this_scores] for this_scores in candidate_questions_scores],
+        "candidate_questions_scores": candidate_questions_scores,
     }
     all_results_dicts[example_id] = results_dict
 

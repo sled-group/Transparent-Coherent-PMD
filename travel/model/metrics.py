@@ -369,7 +369,7 @@ def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], t
     rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
     return rephrased_texts
 
-def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]] = None, previous_answers: Optional[list[list[VQAResponse]]] = None, rephrase_batch_size=20):
+def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]]=None, previous_answers: Optional[list[list[VQAResponse]]]=None, rephrase_batch_size=20):
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
     """
@@ -414,16 +414,14 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
 
     if previous_questions and len(previous_questions[0]) > 0:
         # Rephrase past questions and answers into statements, then un-flatten
-        rephrased_past = [
-            rephrase_question_answer(
-                [question for p_questions in previous_questions for question in p_questions],
-                [answer for p_answers in previous_answers for answer in p_answers],
-                lm_tokenizer,
-                lm_model,
-                generation_batch_size=rephrase_batch_size
-            )
-        ]
-        rephrased_past = [rephrased_past[i * previous_questions[0]:(i + 1) * len(previous_questions[0])] for i in range(len(previous_questions))]
+        rephrased_past = rephrase_question_answer(
+            [question for p_questions in previous_questions for question in p_questions],
+            [answer for p_answers in previous_answers for answer in p_answers],
+            lm_tokenizer,
+            lm_model,
+            generation_batch_size=rephrase_batch_size
+        )
+        rephrased_past = [rephrased_past[i * len(previous_questions[0]):(i + 1) * len(previous_questions[0])] for i in range(len(previous_questions))]
         premise_past = [" ".join(past_qs_rephrased) for past_qs_rephrased in rephrased_past]
         
         premise_past_yes = [pp + " " + py for pp, py in zip(premise_past, premise_yes)]
@@ -450,6 +448,9 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
         # TODO: can consider an "information gain"-like metric which looks at how the probability of success changes from only having previous facts to also having this fact
         # - this is challenging though because the actual answer we'll get very much dictates this, e.g., if we contradict past information this would make this metric high
         # TODO: given entailment/contradiction distribution, we can actually calculate entropy in bits - would this make sense?
+    else:
+        metrics['relevance_marginal'] = metrics['relevance']
+        metrics['informativeness_marginal'] = metrics['informativeness']
 
     # Convert to floats to ensure json serializable
     metrics = {
