@@ -12,7 +12,8 @@ from travel.data.mistake_detection import MistakeDetectionExample
 from travel.data.utils import time_based_exponential_moving_average
 from travel.data.vqa import VQAResponse, VQAOutputs
 from travel.data.vqg import VQGOutputs
-from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE, rephrase_question_answer
+from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE
+from travel.model import simple_lm_prompt
 
 def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str, float]:
     """Accuracy metrics for mistake detection."""
@@ -349,12 +350,29 @@ def generate_risk_coverage_plot(coverages, risks, result_names, save_paths):
 #     return negation_based_relevance, informativeness
 
 
+def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], tokenizer, lm, generation_batch_size: int=20):
+    # return f"{question} {answer.name}."
+    examples = [
+        "Question: Is there a bowl on the table?\nAnswer: Yes\nStatement: There is a bowl on the table.",
+        "Question: Are the eggs cracked?\nAnswer: No\nStatement: The eggs are not cracked.",
+        "Question: Does the cardboard box look open?\nAnswer: Yes\nStatement: The cardboard box looks open.",
+        "Question: Are there any leaves that are not in the basket?\nAnswer: No\nStatement: There are not any leaves that are not in the basket.",
+        "Question: Is the orange peeled?\nAnswer: Yes\nStatement: The orange is peeled.",
+        "Question: Is the mug empty?\nAnswer: No\nStatement: The mug is not empty.",
+        "Question: Are there hedge trimmers in the image?\nAnswer: Yes\nStatement: There are hedge trimmers in the image.",
+        "Question: Has the light switch been turned on?\nAnswer: No\nStatement: The light switch has been turned on.",
+        "Question: Does the table have any cups on it?\nAnswer: Yes\nStatement: The table has cups on it.",
+        "Question: Is the cabinet closed?\nAnswer: No\nStatement: The cabinet is not closed.",
+    ]
+    prompts = ["\n\n".join(examples) + f"\n\nQuestion: {question}\nAnswer: {answer.name}\nStatement: " for question, answer in zip(questions, answers)]
+    rephrased_texts = simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=generation_batch_size)
+    rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
+    return rephrased_texts
+
 def question_coherence_metrics(nli_tokenizer, nli_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]] = None, previous_answers: Optional[list[list[VQAResponse]]] = None):
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
     """
-    # TODO: integrate question-answer rephrasing here
-
     metrics = {}
     
     hypothesis_procedure = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedures]

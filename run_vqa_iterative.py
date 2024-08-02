@@ -26,11 +26,12 @@ from travel.data.mistake_detection import MistakeDetectionExample, get_cutoff_ti
 from travel.data.utils import split_list_into_partitions
 from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES, VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids, VQAOutputs
 from travel.data.vqg import VQGOutputs
+from travel.model import simple_lm_prompt_beam_search
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
 from travel.model.metrics import generate_det_curve, mistake_detection_metrics, question_coherence_metrics
 from travel.model.mistake_detection import aggregate_mistake_probs_over_frames, DETECTION_FRAMES_PROPORTION, MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_HYPOTHESIS_TEMPLATE, NLI_MODEL_PATH, NLI_BATCH_SIZE
-from travel.model.vqa import simple_prompt_lm, run_vqa
+from travel.model.vqa import run_vqa, rephrase_question_answer
 from travel.model.vqg import cleanup_generated_question
 
 parser = argparse.ArgumentParser()
@@ -216,7 +217,7 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
 
         # Generate a question
         prompts_q = [prompt + " USER: Q: " for prompt in prompts]
-        new_questions, generation_scores = simple_prompt_lm(vlm.language_model,
+        new_questions, generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
                                                             vlm_processor.tokenizer,
                                                             [prompt.replace("<image>\n", "") for prompt in prompts_q],
                                                             max_new_tokens=20,

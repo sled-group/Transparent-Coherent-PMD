@@ -3,7 +3,6 @@ from tqdm import tqdm
 import yaml
 
 from travel.constants import CONFIG_PATH
-from travel.data.vqa import VQAResponse
 
 with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
@@ -37,7 +36,3 @@ def run_nli(nli_tokenizer, nli_model, premise_hypothesis_pairs):
         torch.cuda.empty_cache()
 
     return all_logits.softmax(dim=1)
-
-def rephrase_question_answer(question: str, answer: VQAResponse):
-    return f"{question} {answer.name}."
-    # TODO: make this use an LM to rephrase into declarative statement
