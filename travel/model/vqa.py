@@ -7,6 +7,7 @@ import shelve
 from spacy.lang.en import English
 import torch
 from tqdm import tqdm
+import shelve
 from transformers import PreTrainedModel, Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
 from transformers.processing_utils import ProcessorMixin
 from typing import Optional, Callable
@@ -406,5 +407,4 @@ def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
-
-
+  
