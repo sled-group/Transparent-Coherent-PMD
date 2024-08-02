@@ -13,7 +13,7 @@ from travel.constants import RESULTS_DIR
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
-from travel.data.vqa import VQAResponse, SUCCESSVQA_PROMPT_TEMPLATES
+from travel.data.vqa import VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
 from travel.model.api  import GPT
 
@@ -34,7 +34,7 @@ if not args.endpoint or not args.api_key:
 
 vlm = GPT(api_key=args.api_key,
           endpoint=args.endpoint)
-prompt_template = SUCCESSVQA_PROMPT_TEMPLATES['GPT']
+prompt_template = SUCCESSVQA_QUESTION_TEMPLATE + ' (Yes/No)'
 
 # Configure results directory
 if args.resume_dir is None:
