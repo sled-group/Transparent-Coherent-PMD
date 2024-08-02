@@ -232,7 +232,6 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
 
         if args.question_selection_strategy == "likelihood":
             # Select most likely question (first one in list)
-            # TODO: this won't be the case once we add more candidates from VQG, so update later to incorporate likelihoods (need to return them from simple_prompt_lm)
             new_questions = [beam_search_questions[0] for beam_search_questions in new_questions]
             new_scores = [gs[0] for gs in generation_scores]
 
@@ -358,7 +357,7 @@ for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK
     ), open(cache_path, "wb"))
 
 
-print(f"({worker_index}) Gathering and scoring results...")
+print(f"({worker_index}) Gathering results...")
 
 all_results_dicts = {}
 all_probs = []
@@ -385,13 +384,13 @@ for questions, candidate_questions, candidate_questions_scores, scores, vqa_outp
                 score_change += scores[i+1] - scores[i]
             if score_change < args.early_stop_delta:
                 break
-    all_probs.append(round(final_success_prob, 6))
+    all_probs.append(round(final_success_prob, 6))   
 
     results_dict = {
         "procedure": procedure,
         "mistake": label,
         "questions": questions,
-        "answers": [a.name for a in answers],
+        "answers": [a.value for a in answers],
         "answer_probs": [[float(output.answer_probs[VQAResponse(a)]) for a in range(2)] for output in vqa_outputs],
         "frame": [output.frame for output in vqa_outputs][0],
         "scores": scores,
@@ -406,6 +405,10 @@ for questions, candidate_questions, candidate_questions_scores, scores, vqa_outp
 json.dump(all_results_dicts, 
           open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
           indent=4)
+
+
+print(f"({worker_index}) Evaluating outputs...")
+metrics = {}
 
 # Calculate accuracy metrics
 best_metrics = None
@@ -428,4 +431,36 @@ json.dump(accuracy_metrics,
           indent=4)
 
 # Calculate coherence metrics of final rollouts
-# TODO: implement this
+all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
+all_previous_questions = [[all_results_dicts['questions'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+
+all_predicted_answers = [VQAResponse(answer).name for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
+all_previous_answers = [[all_results_dicts['answers'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+
+all_metrics = question_coherence_metrics(nli_tokenizer,
+                                         nli_model,
+                                         [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
+                                         all_chosen_questions,
+                                         all_predicted_answers,
+                                         previous_questions=all_previous_questions,
+                                         previous_answers=all_previous_answers,)
+
+parallel_idx = 0
+coherence_metrics_by_example = defaultdict(list)
+coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal']
+for results_dict in all_results_dicts.values():
+    for k in coherence_metric_names:
+        this_metrics = []
+        for question_idx in range(results_dict['final_turn'] + 1):
+            this_metrics.append(all_metrics[k][parallel_idx])
+        coherence_metrics_by_example[k].append(round(float(np.mean(this_metrics)), 6))
+        parallel_idx += 1
+
+coherence_metrics = {
+    float(np.mean(coherence_metrics_by_example[k]), 6) for k in coherence_metric_names
+} | {
+    "metrics_by_example": coherence_metrics_by_example,
+}
+json.dump(coherence_metrics, 
+          open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "wb"),
+          indent=4)

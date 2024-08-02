@@ -64,3 +64,20 @@ def simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=20, g
         # TODO: return likelihoods from simple_prompt_lm
 
     return all_outputs
+
+# Below is not in use and not debugged
+# def simple_prompt_vlm(vlm, vlm_processor, frames, prompts, max_new_tokens=20, generation_kwargs={}):
+   
+#     inputs = vlm_processor(text=prompts, images=frames, padding=True, return_tensors="pt")
+#     inputs = inputs.to(vlm.device)
+
+#     outputs = vlm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
+#     outputs = vlm_processor.batch_decode(outputs.sequences, skip_special_tokens=True)
+    
+#     if type(vlm) == LlavaForConditionalGeneration:
+#         outputs = [[output.replace("USER:  ", "USER: <image>") for output in beam_search_outputs] for beam_search_outputs in outputs]
+#         outputs = [[output.replace(prompt, "") for output in beam_search_outputs] for beam_search_outputs, prompt in zip(outputs, prompts)]
+#     else:
+#         raise NotImplementedError(f"simple_prompt doesn't support VLM type {type(vlm)}!")
+    
+#     return outputs
