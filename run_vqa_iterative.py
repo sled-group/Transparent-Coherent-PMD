@@ -3,17 +3,12 @@ init_travel()
 
 import argparse
 from collections import defaultdict
-import concurrent.futures
-from copy import deepcopy
 import datetime
 import json
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import numpy as np
 import os
 import pickle
 from PIL import Image
-from pprint import pprint
 import spacy
 import torch
 from tqdm import tqdm
@@ -22,16 +17,14 @@ from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConf
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
-from travel.data.mistake_detection import MistakeDetectionExample, get_cutoff_time_by_proportion, MistakeDetectionTasks
-from travel.data.utils import split_list_into_partitions
-from travel.data.vqa import VQA_PROMPT_TEMPLATES, VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE, CAPTION_VQA_PROMPT_TEMPLATES, VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES, get_vqa_response_token_ids, VQAOutputs
-from travel.data.vqg import VQGOutputs
+from travel.data.mistake_detection import MistakeDetectionTasks
+from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
 from travel.model import simple_lm_prompt_beam_search
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
-from travel.model.metrics import generate_det_curve, mistake_detection_metrics, question_coherence_metrics
-from travel.model.mistake_detection import aggregate_mistake_probs_over_frames, DETECTION_FRAMES_PROPORTION, MISTAKE_DETECTION_STRATEGIES, compile_mistake_detection_preds, MISTAKE_DETECTION_THRESHOLDS
-from travel.model.nli import NLI_HYPOTHESIS_TEMPLATE, NLI_MODEL_PATH, NLI_BATCH_SIZE
-from travel.model.vqa import run_vqa, rephrase_question_answer
+from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics
+from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
+from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
+from travel.model.vqa import run_vqa 
 from travel.model.vqg import cleanup_generated_question
 
 parser = argparse.ArgumentParser()
@@ -63,7 +56,6 @@ else:
     worker_index = 0
     n_workers = 1
 # NOTE: if resuming from a previous run, must have the same number of GPUs as original run
-
 
 # Set up results directory
 if args.resume_dir is None:
