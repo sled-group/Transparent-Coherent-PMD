@@ -20,9 +20,10 @@ from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
+from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
 from travel.model import simple_lm_prompt_beam_search
-from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, TargetObjectCounterFilter, VisualContrastiveFilter
+from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, ImageMaskTypes
 from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
@@ -48,7 +49,8 @@ parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this a
 args = parser.parse_args()
 
 assert torch.cuda.device_count() == 1, "Iterative VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
-
+if args.cache_vqa_frames and args.visual_filter_mode is None:
+    print("Warning: --cache_vqa_frames only applies to frames modified by visual filters (configured through --visual_filter_mode and --visual_filter_strength).")
 
 # Get parallelization details from srun if any
 if "SLURM_PROCID" in os.environ and "SLURM_NPROCS" in os.environ:
@@ -101,17 +103,19 @@ tokenizer = vlm_processor.tokenizer
 
 # Set up visual filter if needed
 visual_filter = None
-visual_filter = None
 if args.visual_filter_mode is not None:
+    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
+        visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=f"cuda:{worker_index}")
+        nlp = spacy.load('en_core_web_lg')
+    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_Blur:
+        visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Blur, device=f"cuda:{worker_index}")
+        nlp = spacy.load('en_core_web_lg')            
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
         visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
         visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')            
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Target_Object_Counter:
-        visual_filter = TargetObjectCounterFilter(device=f"cuda:0")
-        nlp = spacy.load('en_core_web_lg')      
     else:
         raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with SuccessVQA!")
     # TODO: add AGLA as an option here?
@@ -305,16 +309,42 @@ if not is_complete:
             for batch_sub_idx in range(this_batch_size):
                 questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
-            # TODO: apply visual filter and add logic to save frames for each example
+            # Apply visual filter to frames
+            if visual_filter:
+                if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+                    batch_frames_filtered = visual_filter(nlp, batch_frames, new_questions)
+                elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
+                    batch_frames_filtered = visual_filter(batch_frames)
+                elif VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
+                    batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
 
-            # Save frames
+            # Cache paths to frames (if using a visual filter, save filtered frames and cache paths to them)
             if args.visual_filter_mode is None or not args.cache_vqa_frames:
                 for batch_sub_idx in range(this_batch_size):
                     frames[batch_sub_idx].append(batch_examples[batch_sub_idx].frames[0])
+            else:
+                for batch_sub_idx, (frame, example) in enumerate(zip(batch_frames_filtered, batch_examples)):
+                    frame_cache_dir = os.path.join(this_results_dir, f"vqa_frames/{example.example_id}")
+                    if not os.path.exists(frame_cache_dir):
+                        os.makedirs(frame_cache_dir)
+                    frame_path = os.path.join(frame_cache_dir, f"frame_q{question_idx}.jpg")
+                    resized_frame = resize_with_aspect(frame, CACHED_FRAME_DIMENSION)
+                    resized_frame.save(frame_path)
+                    frames[batch_sub_idx].append(frame_path)
 
-            # Predict an answer (yes/no)
+            # Run VQA on base image (yes/no)
             prompts_a = [prompt + f'{question} ASSISTANT: A (yes/no): ' for prompt, question in zip(prompts_q, new_questions)]
             new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
+
+            # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
+            if visual_filter and VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Contrastive_Region, VisualFilterTypes.Visual_Contrastive]:
+                new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
+                if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+                    new_answers_logits = new_answers_logits - new_answers_logits_filtered
+                elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
+                    new_answers_logits = (1 + visual_filter.alpha) * new_answers_logits - visual_filter.alpha * new_answers_logits_filtered
+
+            # Gather up VQA outputs (which automatically calculates answer probabilities from logits)
             new_answers = [
                 VQAOutputs(
                     task_name=MistakeDetectionTasks(args.task),
@@ -329,7 +359,7 @@ if not is_complete:
                 ) for logits, example, prompt, question in zip(new_answers_logits, batch_examples, prompts_a, new_questions)
             ]
 
-            # Save answers
+            # Save answers and their probabilities
             for batch_sub_idx in range(this_batch_size):
                 answer_probs[batch_sub_idx].append([round(float(new_answers[batch_sub_idx].answer_probs[VQAResponse(answer_idx)]), 6) for answer_idx in range(2)])
                 answers[batch_sub_idx].append(new_answers[batch_sub_idx].predicted_answer)
@@ -342,6 +372,7 @@ if not is_complete:
                 prompt + f' USER: Q: Based on the above information, is the procedure "{procedure}" 100% finished?'
                 for prompt, procedure in zip(prompts, batch_procedures)
             ]
+            # TODO: should SuccessVQA stepalso incorporate visual filter?
             success_vqa_outputs = run_vqa(
                 vlm, 
                 vlm_processor, 
@@ -530,6 +561,8 @@ if worker_index == 0:
     accuracy_metrics = {}
     for threshold in MISTAKE_DETECTION_THRESHOLDS:
         preds = [1.0 - p >= threshold for p in all_probs]
+        pprint(len(preds), len(all_probs), len(all_labels))
+        assert len(preds) == len(all_probs) == len(all_labels), "Expected same number of preds, probs, and labels."
         this_metrics = mistake_detection_metrics(all_labels, preds)
         accuracy_metrics[threshold] = this_metrics
 
