@@ -11,6 +11,7 @@ import pickle
 from PIL import Image
 from pprint import pprint
 import spacy
+import time
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint
@@ -165,11 +166,12 @@ else:
 
 print(f"({worker_index}) Beginning iterative VQA inference...")
 all_questions = []
+all_frames = []
 all_candidate_questions = []
 all_candidate_questions_scores = []
 all_scores = []
-all_vqa_outputs = []
 all_answers = []
+all_answer_probs = []
 all_success_probs = []
 
 all_example_ids = []
@@ -177,313 +179,396 @@ all_procedures = []
 all_labels = []
 
 cache_path = os.path.join(this_results_dir, f"cached_outputs{worker_index}.pkl")
+is_complete = False
 if os.path.exists(cache_path):
-    all_questions, all_candidate_questions, all_candidate_questions_scores, all_scores, all_vqa_outputs, all_answers, all_success_probs, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
+    is_complete, all_questions, all_frames, all_candidate_questions, all_candidate_questions_scores, all_scores, all_answers, all_answer_probs, all_success_probs, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
 
-for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK_SIZE, 
-                                                                    n_workers=n_workers, 
-                                                                    worker_index=worker_index,
-                                                                    load_frames=False)), 
-                                                desc="running iterative VQA inference"):
+if not is_complete:
+    for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK_SIZE, 
+                                                                        n_workers=n_workers, 
+                                                                        worker_index=worker_index,
+                                                                        load_frames=False)), 
+                                                    desc="running iterative VQA inference"):
 
-    # If already in cache, skip this batch
-    if len(all_questions) > batch_idx:
-        continue    
+        # If already in cache, skip this batch
+        if len(all_questions) > batch_idx:
+            continue    
 
-    # Take first frame (expect there to only be one frame)
-    batch_procedures = [example.procedure_description for example in batch_examples]
-    batch_frames = [Image.open(example.frames[0]) for example in batch_examples]
+        # Take first frame (expect there to only be one frame)
+        batch_procedures = [example.procedure_description for example in batch_examples]
+        batch_frames = [Image.open(example.frames[0]) for example in batch_examples]
 
-    this_batch_size = len(batch_examples)
+        this_batch_size = len(batch_examples)
 
-    # TODO: enable more prompt template types for other VLMs
-    prompts = [
-        f'USER: <image>\nThis is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions about the state of the scene to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.' 
-        for procedure in batch_procedures
-    ]
-    questions = [[] for _ in range(this_batch_size)]
-    candidate_questions = [[] for _ in range(this_batch_size)]
-    candidate_questions_scores = [[] for _ in range(this_batch_size)]
-    scores = [[] for _ in range(this_batch_size)]
-    vqa_outputs = [[] for _ in range(this_batch_size)] 
-    answers = [[] for _ in range(this_batch_size)]
-    success_probs = [[] for _ in range(this_batch_size)]
+        # TODO: enable more prompt template types for other VLMs
+        prompts = [
+            f'USER: <image>\nThis is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions about the state of the scene to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.' 
+            for procedure in batch_procedures
+        ]
+        questions = [[] for _ in range(this_batch_size)]
+        frames = [[] for _ in range(this_batch_size)]
+        candidate_questions = [[] for _ in range(this_batch_size)]
+        candidate_questions_scores = [[] for _ in range(this_batch_size)]
+        scores = [[] for _ in range(this_batch_size)]
+        answer_probs = [[] for _ in range(this_batch_size)] 
+        answers = [[] for _ in range(this_batch_size)]
+        success_probs = [[] for _ in range(this_batch_size)]
 
-    # Iteratively generate questions
-    for question_idx in tqdm(range(args.max_iterations), desc="generating questions"):
+        # Iteratively generate questions
+        for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
 
-        # Generate a question
-        prompts_q = [prompt + " USER: Q: " for prompt in prompts]
-        new_questions, generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
-                                                                        vlm_processor.tokenizer,
-                                                                        [prompt.replace("<image>\n", "") for prompt in prompts_q],
-                                                                        max_new_tokens=20,
-                                                                        batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
-                                                                        generation_kwargs=generation_kwargs)
-                            
-        new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]
-        for batch_sub_idx in range(len(candidate_questions)):
-            candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
+            # Generate a question
+            prompts_q = [prompt + " USER: Q: " for prompt in prompts]
+            new_questions, generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
+                                                                            vlm_processor.tokenizer,
+                                                                            [prompt.replace("<image>\n", "") for prompt in prompts_q],
+                                                                            max_new_tokens=20,
+                                                                            batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
+                                                                            generation_kwargs=generation_kwargs)
+                                
+            new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]
+            for batch_sub_idx in range(len(candidate_questions)):
+                candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
-        # TODO: optionally inject more candidates from original VQG ICL code
+            # TODO: optionally inject more candidates from original VQG ICL code
 
-        if args.question_selection_strategy == "likelihood":
-            # Select most likely question (first one in list)
-            # TODO: need to avoid generating a question we already generated
-            new_questions = [beam_search_questions[0] for beam_search_questions in new_questions]
-            new_scores = [gs[0] for gs in generation_scores]
+            if args.question_selection_strategy == "likelihood":
+                # Select most likely question (first one in list)
+                # TODO: need to avoid generating a question we already generated
+                new_questions = [beam_search_questions[0] for beam_search_questions in new_questions]
+                new_scores = [gs[0] for gs in generation_scores]
 
-        elif args.question_selection_strategy in ["consistency", "verifiability", "coherence"]:
-            # Calculate coherence metrics for each candidate question
-            nli_outputs = question_coherence_metrics(
-                nli_tokenizer, 
-                nli_model,
-                tokenizer,
-                lm,
-                [procedure for procedure, beam_search_questions in zip(batch_procedures, new_questions) for _ in beam_search_questions],
-                [question for beam_search_questions in new_questions for question in beam_search_questions],
-                previous_questions=[batch_idx_questions for batch_idx_questions, beam_search_questions in zip(questions, new_questions) for _ in beam_search_questions],
-                previous_answers=[batch_idx_answers for batch_idx_answers, beam_search_questions in zip(answers, new_questions) for _ in beam_search_questions],
-                rephrase_batch_size=args.generation_batch_size
-            )
+            elif args.question_selection_strategy in ["consistency", "verifiability", "coherence"]:
+                # Calculate coherence metrics for each candidate question
+                nli_outputs = question_coherence_metrics(
+                    nli_tokenizer, 
+                    nli_model,
+                    tokenizer,
+                    lm,
+                    [procedure for procedure, beam_search_questions in zip(batch_procedures, new_questions) for _ in beam_search_questions],
+                    [question for beam_search_questions in new_questions for question in beam_search_questions],
+                    previous_questions=[batch_idx_questions for batch_idx_questions, beam_search_questions in zip(questions, new_questions) for _ in beam_search_questions],
+                    previous_answers=[batch_idx_answers for batch_idx_answers, beam_search_questions in zip(answers, new_questions) for _ in beam_search_questions],
+                    rephrase_batch_size=args.generation_batch_size
+                )
 
-            # Select best candidate based on coherence metrics
-            selected_questions = []
-            new_scores = []
-            parallel_idx = 0
-            for batch_sub_idx, beam_search_questions in enumerate(new_questions):
-                this_nli_outputs = [{k: round(float(nli_outputs[k][i]), 3) for k in nli_outputs} for i in range(parallel_idx, parallel_idx + len(beam_search_questions))]
-                candidate_questions_scores[batch_sub_idx].append(this_nli_outputs)
-                parallel_idx += len(beam_search_questions)
+                # Select best candidate based on coherence metrics
+                selected_questions = []
+                new_scores = []
+                parallel_idx = 0
+                for batch_sub_idx, beam_search_questions in enumerate(new_questions):
+                    this_nli_outputs = [{k: round(float(nli_outputs[k][i]), 3) for k in nli_outputs} for i in range(parallel_idx, parallel_idx + len(beam_search_questions))]
+                    candidate_questions_scores[batch_sub_idx].append(this_nli_outputs)
+                    parallel_idx += len(beam_search_questions)
 
-                # Use marginal relevance (consistency) and/or expected informativeness (verifiability)
-                if args.question_selection_strategy == "consistency":
-                    candidate_scores = np.array(
-                        [candidate_metrics['relevance_marginal'] for candidate_metrics in this_nli_outputs]
-                    )
-                elif args.question_selection_strategy == "verifiability":
-                    candidate_scores = np.array(
-                        [candidate_metrics['informativeness_marginal'] for candidate_metrics in this_nli_outputs]
-                    )
-                elif args.question_selection_strategy == "coherence":
-                    candidate_scores = np.array(
-                        [candidate_metrics['relevance_marginal'] * candidate_metrics['informativeness_marginal'] for candidate_metrics in this_nli_outputs]
-                    )
+                    # Use marginal relevance (consistency) and/or expected informativeness (verifiability)
+                    if args.question_selection_strategy == "consistency":
+                        candidate_scores = np.array(
+                            [candidate_metrics['relevance_marginal'] for candidate_metrics in this_nli_outputs]
+                        )
+                    elif args.question_selection_strategy == "verifiability":
+                        candidate_scores = np.array(
+                            [candidate_metrics['informativeness_marginal'] for candidate_metrics in this_nli_outputs]
+                        )
+                    elif args.question_selection_strategy == "coherence":
+                        candidate_scores = np.array(
+                            [candidate_metrics['relevance_marginal'] * candidate_metrics['informativeness_marginal'] for candidate_metrics in this_nli_outputs]
+                        )
 
-                best_candidate = np.argmax(candidate_scores)
-                selected_questions.append(beam_search_questions[best_candidate])
-                new_scores.append(round(float(candidate_scores[best_candidate]), 6))
-            
-            new_questions = selected_questions
+                    best_candidate = np.argmax(candidate_scores)
+                    selected_questions.append(beam_search_questions[best_candidate])
+                    new_scores.append(round(float(candidate_scores[best_candidate]), 6))
                 
-        # Save scores for best questions
-        for batch_sub_idx in range(this_batch_size):
-            scores[batch_sub_idx].append(new_scores[batch_sub_idx])
+                new_questions = selected_questions
+                    
+            # Save scores for best questions
+            for batch_sub_idx in range(this_batch_size):
+                scores[batch_sub_idx].append(new_scores[batch_sub_idx])
 
-        # Save generated questions
-        for batch_sub_idx in range(this_batch_size):
-            questions[batch_sub_idx].append(new_questions[batch_sub_idx])
+            # Save generated questions
+            for batch_sub_idx in range(this_batch_size):
+                questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
-        # TODO: apply visual filter and add logic to save frames for each example
+            # TODO: apply visual filter and add logic to save frames for each example
 
-        # Predict an answer (yes/no)
-        prompts_a = [prompt + f'{question} ASSISTANT: A (yes/no): ' for prompt, question in zip(prompts_q, new_questions)]
-        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
-        new_answers = [
-            VQAOutputs(
-                task_name=MistakeDetectionTasks(args.task),
-                example_id=example.example_id,
-                procedure_id=example.procedure_id,
-                frame=example.frames[0],
-                prompt=prompt,
-                expected_answer=None,
-                response_token_ids=response_token_ids,
-                logits=logits,
-                question=question,
-            ) for logits, example, prompt, question in zip(new_answers_logits, batch_examples, prompts_a, new_questions)
-        ]
+            # Save frames
+            if args.visual_filter_mode is None or not args.cache_vqa_frames:
+                for batch_sub_idx in range(this_batch_size):
+                    frames[batch_sub_idx].append(batch_examples[batch_sub_idx].frames[0])
 
-        # Save answers
-        for batch_sub_idx in range(this_batch_size):
-            vqa_outputs[batch_sub_idx].append(new_answers[batch_sub_idx])
-            answers[batch_sub_idx].append(new_answers[batch_sub_idx].predicted_answer)
+            # Predict an answer (yes/no)
+            prompts_a = [prompt + f'{question} ASSISTANT: A (yes/no): ' for prompt, question in zip(prompts_q, new_questions)]
+            new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
+            new_answers = [
+                VQAOutputs(
+                    task_name=MistakeDetectionTasks(args.task),
+                    example_id=example.example_id,
+                    procedure_id=example.procedure_id,
+                    frame=example.frames[0],
+                    prompt=prompt,
+                    expected_answer=None,
+                    response_token_ids=response_token_ids,
+                    logits=logits,
+                    question=question,
+                ) for logits, example, prompt, question in zip(new_answers_logits, batch_examples, prompts_a, new_questions)
+            ]
 
-        # Update prompts with answers
-        prompts = [prompt + output.predicted_answer.name for prompt, output in zip(prompts_a, new_answers)]
+            # Save answers
+            for batch_sub_idx in range(this_batch_size):
+                answer_probs[batch_sub_idx].append([round(float(new_answers[batch_sub_idx].answer_probs[VQAResponse(answer_idx)]), 6) for answer_idx in range(2)])
+                answers[batch_sub_idx].append(new_answers[batch_sub_idx].predicted_answer)
 
-        # Ask VLM probability of success
-        prompt_success = [
-            prompt + f' USER: Q: Based on the above information, is the procedure "{procedure}" 100% finished?'
-            for prompt, procedure in zip(prompts, batch_procedures)
-        ]
-        success_vqa_outputs = run_vqa(
-            vlm, 
-            vlm_processor, 
-            prompt_success, 
-            batch_frames, 
-            batch_size=args.vqa_batch_size
-        )
-        success_vqa_outputs = [
-            VQAOutputs(
-                task_name=MistakeDetectionTasks(args.task),
-                example_id=example.example_id,
-                procedure_id=example.procedure_id,
-                frame=example.frames[0],
-                prompt=prompt,
-                expected_answer=None,
-                response_token_ids=response_token_ids,
-                logits=logits,
-                question=question,
-            ) for logits, example, prompt, question in zip(success_vqa_outputs, batch_examples, prompts_a, new_questions)
-        ]
+            # Update prompts with answers
+            prompts = [prompt + output.predicted_answer.name for prompt, output in zip(prompts_a, new_answers)]
 
-        # Save success probability for this turn
-        for batch_sub_idx in range(this_batch_size):
-            success_probs[batch_sub_idx].append(
-                round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
+            # Ask VLM probability of success
+            prompt_success = [
+                prompt + f' USER: Q: Based on the above information, is the procedure "{procedure}" 100% finished?'
+                for prompt, procedure in zip(prompts, batch_procedures)
+            ]
+            success_vqa_outputs = run_vqa(
+                vlm, 
+                vlm_processor, 
+                prompt_success, 
+                batch_frames, 
+                batch_size=args.vqa_batch_size
             )
+            success_vqa_outputs = [
+                VQAOutputs(
+                    task_name=MistakeDetectionTasks(args.task),
+                    example_id=example.example_id,
+                    procedure_id=example.procedure_id,
+                    frame=example.frames[0],
+                    prompt=prompt,
+                    expected_answer=None,
+                    response_token_ids=response_token_ids,
+                    logits=logits,
+                    question=question,
+                ) for logits, example, prompt, question in zip(success_vqa_outputs, batch_examples, prompts_a, new_questions)
+            ]
 
-    # Update global lists of tracked outputs
-    all_questions += questions
-    all_candidate_questions += candidate_questions
-    all_candidate_questions_scores += candidate_questions_scores
-    all_scores += scores
-    all_vqa_outputs += vqa_outputs
-    all_answers += answers
-    all_success_probs += success_probs
+            # Save success probability for this turn
+            for batch_sub_idx in range(this_batch_size):
+                success_probs[batch_sub_idx].append(
+                    round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
+                )
 
-    all_example_ids += [example.example_id for example in batch_examples]
-    all_procedures += [example.procedure_description for example in batch_examples]
-    all_labels += [example.mistake for example in batch_examples]
+            # Clear out VQA outputs now because they occupy a lot of memory
+            del new_answers
+            del success_vqa_outputs
 
-    # And cache tracked outputs
-    pickle.dump((    
-        all_questions, 
-        all_candidate_questions, 
-        all_candidate_questions_scores, 
-        all_scores, 
-        all_vqa_outputs, 
-        all_answers, 
-        all_success_probs,
-        all_example_ids,
-        all_procedures,
-        all_labels,
-    ), open(cache_path, "wb"))
+        # Update global lists of tracked outputs
+        all_questions += questions
+        all_frames += frames
+        all_candidate_questions += candidate_questions
+        all_candidate_questions_scores += candidate_questions_scores
+        all_scores += scores
+        all_answers += answers
+        all_answer_probs += answer_probs
+        all_success_probs += success_probs
+        all_example_ids += [example.example_id for example in batch_examples]
+        all_procedures += [example.procedure_description for example in batch_examples]
+        all_labels += [example.mistake for example in batch_examples]
 
-# TODO: update to make work with multiple GPUs
+        for frame in batch_frames:
+            frame.close()
+        del batch_frames
 
-print(f"({worker_index}) Gathering results...")
+        # And cache tracked outputs
+        pickle.dump((    
+            False,
+            all_questions, 
+            all_frames,
+            all_candidate_questions, 
+            all_candidate_questions_scores, 
+            all_scores, 
+            all_answers, 
+            all_answer_probs, 
+            all_success_probs,
+            all_example_ids,
+            all_procedures,
+            all_labels,
+        ), open(cache_path, "wb"))
 
-all_results_dicts = {}
-all_probs = []
-for questions, candidate_questions, candidate_questions_scores, scores, vqa_outputs, answers, success_probs, example_id, procedure, label \
-    in tqdm(zip(all_questions,
-                all_candidate_questions,
-                all_candidate_questions_scores,
-                all_scores,
-                all_vqa_outputs,
-                all_answers,
-                all_success_probs,
-                all_example_ids,
-                all_procedures,
-                all_labels), desc="evaluating"):
-    
-    final_success_prob = None
-    for success_prob_idx, success_prob in enumerate(success_probs):
-        # Early stopping mechanism: 
-        # if success score doesn't change enough over 3 turns, stop incorporating questions
-        # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
-        final_success_prob = success_prob
-        if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
-            score_change = 0.0
-            for i in range(success_prob_idx - 2, success_prob_idx):
-                score_change += scores[i+1] - scores[i]
-            if score_change < args.early_stop_delta:
-                break
-    all_probs.append(round(final_success_prob, 6))   
+# Cache one more time to indicate the generation is finished
+pickle.dump((    
+    True,
+    all_questions, 
+    all_frames,
+    all_candidate_questions, 
+    all_candidate_questions_scores, 
+    all_scores, 
+    all_answers, 
+    all_answer_probs, 
+    all_success_probs,
+    all_example_ids,
+    all_procedures,
+    all_labels,
+), open(cache_path, "wb"))
 
-    results_dict = {
-        "procedure": procedure,
-        "mistake": label,
-        "questions": questions,
-        "answers": [a.value for a in answers],
-        "answer_probs": [[float(output.answer_probs[VQAResponse(a)]) for a in range(2)] for output in vqa_outputs],
-        "frame": [output.frame for output in vqa_outputs][0],
-        "scores": scores,
-        "success_probs": success_probs,
-        "final_turn": success_prob_idx,
-        "final_success_prob": final_success_prob,
-        "candidate_questions": candidate_questions,
-        "candidate_questions_scores": candidate_questions_scores,
+print(f"({worker_index}) Done running iterative VQA inference!")
+
+
+# Gather up results across processes and evaluate
+if worker_index == 0:
+    print(f"({worker_index}) Gathering all results...")
+    for other_worker_index in range(1, n_workers):
+        print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
+        delay_per_try = 10
+        delay_so_far = 0
+        max_delay = 1800
+        while True:
+            other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
+            if os.path.exists(other_cache_path):
+                is_complete, \
+                other_questions, \
+                other_frames, \
+                other_candidate_questions, \
+                other_candidate_questions_scores, \
+                other_scores, \
+                other_answers, \
+                other_answer_probs, \
+                other_success_probs, \
+                other_example_ids, \
+                other_procedures, \
+                other_labels = pickle.load(open(other_cache_path, "rb"))
+                if is_complete:
+                    # Add other process results to our results
+                    all_questions += other_questions
+                    all_frames += other_frames
+                    all_candidate_questions += other_candidate_questions
+                    all_candidate_questions_scores += other_candidate_questions_scores
+                    all_scores += other_scores
+                    all_answers += other_answers
+                    all_answer_probs += other_answer_probs
+                    all_success_probs += other_success_probs
+                    all_example_ids += other_example_ids
+                    all_procedures += other_procedures
+                    all_labels += other_labels
+                    print(f"({worker_index}) Collected results from worker {other_worker_index}.")
+                    break
+
+            # Decide whether to try again
+            if delay_so_far >= max_delay:
+                raise TimeoutError(f"Waited for {max_delay} seconds for results from worker {other_worker_index}. Process may have failed.")
+            print(f"({worker_index}) Still waiting for results from worker {other_worker_index} ({delay_so_far} sec.)!")
+            time.sleep(delay_per_try)
+            delay_so_far += delay_per_try
+
+    all_results_dicts = {}
+    all_probs = []
+    for questions, frames, candidate_questions, candidate_questions_scores, scores, answers, answer_probs, success_probs, example_id, procedure, label \
+        in tqdm(zip(all_questions,
+                    all_frames,
+                    all_candidate_questions,
+                    all_candidate_questions_scores,
+                    all_scores,
+                    all_answers,
+                    all_answer_probs,
+                    all_success_probs,
+                    all_example_ids,
+                    all_procedures,
+                    all_labels), desc="evaluating"):
+        
+        final_success_prob = None
+        for success_prob_idx, success_prob in enumerate(success_probs):
+            # Early stopping mechanism: 
+            # if success score doesn't change enough over 3 turns, stop incorporating questions
+            # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
+            final_success_prob = success_prob
+            if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
+                score_change = 0.0
+                for i in range(success_prob_idx - 2, success_prob_idx):
+                    score_change += scores[i+1] - scores[i]
+                if score_change < args.early_stop_delta:
+                    break
+        all_probs.append(round(final_success_prob, 6))   
+
+        results_dict = {
+            "procedure": procedure,
+            "mistake": label,
+            "questions": questions,
+            "frame_paths": frames,
+            "answers": [a.value for a in answers],
+            "answer_probs": answer_probs,
+            "scores": scores,
+            "success_probs": success_probs,
+            "final_turn": success_prob_idx,
+            "final_success_prob": final_success_prob,
+            "candidate_questions": candidate_questions,
+            "candidate_questions_scores": candidate_questions_scores,
+        }
+        all_results_dicts[example_id] = results_dict
+
+    json.dump(all_results_dicts, 
+            open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
+            indent=4)
+
+
+    print(f"({worker_index}) Evaluating outputs...")
+    metrics = {}
+
+    # Calculate accuracy metrics
+    best_metrics = None
+    best_threshold = None
+    accuracy_metrics = {}
+    for threshold in MISTAKE_DETECTION_THRESHOLDS:
+        preds = [1.0 - p >= threshold for p in all_probs]
+        this_metrics = mistake_detection_metrics(all_labels, preds)
+        accuracy_metrics[threshold] = this_metrics
+
+        if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
+            best_metrics = this_metrics
+            best_threshold = threshold
+
+    accuracy_metrics['best_metrics'] = best_metrics
+    accuracy_metrics['best_threshold'] = best_threshold
+
+    json.dump(accuracy_metrics, 
+            open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
+            indent=4)
+
+    # Generate DET curve
+    generate_det_curve(accuracy_metrics, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
+
+    # Calculate coherence metrics of final rollouts
+    all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
+    all_previous_questions = [results_dict['questions'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+
+    all_predicted_answers = [VQAResponse(answer).name for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
+    all_previous_answers = [results_dict['answers'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+
+    all_metrics = question_coherence_metrics(nli_tokenizer,
+                                            nli_model,
+                                            tokenizer,
+                                            lm,                                         
+                                            [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
+                                            all_chosen_questions,
+                                            all_predicted_answers,
+                                            previous_questions=all_previous_questions,
+                                            previous_answers=all_previous_answers,
+                                            rephrase_batch_size=args.generation_batch_size)
+
+    parallel_idx = 0
+    coherence_metrics_by_example = defaultdict(list)
+    coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal']
+    for results_dict in all_results_dicts.values():
+        for k in coherence_metric_names:
+            if k in all_metrics:
+                this_metrics = []
+                for question_idx in range(results_dict['final_turn'] + 1):
+                    this_metrics.append(all_metrics[k][parallel_idx])
+                coherence_metrics_by_example[k].append(round(float(np.mean(this_metrics)), 6))
+        parallel_idx += 1
+
+    coherence_metrics = {
+        k: round(float(np.mean(coherence_metrics_by_example[k])), 6) for k in coherence_metric_names if k in coherence_metrics_by_example
+    } | {
+        "metrics_by_example": coherence_metrics_by_example,
     }
-    all_results_dicts[example_id] = results_dict
+    json.dump(coherence_metrics, 
+            open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "w"),
+            indent=4)
 
-json.dump(all_results_dicts, 
-          open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
-          indent=4)
-
-
-print(f"({worker_index}) Evaluating outputs...")
-metrics = {}
-
-# Calculate accuracy metrics
-best_metrics = None
-best_threshold = None
-accuracy_metrics = {}
-for threshold in MISTAKE_DETECTION_THRESHOLDS:
-    preds = [1.0 - p >= threshold for p in all_probs]
-    this_metrics = mistake_detection_metrics(all_labels, preds)
-    accuracy_metrics[threshold] = this_metrics
-
-    if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
-        best_metrics = this_metrics
-        best_threshold = threshold
-
-accuracy_metrics['best_metrics'] = best_metrics
-accuracy_metrics['best_threshold'] = best_threshold
-
-json.dump(accuracy_metrics, 
-          open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
-          indent=4)
-
-# Generate DET curve
-generate_det_curve(accuracy_metrics, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
-
-# Calculate coherence metrics of final rollouts
-all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
-all_previous_questions = [results_dict['questions'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
-
-all_predicted_answers = [VQAResponse(answer).name for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
-all_previous_answers = [results_dict['answers'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
-
-all_metrics = question_coherence_metrics(nli_tokenizer,
-                                         nli_model,
-                                         tokenizer,
-                                         lm,                                         
-                                         [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
-                                         all_chosen_questions,
-                                         all_predicted_answers,
-                                         previous_questions=all_previous_questions,
-                                         previous_answers=all_previous_answers,
-                                         rephrase_batch_size=args.generation_batch_size)
-
-parallel_idx = 0
-coherence_metrics_by_example = defaultdict(list)
-coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal']
-for results_dict in all_results_dicts.values():
-    for k in coherence_metric_names:
-        if k in all_metrics:
-            this_metrics = []
-            for question_idx in range(results_dict['final_turn'] + 1):
-                this_metrics.append(all_metrics[k][parallel_idx])
-            coherence_metrics_by_example[k].append(round(float(np.mean(this_metrics)), 6))
-    parallel_idx += 1
-
-coherence_metrics = {
-    k: round(float(np.mean(coherence_metrics_by_example[k])), 6) for k in coherence_metric_names if k in coherence_metrics_by_example
-} | {
-    "metrics_by_example": coherence_metrics_by_example,
-}
-json.dump(coherence_metrics, 
-          open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "w"),
-          indent=4)
+    
+    print(f"({worker_index}) Done!")
