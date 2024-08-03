@@ -22,6 +22,7 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
+from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, ImageMaskTypes
 from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve
@@ -35,6 +36,7 @@ parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", 
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
+parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "consistency", "verifiability", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
@@ -70,6 +72,8 @@ if args.resume_dir is None:
         task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
     this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}"
+    if args.n_icl_demonstrations > 0:
+        this_results_dir += f"_icl{args.n_icl_demonstrations}"
     this_results_dir += f"_{args.question_selection_strategy}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
@@ -110,14 +114,14 @@ if args.visual_filter_mode is not None:
     elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_Blur:
         visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Blur, device=f"cuda:{worker_index}")
         nlp = spacy.load('en_core_web_lg')            
-    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
+    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
         visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')
-    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
+    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
         visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')            
     else:
-        raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with SuccessVQA!")
+        raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with iterative VQA!")
     # TODO: add AGLA as an option here?
 
 # Shared generation kwargs
@@ -231,12 +235,31 @@ if not is_complete:
                                                                             batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                                             generation_kwargs=generation_kwargs)
                                 
+
+            # Optionally inject more candidates from original VQG ICL code
+            if args.n_icl_demonstrations > 0:
+                icl_prompts = [generate_vqg_prompt_icl(procedure, args.n_icl_demonstrations, include_answers=False) for procedure in batch_procedures] # Create ICL prompt
+                icl_prompts = [
+                    prompt + '\n'.join([str(pqi+1) + ' ' + pq for pqi, pq in enumerate(previous_questions[-2:])]) + "\n" if len(previous_questions) > 0 else "" + f"{len(previous_questions) + 1}. " 
+                    for prompt, previous_questions in zip(icl_prompts, questions)
+                ] # Add some previous questions if possible (take last 2 that were asked)
+
+                pprint(icl_prompts[0])
+                icl_new_questions, icl_generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
+                                                                                        vlm_processor.tokenizer,
+                                                                                        icl_prompts,
+                                                                                        max_new_tokens=20,
+                                                                                        batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1),
+                                                                                        generation_kwargs=generation_kwargs)
+                new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in icl_new_questions]    
+                for batch_sub_idx in range(this_batch_size):
+                    new_questions[batch_sub_idx] += icl_new_questions[batch_sub_idx]
+                    generation_scores[batch_sub_idx] += icl_generation_scores[batch_sub_idx]
+
             # Save all candidates from beam search
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]
             for batch_sub_idx in range(len(candidate_questions)):
                 candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
-
-            # TODO: optionally inject more candidates from original VQG ICL code
 
             # Select best candidate question from pool
             if args.question_selection_strategy == "likelihood":

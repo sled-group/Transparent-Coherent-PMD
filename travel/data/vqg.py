@@ -66,10 +66,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=540088,
         procedure_description="Soak the sponge in a soapy water with your hands",
         questions=[
-            "Is the sponge in the water?",
+            "Is there a sponge?",
+            "Is the sponge in water?",
             "Is the water soapy?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
@@ -78,10 +80,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=600088,
         procedure_description="Open the bottle",
         questions=[
+            "Is there a bottle in the image?",
             "Is the bottle open?",
             "Does the bottle have a lid on it?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "No"
         ]
@@ -90,10 +94,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=107275,
         procedure_description="Take the baking tray away from the table",
         questions=[
+            "Can you see a baking tray?",
             "Is the baking tray on the table?",
             "Is the baking tray somewhere not on the table?",
         ],
         answers_str=[
+            "Yes",
             "No",
             "Yes"
         ]
@@ -102,10 +108,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=357010,
         procedure_description="Turn on a torch light",
         questions=[
+            "Is there a torch light in the photo?",
             "Is the torch light powered on?",
             "Is the torch light lit up?"
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
@@ -114,10 +122,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=426130,
         procedure_description="Fold the right edge of the wrapper",
         questions=[
+            "Is there a wrapper in the image?",
             "Is the wrapper completely flat?",
             "Is the right edge of the wrapper folded?",
         ],
         answers_str=[
+            "Yes",
             "No",
             "Yes"
         ]
@@ -126,10 +136,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=730006,
         procedure_description="Pour the water into the blue container",
         questions=[
+            "Do you see a blue container anywhere?",
             "Is there water in the blue container?",
             "Is the blue container empty?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "No"
         ]
@@ -138,10 +150,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=83057,
         procedure_description="Paint the patio with the paint brush",
         questions=[
+            "Is this a photo of a patio?",
             "Is the patio painted?",
             "Is someone holding a paint brush?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
@@ -150,10 +164,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=412036,
         procedure_description="Spread the black peas on the salad with the spoon in your hand",
         questions=[
-            "Are the black peas on the salad?",
+            "Is there a salad?",
+            "Are there black peas on the salad?",
             "Is there a spoon in someone's hand?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
@@ -162,10 +178,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=80062,
         procedure_description="Scoop paint from the pallet on the table with the paint brush",
         questions=[
+            "Do you see a paint brush and a paint palette?",
             "Is there paint on the paint brush?",
             "Is the paint brush in someone's hand?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
@@ -174,10 +192,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=540138,
         procedure_description="Wash the car with a sponge in your hand",
         questions=[
+            "Do you see a car?",
             "Is the car clean?",
             "Is the sponge being held?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
@@ -186,10 +206,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=599053,
         procedure_description="Pick the scrubber from the sink",
         questions=[
+            "Do you see a scrubber somewhere?",
             "Is the scrubber in the sink?",
             "Is the scrubber in someone's hand?",
         ],
         answers_str=[
+            "Yes",
             "No",
             "Yes"
         ]
@@ -198,10 +220,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=404040,
         procedure_description="Peel the onion",
         questions=[
+            "Is there an onion in the image?",
             "Is the onion's skin removed?",
             "Is the onion peeled?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
@@ -210,10 +234,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=496081,
         procedure_description="Put the dirt in the dust bin",
         questions=[
+            "Is there a dust bin?",
             "Is there dirt in the dust bin?",
             "Is there any dirt that is not in the dust bin?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "No"
         ]
@@ -222,10 +248,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=581090,
         procedure_description="Cut dough into two",
         questions=[
+            "Do you see any dough?",
             "Is the dough in two pieces?",
             "Is the dough whole?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "No"
         ]
@@ -234,34 +262,26 @@ VQG_DEMONSTRATIONS = [
         procedure_id=513269,
         procedure_description="Break the walnut with the nutcracker in your hand",
         questions=[
-            "Is there a cracked nut?",
-            "Is the nut cracker being held in someone's hand?",
+            "Do you see a walnut?",
+            "Is the walnut cracked?",
+            "Is there a nut cracker in someone's hand?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
     ),   
-    # VQGOutputs(
-    #     procedure_id=168002,
-    #     procedure_description="Drop the brush in your hand on the oven",
-    #     questions=[
-    #         "Is the brush on the oven?",
-    #         "Is the brush in a hand?"
-    #     ],
-    #     answers_str=[
-    #         "Yes",
-    #         "No"
-    #     ]
-    # ),
     VQGOutputs(
         procedure_id=188064,
         procedure_description="Turn off the tap",
         questions=[
+            "Is there a tap in the photo?",
             "Is the water running?",
             "Is the faucet switched off?",
         ],
         answers_str=[
+            "Yes",
             "No",
             "Yes"
         ]
@@ -270,10 +290,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=523017,
         procedure_description="Heat the edge of the bag with the lighter",
         questions=[
+            "Do you see a bag and a lighter?",
             "Is there a flame coming from the lighter?",
             "Is the lighter near the bag?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
@@ -282,10 +304,12 @@ VQG_DEMONSTRATIONS = [
         procedure_id=321040,
         procedure_description="Close the fridge",
         questions=[
+            "Is there a fridge?",
             "Is the fridge open?",
             "Can you see inside the fridge?",
         ],
         answers_str=[
+            "Yes",
             "No",
             "No"
         ]
@@ -294,26 +318,42 @@ VQG_DEMONSTRATIONS = [
         procedure_id=25084,
         procedure_description="Chop green beans with a knife on the chopping board",
         questions=[
-            "Are the green beans on the cutting board sliced?",
+            "Do you see green beams on a cutting board?",
+            "Are the green beans sliced?",
             "Is someone using a knife?",
         ],
         answers_str=[
+            "Yes",
             "Yes",
             "Yes"
         ]
     ),       
     VQGOutputs(
-        procedure_id=349047,
-        procedure_description="Arrange the dumplings on the tray",
+        procedure_id=168002,
+        procedure_description="Drop the brush in your hand on the oven",
         questions=[
-            "Are there dumplings on the tray?",
-            "Are there any dumplings that are not on the tray?",
+            "Is there a brush in the scene?",
+            "Is there an oven?",
+            "Is the brush on the oven?",
         ],
         answers_str=[
             "Yes",
-            "No"
+            "Yes",
+            "Yes"
         ]
     ),
+    # VQGOutputs(
+    #     procedure_id=349047,
+    #     procedure_description="Arrange the dumplings on the tray",
+    #     questions=[
+    #         "Are there dumplings on the tray?",
+    #         "Are there any dumplings that are not on the tray?",
+    #     ],
+    #     answers_str=[
+    #         "Yes",
+    #         "No"
+    #     ]
+    # ),
 ]
 
 VQG_DEMONSTRATIONS_OLD = [
@@ -413,7 +453,7 @@ def generate_vqg_prompt(instruction_step: str) -> str:
     return VQG_PROMPT_TEMPLATE.format(instruction_step=instruction_step,
                                       n_questions=str(N_GENERATED_QUESTIONS))
 
-def generate_vqg_example(vqg_output: VQGOutputs) -> str:
+def generate_vqg_example(vqg_output: VQGOutputs, include_answer: bool=True) -> str:
     """
     Returns a full VQG prompt example for in-context learning.
 
@@ -425,8 +465,8 @@ def generate_vqg_example(vqg_output: VQGOutputs) -> str:
                                        question_list="\n".join([VQG_QUESTION_TEMPLATE.format(
                                             question_number=question_idx + 1,
                                             question=question,
-                                            answer=answer.name
-                                       ) for question_idx, (question, answer) in enumerate(zip(vqg_output.questions, vqg_output.answers))]))
+                                            answer=answer.name if include_answer else ""
+                                       ).strip() for question_idx, (question, answer) in enumerate(zip(vqg_output.questions, vqg_output.answers))]))
 
 def save_vqg_inputs(inputs: list[VQGInputs], path: str):
     """
@@ -450,7 +490,7 @@ def load_vqg_inputs(path: str) -> list[VQGInputs]:
     """
     return [VQGInputs.from_dict(inp) for inp in json.load(open(path, "r"))]
 
-def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3) -> str:
+def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3, include_answers: bool=True) -> str:
     """
     Returns a prompt for VQG including in-context demonstrations.
 
@@ -462,7 +502,7 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3)
     demonstrations = VQG_DEMONSTRATIONS
     random.shuffle(demonstrations) # Shuffle demonstrations for each prompt to ensure the ordering is not sub-optimal
     demonstrations = demonstrations[:n_demonstrations] # We'll randomly select n_demonstrations of the available demonstrations
-    examples = [generate_vqg_example(demo) for demo in demonstrations]
+    examples = [generate_vqg_example(demo, include_answer=include_answers) for demo in demonstrations]
     examples += [generate_vqg_prompt(procedure_description)]
     return "\n\n".join(examples)
 
