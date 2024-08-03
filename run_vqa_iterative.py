@@ -23,7 +23,7 @@ from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
 from travel.data.vqg import generate_vqg_prompt_icl
-from travel.model import simple_lm_prompt_beam_search
+from travel.model import simple_lm_prompt_beam_search, compute_log_likelihood
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, ImageMaskTypes
 from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
@@ -104,6 +104,7 @@ response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 # We'll use VLM's LM directly to generate questions
 lm = vlm.language_model
 tokenizer = vlm_processor.tokenizer
+tokenizer.pad_token_id = tokenizer.eos_token_id
 
 # Set up visual filter if needed
 visual_filter = None
@@ -243,12 +244,20 @@ if not is_complete:
                     prompt + '\n'.join([str(pqi+1) + ' ' + pq for pqi, pq in enumerate(previous_questions[-2:])]) + ("\n" if len(previous_questions) > 0 else "") + f"{len(previous_questions) + 1}. " 
                     for prompt, previous_questions in zip(icl_prompts, questions)
                 ] # Add some previous questions if possible (take last 2 that were asked)
-                icl_new_questions, icl_generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
-                                                                                        vlm_processor.tokenizer,
-                                                                                        icl_prompts,
-                                                                                        max_new_tokens=20,
-                                                                                        batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1),
-                                                                                        generation_kwargs=generation_kwargs)
+                icl_new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
+                                                                    vlm_processor.tokenizer,
+                                                                    icl_prompts,
+                                                                    max_new_tokens=20,
+                                                                    batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1),
+                                                                    generation_kwargs=generation_kwargs)
+                # TODO: below is inefficient and doesn't incorporate padding that would have been added to prompts (but still gets scores close enough to original)
+                # Calculate likelihood of these questions in iterative VQA context (only if we'll need it)
+                if args.question_selection_strategy == "likelihood":
+                    icl_generation_scores = [compute_log_likelihood(lm, tokenizer, prompt, question) for prompt, beam_search_questions in zip(icl_prompts, icl_new_questions) for question in beam_search_questions]
+                    icl_generation_scores = [icl_generation_scores[i * len(icl_new_questions[0]):(i+1) * len(icl_new_questions[0])] for i in range(len(icl_new_questions))]
+                else:
+                    icl_generation_scores = [None for _ in icl_new_questions]
+
                 new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in icl_new_questions]    
                 for batch_sub_idx in range(this_batch_size):
                     new_questions[batch_sub_idx] += icl_new_questions[batch_sub_idx]

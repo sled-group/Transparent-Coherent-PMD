@@ -1,5 +1,6 @@
 import numpy as np
 from pprint import pprint
+import torch
 from tqdm import tqdm
 
 def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batch_size=20, generation_kwargs={}):
@@ -22,10 +23,11 @@ def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batc
         inputs = tokenizer(text=batch_prompts, padding=True, return_tensors="pt")
         inputs = inputs.to(lm.device)
 
-        outputs = lm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
+        with torch.no_grad():
+            outputs = lm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
 
         scores = lm.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices).cpu().numpy()
-        all_scores += [round(float(np.exp2(np.mean(s))), 6) for s in scores] # Save sequence probability
+        all_scores += [round(float(np.sum(s)), 6) for s in scores] # Save sequence probability
         outputs = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
         
         all_outputs += [output.replace(batch_prompts[output_idx // num_seq], "") for output_idx, output in enumerate(outputs)]
@@ -82,3 +84,33 @@ def simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=20, g
 #         raise NotImplementedError(f"simple_prompt doesn't support VLM type {type(vlm)}!")
     
 #     return outputs
+
+def compute_log_likelihood(model, tokenizer, prompt, completion):
+    # Combine prompt and completion with a space in between
+    full_input_text = prompt + " " + completion
+    full_input = tokenizer(full_input_text, return_tensors='pt', add_special_tokens=True).to(model.device)
+    
+    # Get the logits from the model
+    with torch.no_grad():
+        outputs = model(**full_input)
+
+    logits = outputs.logits
+
+    # Shift logits and labels for log-likelihood calculation
+    shifted_logits = logits[:, :-1, :].contiguous()
+    shifted_labels = full_input.input_ids[:, 1:].contiguous()
+
+    # Compute log softmax
+    log_probs = torch.nn.functional.log_softmax(shifted_logits, dim=-1)
+    
+    # Gather the log probabilities of the correct tokens
+    log_likelihood = log_probs.gather(dim=-1, index=shifted_labels.unsqueeze(-1)).squeeze(-1)
+    
+    # Only consider the log likelihood of the completion part
+    completion_len = len(tokenizer(completion, add_special_tokens=False)['input_ids'])
+    log_likelihood = log_likelihood[:, -completion_len:]
+
+    # Sum the log likelihood for the completion tokens
+    total_log_likelihood = round(float(log_likelihood.sum().item()), 6)
+
+    return total_log_likelihood
