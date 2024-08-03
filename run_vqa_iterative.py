@@ -217,7 +217,7 @@ if not is_complete:
         # Iteratively generate questions
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
 
-            # Generate a question
+            # Generate a question (with beam search so we have several candidates)
             prompts_q = [prompt + " USER: Q: " for prompt in prompts]
             new_questions, generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
                                                                             vlm_processor.tokenizer,
@@ -226,17 +226,33 @@ if not is_complete:
                                                                             batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                                             generation_kwargs=generation_kwargs)
                                 
+            # Save all candidates from beam search
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]
             for batch_sub_idx in range(len(candidate_questions)):
                 candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
             # TODO: optionally inject more candidates from original VQG ICL code
 
+            # Select best candidate question from pool
             if args.question_selection_strategy == "likelihood":
                 # Select most likely question (first one in list)
-                # TODO: need to avoid generating a question we already generated
-                new_questions = [beam_search_questions[0] for beam_search_questions in new_questions]
-                new_scores = [gs[0] for gs in generation_scores]
+                selected_questions = []
+                new_scores = []
+                for batch_sub_idx, (beam_search_questions, beam_search_scores) in enumerate(zip(new_questions, generation_scores)):
+                    assert len(beam_search_questions) == len(beam_search_scores), "Expected candidate questions and their scores to have the same shape!"
+
+                    # First make sure we don't sample an already asked question (if possible)
+                    candidate_idxs = [i for i in range(len(beam_search_questions)) if beam_search_questions[i] not in questions[batch_sub_idx]]
+                    if len(candidate_idxs) == 0:
+                        candidate_idxs = list(range(len(beam_search_questions)))
+                        print("Warning: Generating a redundant question!")
+
+                    # Then pick candidate with highest score
+                    best_candidate = max(candidate_idxs, key=lambda x: beam_search_scores[x] == max(beam_search_scores))
+                    selected_questions.append(beam_search_questions[best_candidate])
+                    new_scores.append(beam_search_scores[best_candidate])
+
+                new_questions = selected_questions
 
             elif args.question_selection_strategy in ["consistency", "verifiability", "coherence"]:
                 # Calculate coherence metrics for each candidate question
