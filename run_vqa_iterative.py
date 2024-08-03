@@ -242,10 +242,13 @@ if not is_complete:
                 # Select most likely question (first one in list)
                 selected_questions = []
                 new_scores = []
-                for batch_sub_idx, (beam_search_questions, beam_search_scores) in enumerate(zip(new_questions, generation_scores)):
+                for batch_sub_idx, (beam_search_questions, beam_search_scores) in enumerate(zip(new_questions, generation_scores)):                    
                     assert len(beam_search_questions) == len(beam_search_scores), "Expected candidate questions and their scores to have the same shape!"
 
-                    # First make sure we don't sample an already asked question (if possible)
+                    # Save all candidate scores
+                    candidate_questions_scores[batch_sub_idx].append(beam_search_scores)
+
+                    # Make sure we don't sample an already asked question (if possible)
                     candidate_idxs = [i for i in range(len(beam_search_questions)) if beam_search_questions[i] not in questions[batch_sub_idx]]
                     if len(candidate_idxs) == 0:
                         candidate_idxs = list(range(len(beam_search_questions)))
@@ -502,6 +505,7 @@ if worker_index == 0:
             time.sleep(delay_per_try)
             delay_so_far += delay_per_try
 
+    # Collect key information from results rollouts and final success probabilities
     all_results_dicts = {}
     all_probs = []
     for questions, frames, candidate_questions, candidate_questions_scores, scores, answers, answer_probs, success_probs, example_id, procedure, label \
@@ -561,7 +565,6 @@ if worker_index == 0:
     accuracy_metrics = {}
     for threshold in MISTAKE_DETECTION_THRESHOLDS:
         preds = [1.0 - p >= threshold for p in all_probs]
-        pprint(len(preds), len(all_probs), len(all_labels))
         assert len(preds) == len(all_probs) == len(all_labels), "Expected same number of preds, probs, and labels."
         this_metrics = mistake_detection_metrics(all_labels, preds)
         accuracy_metrics[threshold] = this_metrics
