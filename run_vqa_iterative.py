@@ -240,11 +240,9 @@ if not is_complete:
             if args.n_icl_demonstrations > 0:
                 icl_prompts = [generate_vqg_prompt_icl(procedure, args.n_icl_demonstrations, include_answers=False) for procedure in batch_procedures] # Create ICL prompt
                 icl_prompts = [
-                    prompt + '\n'.join([str(pqi+1) + ' ' + pq for pqi, pq in enumerate(previous_questions[-2:])]) + "\n" if len(previous_questions) > 0 else "" + f"{len(previous_questions) + 1}. " 
+                    prompt + '\n'.join([str(pqi+1) + ' ' + pq for pqi, pq in enumerate(previous_questions[-2:])]) + ("\n" if len(previous_questions) > 0 else "") + f"{len(previous_questions) + 1}. " 
                     for prompt, previous_questions in zip(icl_prompts, questions)
                 ] # Add some previous questions if possible (take last 2 that were asked)
-
-                pprint(icl_prompts[0])
                 icl_new_questions, icl_generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
                                                                                         vlm_processor.tokenizer,
                                                                                         icl_prompts,
