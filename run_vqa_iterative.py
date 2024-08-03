@@ -184,8 +184,9 @@ all_labels = []
 
 cache_path = os.path.join(this_results_dir, f"cached_outputs{worker_index}.pkl")
 is_complete = False
+last_batch_idx = -1
 if os.path.exists(cache_path):
-    is_complete, all_questions, all_frames, all_candidate_questions, all_candidate_questions_scores, all_scores, all_answers, all_answer_probs, all_success_probs, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
+    is_complete, last_batch_idx, all_questions, all_frames, all_candidate_questions, all_candidate_questions_scores, all_scores, all_answers, all_answer_probs, all_success_probs, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
 
 if not is_complete:
     for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK_SIZE, 
@@ -195,7 +196,7 @@ if not is_complete:
                                                     desc="running iterative VQA inference"):
 
         # If already in cache, skip this batch
-        if len(all_questions) > batch_idx:
+        if batch_idx <= last_batch_idx:
             continue    
 
         # Take first frame (expect there to only be one frame)
@@ -427,6 +428,7 @@ if not is_complete:
         # And cache tracked outputs
         pickle.dump((    
             False,
+            batch_idx,
             all_questions, 
             all_frames,
             all_candidate_questions, 
@@ -440,9 +442,26 @@ if not is_complete:
             all_labels,
         ), open(cache_path, "wb"))
 
+# Verify we got correct number of outputs
+all_results = [
+    all_questions, 
+    all_frames,
+    all_candidate_questions, 
+    all_candidate_questions_scores, 
+    all_scores, 
+    all_answers, 
+    all_answer_probs, 
+    all_success_probs,
+    all_example_ids,
+    all_procedures,
+    all_labels,
+]
+assert all(len(l) == len(dataset) for l in all_results), f"Expected to get same number of all outputs, equal to dataset size! ({', '.join([str(len(l)) for l in all_results])})"
+
 # Cache one more time to indicate the generation is finished
 pickle.dump((    
     True,
+    batch_idx,
     all_questions, 
     all_frames,
     all_candidate_questions, 
@@ -519,7 +538,7 @@ if worker_index == 0:
                     all_success_probs,
                     all_example_ids,
                     all_procedures,
-                    all_labels), desc="evaluating"):
+                    all_labels), desc="compiling results"):
         
         final_success_prob = None
         for success_prob_idx, success_prob in enumerate(success_probs):
