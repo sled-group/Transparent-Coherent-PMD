@@ -487,7 +487,7 @@ all_results = [
     all_procedures,
     all_labels,
 ]
-assert all(len(l) == len(dataset) for l in all_results), f"Expected to get same number of all outputs, equal to dataset size! ({', '.join([str(len(l)) for l in all_results])})"
+assert all(len(l) == len(all_results[0]) for l in all_results), f"Expected to get same number of all outputs! ({', '.join([str(len(l)) for l in all_results])})"
 
 # Cache one more time to indicate the generation is finished
 pickle.dump((    
@@ -521,6 +521,7 @@ if worker_index == 0:
             other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
             if os.path.exists(other_cache_path):
                 is_complete, \
+                _, \
                 other_questions, \
                 other_frames, \
                 other_candidate_questions, \
