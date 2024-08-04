@@ -23,7 +23,7 @@ from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
 from travel.data.vqg import generate_vqg_prompt_icl
-from travel.model import simple_lm_prompt_beam_search, compute_log_likelihood
+from travel.model import simple_lm_prompt_beam_search, compute_completion_log_likelihoods
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, ImageMaskTypes
 from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
@@ -79,7 +79,8 @@ if args.resume_dir is None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
-    os.makedirs(this_results_dir)
+    if worker_index == 0:
+        os.makedirs(this_results_dir)
 else:
     this_results_dir = args.resume_dir
 
@@ -229,13 +230,13 @@ if not is_complete:
 
             # Generate a question (with beam search so we have several candidates)
             prompts_q = [prompt + " USER: Q: " for prompt in prompts]
-            new_questions, generation_scores = simple_lm_prompt_beam_search(vlm.language_model,
-                                                                            vlm_processor.tokenizer,
-                                                                            [prompt.replace("<image>\n", "") for prompt in prompts_q],
-                                                                            max_new_tokens=20,
-                                                                            batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
-                                                                            generation_kwargs=generation_kwargs)
-                                
+            new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
+                                                            vlm_processor.tokenizer,
+                                                            [prompt.replace("<image>\n", "") for prompt in prompts_q],
+                                                            max_new_tokens=20,
+                                                            batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
+                                                            generation_kwargs=generation_kwargs)
+            new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
 
             # Optionally inject more candidates from original VQG ICL code
             if args.n_icl_demonstrations > 0:
@@ -250,26 +251,30 @@ if not is_complete:
                                                                     max_new_tokens=20,
                                                                     batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1),
                                                                     generation_kwargs=generation_kwargs)
-                # TODO: below is inefficient and doesn't incorporate padding that would have been added to prompts (but still gets scores close enough to original)
-                # Calculate likelihood of these questions in iterative VQA context (only if we'll need it)
-                if args.question_selection_strategy == "likelihood":
-                    icl_generation_scores = [compute_log_likelihood(lm, tokenizer, prompt, question) for prompt, beam_search_questions in zip(icl_prompts, icl_new_questions) for question in beam_search_questions]
-                    icl_generation_scores = [icl_generation_scores[i * len(icl_new_questions[0]):(i+1) * len(icl_new_questions[0])] for i in range(len(icl_new_questions))]
-                else:
-                    icl_generation_scores = [None for _ in icl_new_questions]
-
-                new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in icl_new_questions]    
+                
+                icl_new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in icl_new_questions]
                 for batch_sub_idx in range(this_batch_size):
                     new_questions[batch_sub_idx] += icl_new_questions[batch_sub_idx]
-                    generation_scores[batch_sub_idx] += icl_generation_scores[batch_sub_idx]
+
+            # Remove duplicate candidates
+            new_questions = [[question for question_idx, question in enumerate(beam_search_outputs) if question.strip() not in beam_search_outputs[:question_idx]] for beam_search_outputs in new_questions]
+
+            # Try to remove any candidates that we've seen before (if we've seen all the candidates before, don't remove any)
+            new_questions_filtered = [[question for question in beam_search_outputs if question.strip() not in questions[batch_sub_idx]] for batch_sub_idx, beam_search_outputs in enumerate(new_questions)]
+            new_questions = [new_questions_filtered[batch_sub_idx] if len(new_questions_filtered[batch_sub_idx]) > 0 else new_questions[batch_sub_idx] for batch_sub_idx in range(this_batch_size)]
 
             # Save all candidates from beam search
-            new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]
             for batch_sub_idx in range(len(candidate_questions)):
                 candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
             # Select best candidate question from pool
             if args.question_selection_strategy == "likelihood":
+
+                # First recalculate likelihood of each cleaned up question in iterative VQA context
+                # (this is mostly important when we're using ICL injected questions)
+                # TODO: why not just use beam search transition scores? These don't seem to match likelihood of forward pass with model, but need to understand why this is
+                generation_scores = compute_completion_log_likelihoods(lm, tokenizer, prompts_q, new_questions, batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1))
+
                 # Select most likely question (first one in list)
                 selected_questions = []
                 new_scores = []
@@ -279,11 +284,7 @@ if not is_complete:
                     # Save all candidate scores
                     candidate_questions_scores[batch_sub_idx].append(beam_search_scores)
 
-                    # Make sure we don't sample an already asked question (if possible)
-                    candidate_idxs = [i for i in range(len(beam_search_questions)) if beam_search_questions[i] not in questions[batch_sub_idx]]
-                    if len(candidate_idxs) == 0:
-                        candidate_idxs = list(range(len(beam_search_questions)))
-                        print("Warning: Generating a redundant question!")
+                    candidate_idxs = list(range(len(beam_search_questions)))
 
                     # Then pick candidate with highest score
                     best_candidate = max(candidate_idxs, key=lambda x: beam_search_scores[x] == max(beam_search_scores))
@@ -645,7 +646,7 @@ if worker_index == 0:
                                             lm,                                         
                                             [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
                                             all_chosen_questions,
-                                            all_predicted_answers,
+                                            all_predicted_answers, # TODO: this returns an informativeness metric which says how much different success probability is for a yes or no answer - should we just look at probability of entailment if it's a success example, and contradiction if it's a mistake?
                                             previous_questions=all_previous_questions,
                                             previous_answers=all_previous_answers,
                                             rephrase_batch_size=args.generation_batch_size)
