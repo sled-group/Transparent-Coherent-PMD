@@ -112,10 +112,10 @@ tokenizer.pad_token_id = tokenizer.eos_token_id
 visual_filter = None
 if args.visual_filter_mode is not None:
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
-        visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=f"cuda:{worker_index}")
+        visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')
     elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_Blur:
-        visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Blur, device=f"cuda:{worker_index}")
+        visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Blur, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')            
     elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
         visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:0")
