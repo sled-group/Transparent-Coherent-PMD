@@ -474,7 +474,7 @@ class PerTokenPPOTrainer(PPOTrainer):
 
         full_kl_penalty = self.config.kl_penalty == "full"
 
-        with torch.no_grad():
+        with torch.inference_mode():
             all_logprobs, logits_or_none, values, masks = self.batched_forward_pass(
                 self.model,
                 queries,
@@ -494,7 +494,7 @@ class PerTokenPPOTrainer(PPOTrainer):
 
         timing["time/ppo/forward_pass"] = time.time() - t
 
-        with torch.no_grad():
+        with torch.inference_mode():
             t = time.time()
             if full_kl_penalty:
                 active_full_logprobs = logprobs_from_logits(logits_or_none, None, gather=False)
@@ -712,7 +712,7 @@ class PerTokenPPOTrainer(PPOTrainer):
 
     #     full_kl_penalty = self.config.kl_penalty == "full"
 
-    #     with torch.no_grad():
+    #     with torch.inference_mode():
     #         all_logprobs, logits_or_none, values, masks = self.batched_forward_pass(
     #             self.model,
     #             queries,
@@ -732,7 +732,7 @@ class PerTokenPPOTrainer(PPOTrainer):
 
     #     timing["time/ppo/forward_pass"] = time.time() - t
 
-    #     with torch.no_grad():
+    #     with torch.inference_mode():
     #         t = time.time()
     #         if full_kl_penalty:
     #             active_full_logprobs = logprobs_from_logits(logits_or_none, None, gather=False)

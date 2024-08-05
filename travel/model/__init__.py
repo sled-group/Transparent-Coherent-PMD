@@ -23,7 +23,7 @@ def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batc
         inputs = tokenizer(text=batch_prompts, padding=True, return_tensors="pt")
         inputs = inputs.to(lm.device)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = lm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
 
         scores = lm.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False).cpu().numpy()
@@ -126,7 +126,7 @@ def compute_completion_log_likelihoods(model, tokenizer, prompts: list[str], com
         batch_inputs = combined_inputs[batch_start:batch_end]
 
         # Get the logits from the model in a single forward pass
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = model(batch_inputs)
 
         logits = outputs.logits[:, :-1, :]  # Exclude the last token's logits

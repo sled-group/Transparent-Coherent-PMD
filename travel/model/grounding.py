@@ -45,7 +45,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     if vqg_outputs is None:
         nlp = spacy.load('en_core_web_lg')
 
-    with torch.no_grad():
+    with torch.inference_mode():
         
         all_frames = [frame for example in dataset for frame in example.frames]
         frames_before = len(all_frames)
@@ -156,7 +156,7 @@ class AdaptiveVisualFilter:
 
         padded_images = []
         results = []
-        with torch.no_grad():
+        with torch.inference_mode():
             for i in tqdm(range(0, len(frames), batch_size), desc=f"running detection ({str(self.detector.device)})"):
                 # Prepare the batch
                 batch_prompts = owl_prompts[i:i+batch_size]

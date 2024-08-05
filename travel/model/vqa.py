@@ -53,7 +53,7 @@ def run_vqa(vlm: PreTrainedModel,
                 os.makedirs("/".join(cache_path.split("/")[:-1]))
 
     last_save = 0
-    with torch.no_grad():
+    with torch.inference_mode():
         # Start at logits.shape[0] so we don't rerun any logits that were already cached (resuming logic)
         for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc=f"running VQA ({str(vlm.device)})"):
             # Prepare the batch
@@ -135,7 +135,7 @@ def run_captioning(vlm: PreTrainedModel,
                     pass
 
     last_save = len(captions)
-    with torch.no_grad():
+    with torch.inference_mode():
         # Start at len(captions) so we don't produce any captions that were already cached (resuming logic)
         for i in tqdm(range(len(captions), len(frames), batch_size), desc=f"running captioning ({str(vlm.device)})"):
             # Prepare the batch

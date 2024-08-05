@@ -15,7 +15,7 @@ NLI_RERUN_ON_RELEVANT_EVIDENCE = bool(config["mistake_detection_strategies"]["nl
 NLI_HYPOTHESIS_TEMPLATE = 'The procedure "{procedure}" has been successfully completed.' 
 
 def run_nli(nli_tokenizer, nli_model, premise_hypothesis_pairs):
-    with torch.no_grad():
+    with torch.inference_mode():
         all_logits = None
         for i in tqdm(range(0, len(premise_hypothesis_pairs), NLI_BATCH_SIZE), desc=f"running NLI ({str(nli_model.device)})"):
             batch_premise_hypothesis_pairs = premise_hypothesis_pairs[i:i+NLI_BATCH_SIZE]

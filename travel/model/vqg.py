@@ -25,7 +25,7 @@ def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list
     """
     assert len(inputs) == len(input_ids), "run_vqg expected the same number of inputs and input IDs!"
     prompt_idx = 0
-    with torch.no_grad():
+    with torch.inference_mode():
         for inp, inp_id, out in tqdm(zip(inputs,
                                          input_ids,
                                          lm(KeyDataset([inp.to_dict() for inp in inputs], "prompt"), 
@@ -93,7 +93,7 @@ def run_vqg_semi_structured(lm: TextGenerationPipeline, inputs: list[VQGInputs],
     """
     def run_vqg_partial(inputs, input_ids, lm):
         partial_outputs = []
-        with torch.no_grad():
+        with torch.inference_mode():
             for inp, inp_id, out in tqdm(zip(inputs,
                                             input_ids,
                                             lm(KeyDataset([inp.to_dict() for inp in inputs], "prompt"), 
@@ -169,7 +169,7 @@ def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs],
     # TODO: we should also check whether answers to questions contradict each other... can do this by using one QA as premise and the other as hypothesis and vice versa
 
     new_answers = []
-    with torch.no_grad():
+    with torch.inference_mode():
         for i in tqdm(range(0, len(all_questions), NLI_BATCH_SIZE), desc=f"running NLI ({str(nli_model.device)})"):
             # Prepare the batch
             batch_questions = all_questions[i:i+NLI_BATCH_SIZE]
