@@ -44,6 +44,7 @@ parser.add_argument("--visual_filter_strength", type=float, required=False, defa
 parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch size for question generation with LM.")
 parser.add_argument("--vqa_batch_size", type=int, default=10, help="Batch size for VQA with VLM.")
 parser.add_argument("--nli_batch_size", type=int, default=NLI_BATCH_SIZE, help="Batch size for scoring candidate questions with NLI model.")
+parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
@@ -65,7 +66,6 @@ else:
 
 # Set up results directory
 if args.resume_dir is None:
-    timestamp = datetime.datetime.now()
     vlm_name = args.vlm_name.split('/')[-1]
     task_name = args.task
     if args.debug:
@@ -77,7 +77,7 @@ if args.resume_dir is None:
     this_results_dir += f"_{args.question_selection_strategy}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
-    this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    this_results_dir += f"_{args.run_id}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     if worker_index == 0:
         os.makedirs(this_results_dir)
@@ -654,7 +654,7 @@ if worker_index == 0:
 
     parallel_idx = 0
     coherence_metrics_by_example = defaultdict(list)
-    coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal']
+    coherence_metric_names = ['relevance', 'informativeness']
     for results_dict in all_results_dicts.values():
         for k in coherence_metric_names:
             if k in all_metrics:
