@@ -6,6 +6,7 @@ import os
 from PIL import Image
 import spacy
 from spacy.lang.en import English
+import sys
 import torch
 from tqdm import tqdm
 from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesConfig, BatchEncoding
@@ -787,5 +788,6 @@ class VisualFilterTypes(Enum):
     Spatial_Blur = "spatial_blur" # Spatial filter that blurs rather than blacks out unimportant regions (also doesn't crop images or rephrase questions)
     Contrastive_Region = "contrastive_region" # Contrastive region guidance https://contrastive-region-guidance.github.io/
     Visual_Contrastive = "visual_contrastive" # Visual contrastive decoding https://arxiv.org/pdf/2311.16922
+    AGLA = "agla"
     Target_Object_Counter = "target_object_counter" # Filter that identifies objects mentioned in visual questions and counts their occurrences in frames
     # Don't include target object counter here because it won't be used in the same way as other filters

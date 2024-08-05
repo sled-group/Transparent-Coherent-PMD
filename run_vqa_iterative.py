@@ -283,7 +283,7 @@ if not is_complete:
                 # First recalculate likelihood of each cleaned up question in iterative VQA context
                 # (this is mostly important when we're using ICL injected questions)
                 # TODO: why not just use beam search transition scores? These don't seem to match likelihood of forward pass with model, but need to understand why this is
-                generation_scores = compute_completion_log_likelihoods(lm, tokenizer, prompts_q, new_questions, batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1))
+                generation_scores = compute_completion_log_likelihoods(lm, tokenizer, prompts_q, new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
 
                 # Select most likely question (first one in list)
                 selected_questions = []
