@@ -128,7 +128,6 @@ if args.visual_filter_mode is not None:
         nlp = None
     else:
         raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with iterative VQA!")
-    # TODO: add AGLA as an option here?
 
 # Shared generation kwargs
 
