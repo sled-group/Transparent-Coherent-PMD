@@ -28,12 +28,11 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 # Configure arguments here
-# TODO: fill these in
 results_fnames = [
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805122212/outputs_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_icl20_likelihood_20240805002323/outputs_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_20240805002323/outputs_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240805093958/outputs_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_icl20_coherence_20240804224634/outputs_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240804224634/outputs_val.json",
 ]
 for results_fname in results_fnames:
     if not os.path.exists(os.path.join(os.path.join("/".join(results_fname.split("/")[:-1]), run_folder_name))):
@@ -89,32 +88,51 @@ for i, result_fname in enumerate(results_fnames):
         turn_success_probs[i].append(pred['success_probs'])
 
 # Analysis 0: save number of turns spent on each example (efficiency)
+def entropy(binary_prob):
+    if binary_prob == 0.0 or binary_prob == 1.0:
+        return 1.0
+    ent = -binary_prob * np.log2(binary_prob)
+    ent += -(1.0 - binary_prob) * np.log2(1.0 - binary_prob)
+    return ent
+
 lines = []
 for i in range(len(results_fnames)):
     lines.append(f"{results_names[i]} average number of turns: {np.mean(n_turns[i])}")
 
-    correct_prob_gained_per_question = []
-    all_turn_gains = []
+    all_turn_prob_gains = []
+    all_turn_info_gains = []
     for label_idx, label in enumerate(all_labels[i]):
-        turn_gains = []
+        turn_prob_gains = []
+        turn_info_gains = []
         for turn_idx in range(n_turns[i][label_idx]):
             last_turn_success_prob = turn_success_probs[i][label_idx][turn_idx - 1] if turn_idx > 0 else None
             this_turn_success_prob = turn_success_probs[i][label_idx][turn_idx]
 
-            turn_gain = this_turn_success_prob
+            turn_prob_gain = this_turn_success_prob
             if last_turn_success_prob:
-                turn_gain -= last_turn_success_prob # how much closer we got to 1.0 probability in this turn
+                turn_prob_gain -= last_turn_success_prob # how much closer we got to 1.0 probability in this turn
             
             if label == True:
-                turn_gain = -turn_gain # want how much closer we got to 0.0 probability
+                turn_prob_gain = -turn_prob_gain # want how much closer we got to 0.0 probability
 
-            turn_gain = np.abs(turn_gain)
+            turn_prob_gain = np.abs(turn_prob_gain)
 
-            turn_gains.append(turn_gain)
-        all_turn_gains.append(np.mean(turn_gains))
+            # also get information gain
+            last_turn_info = (1.0 - entropy(last_turn_success_prob)) if turn_idx > 0 else 0.0
+            this_turn_info = 1.0 - entropy(this_turn_success_prob)
+            turn_info_gain = this_turn_info - last_turn_info
 
-    mean_turn_gain = np.mean(all_turn_gains)
+            turn_prob_gains.append(turn_prob_gain)
+            turn_info_gains.append(turn_info_gain)
+
+        all_turn_prob_gains.append(np.mean(turn_prob_gains))
+        all_turn_info_gains.append(np.sum(turn_info_gains))
+
+    mean_turn_gain = np.mean(all_turn_prob_gains)
+    mean_info_gain = np.mean(all_turn_info_gains)
+
     lines.append(f"{results_names[i]} average confidence gained toward correct label per turn: {mean_turn_gain}")
+    lines.append(f"{results_names[i]} average information gained per dialog: {mean_info_gain}")
     lines.append("")
 
 output_fname = f"efficiency_metrics_{'_'.join(results_names).replace(' ', '-')}.txt"

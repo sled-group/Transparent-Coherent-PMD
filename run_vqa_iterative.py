@@ -597,6 +597,7 @@ if worker_index == 0:
             # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
             final_success_prob = success_prob
             if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
+                # TODO: this doesn't seem to be working as expected
                 if np.abs(scores[success_prob_idx-1] - scores[success_prob_idx-2]) < args.early_stop_delta and np.abs(scores[success_prob_idx] - scores[success_prob_idx-1]) < args.early_stop_delta:
                     break
         all_probs.append(round(final_success_prob, 6))   
