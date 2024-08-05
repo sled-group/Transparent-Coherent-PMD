@@ -19,7 +19,7 @@ from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE, NLI_RELEVANCE_DELTA
 with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
 DETECTION_FRAMES_PROPORTION = float(config["mistake_detection_strategies"]["frames_proportion"]) # Use last N% of frames for frame-based mistake detection strategies
-MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.0, 1.0, 0.05)]
+MISTAKE_DETECTION_THRESHOLDS = [round(threshold, 2) for threshold in generate_float_series(0.05, 0.95, 0.05)]
 
 @dataclass
 class MistakeDetectionOutputs:

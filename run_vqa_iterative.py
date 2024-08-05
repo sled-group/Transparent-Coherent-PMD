@@ -73,9 +73,9 @@ if args.resume_dir is None:
         task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
     this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}"
+    this_results_dir += f"_{args.question_selection_strategy}"
     if args.n_icl_demonstrations > 0:
         this_results_dir += f"_icl{args.n_icl_demonstrations}"
-    this_results_dir += f"_{args.question_selection_strategy}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{args.run_id}"
@@ -671,7 +671,7 @@ if worker_index == 0:
 
     parallel_idx = 0
     coherence_metrics_by_example = defaultdict(list)
-    coherence_metric_names = ['relevance', 'informativeness']
+    coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal']
     for results_dict in all_results_dicts.values():
         for k in coherence_metric_names:
             if k in all_metrics:
