@@ -19,11 +19,9 @@ from AGLA.eval.augmentation import augmentation
 
 from travel.constants import CONFIG_PATH
 from travel.data.mistake_detection import MistakeDetectionDataset
-from travel.data.utils import time_based_exponential_moving_average
 from travel.data.utils.image import get_preprocessed_image, BoundingBoxCluster, BoundingBox
 from travel.data.utils.text import get_compound_noun
 from travel.data.vqg import VQGOutputs
-from travel.model.grounding import AdaptiveVisualFilter
 
 with open(CONFIG_PATH, 'r') as file:
     config = yaml.safe_load(file)
@@ -638,6 +636,10 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         else:
             return new_frames, new_questions
 
+    def combine_logits(self, original_frame_logits, new_frame_logits):
+        # Spatial filter doesn't use original frame logits, just use filtered frame logits.
+        return new_frame_logits
+
 class ContrastiveRegionFilter(AdaptiveVisualFilter):
     def __init__(self, mask_strength: float=1.0, mask_type: ImageMaskTypes=ImageMaskTypes.Darkness, **kwargs: dict[str, Any]):
         """
@@ -728,6 +730,10 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
 
         return new_frames
 
+    def combine_logits(self, original_frame_logits, new_frame_logits):
+        # CRG subtracts original and filtered frame logits
+        return original_frame_logits - new_frame_logits
+
 
 class VisualContrastiveFilter(AdaptiveVisualFilter):
     def __init__(self, alpha: float=1.0, **kwargs: dict[str, Any]):
@@ -791,6 +797,10 @@ class VisualContrastiveFilter(AdaptiveVisualFilter):
 
         return new_frames
 
+    def combine_logits(self, original_frame_logits, new_frame_logits):
+        # VCD combines logits using alpha hyperparameter
+        return (1 + self.alpha) * original_frame_logits - self.alpha * new_frame_logits
+
 class AGLAFilter(AdaptiveVisualFilter):
     def __init__(self, alpha: float=2.0, beta: float=0.5, **kwargs: dict[str, Any]):
         """
@@ -800,6 +810,7 @@ class AGLAFilter(AdaptiveVisualFilter):
         :param beta: Beta hyperparameter of AGLA (controls adaptive plausibility constraint; higher beta meeans only higher probability tokens will be preserved from the original image output distribution).
         """        
         self.alpha = alpha
+        self.beta = beta
         
         # Get image-text matcher modules
         model_itm, vis_processors, text_processors = load_model_and_preprocess("blip_image_text_matching", "large", device="cuda", is_eval=True)
@@ -822,6 +833,13 @@ class AGLAFilter(AdaptiveVisualFilter):
         augmented_images = [frame.resize(original_size) for frame, original_size in zip(augmented_images, original_sizes)]
         
         return augmented_images
+
+    def combine_logits(self, original_frame_logits, new_frame_logits):
+        # AGLA combines logits using alpha, preserving highest-probability tokens from original frame using probability cutoff beta
+        cutoff = torch.log(torch.tensor(self.beta)) + original_frame_logits.max(dim=-1, keepdim=True).values
+        diffs = original_frame_logits + self.alpha * new_frame_logits
+        cd_logits = diffs.masked_fill(original_frame_logits < cutoff, -float("inf"))
+        return cd_logits
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial" # Default spatial filter that crops and masks images in black based on target objects and spatial relations mentioned in questions, then rephrases questions based on the information that has been abstracted away

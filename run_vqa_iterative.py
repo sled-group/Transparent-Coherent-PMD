@@ -24,12 +24,13 @@ from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, compute_completion_log_likelihoods
-from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, ImageMaskTypes
+from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
 from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa 
 from travel.model.vqg import cleanup_generated_question
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
@@ -122,6 +123,9 @@ if args.visual_filter_mode is not None:
     elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
         visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')            
+    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.AGLA:
+        visual_filter = AGLAFilter(alpha=args.visual_filter_strength, beta=0.5, device=f"cuda:0")
+        nlp = None
     else:
         raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with iterative VQA!")
     # TODO: add AGLA as an option here?
@@ -362,6 +366,8 @@ if not is_complete:
                     batch_frames_filtered = visual_filter(batch_frames)
                 elif VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
                     batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
+                elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.AGLA:
+                    batch_frames_filtered = visual_filter(batch_frames, new_questions)
 
             # Cache paths to frames (if using a visual filter, save filtered frames and cache paths to them)
             if args.visual_filter_mode is None or not args.cache_vqa_frames:
@@ -379,15 +385,17 @@ if not is_complete:
 
             # Run VQA on base image (yes/no)
             prompts_a = [prompt + f'{question} ASSISTANT: A: ' for prompt, question in zip(prompts_q, new_questions)]
-            new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
+            if not (visual_filter and VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]):
+                new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
+            else:
+                # Spatial filter doesn't need original image logits, so don't get them for efficiency
+                new_answers_logits = None
 
             # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
-            if visual_filter and VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Contrastive_Region, VisualFilterTypes.Visual_Contrastive]:
+            # TODO: write a method in each visual filter class to do this
+            if visual_filter:
                 new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
-                if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-                    new_answers_logits = new_answers_logits - new_answers_logits_filtered
-                elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
-                    new_answers_logits = (1 + visual_filter.alpha) * new_answers_logits - visual_filter.alpha * new_answers_logits_filtered
+                new_answers_logits = visual_filter.combine_logits(new_answers_logits, new_answers_logits_filtered)
 
             # Gather up VQA outputs (which automatically calculates answer probabilities from logits)
             new_answers = [
