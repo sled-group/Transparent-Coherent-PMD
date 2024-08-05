@@ -640,6 +640,7 @@ if worker_index == 0:
             indent=4)
 
     # Generate DET curve
+    # TODO: remove 0.0 and 1.0 from thresholds for cleaner curves
     generate_det_curve(accuracy_metrics, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
 
     # Calculate coherence metrics of final rollouts
