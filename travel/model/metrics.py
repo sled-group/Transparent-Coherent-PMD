@@ -412,8 +412,8 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
         informativeness = torch.abs(probs_actual[:, 0].unsqueeze(1) - probs_actual[:, 1].unsqueeze(1))
     metrics['informativeness'] = informativeness.numpy()
 
-    if previous_questions and len(previous_questions[0]) > 0:
-        # Rephrase past questions and answers into statements, then un-flatten
+    if previous_questions:
+        # Flatten and rephrase past questions and answers into statements, then un-flatten
         rephrased_past = rephrase_question_answer(
             [question for p_questions in previous_questions for question in p_questions],
             [answer for p_answers in previous_answers for answer in p_answers],
@@ -421,11 +421,20 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
             lm_model,
             generation_batch_size=rephrase_batch_size
         )
-        rephrased_past = [rephrased_past[i * len(previous_questions[0]):(i + 1) * len(previous_questions[0])] for i in range(len(previous_questions))]
+        parallel_idx = 0
+        new_rephrased_past = []
+        for p_questions in previous_questions:
+            this_rephrased_past = []
+            for _ in p_questions:
+                this_rephrased_past.append(rephrased_past[parallel_idx])
+                parallel_idx += 1
+            new_rephrased_past.append(this_rephrased_past)
+        rephrased_past = new_rephrased_past
+
         premise_past = [" ".join(past_qs_rephrased) for past_qs_rephrased in rephrased_past]
         
-        premise_past_yes = [pp + " " + py for pp, py in zip(premise_past, premise_yes)]
-        premise_past_no = [pp + " " + pn for pp, pn in zip(premise_past, premise_no)]
+        premise_past_yes = [(pp + " " + py).strip() for pp, py in zip(premise_past, premise_yes)]
+        premise_past_no = [(pp + " " + pn).strip() for pp, pn in zip(premise_past, premise_no)]
         # probs_past = run_nli(nli_tokenizer, nli_model, list(zip(premise_past, hypothesis_procedure)))
         probs_past_yes = run_nli(nli_tokenizer, nli_model, list(zip(premise_past_yes, hypothesis_procedure)))
         probs_past_no = run_nli(nli_tokenizer, nli_model, list(zip(premise_past_no, hypothesis_procedure)))

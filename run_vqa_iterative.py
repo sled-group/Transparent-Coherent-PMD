@@ -647,7 +647,7 @@ if worker_index == 0:
             indent=4)
 
     # Generate DET curve
-    # TODO: remove 0.0 and 1.0 from thresholds for cleaner curves
+    # TODO: add more thresholds? e.g., every 0.01
     generate_det_curve(accuracy_metrics, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
 
     # Calculate coherence metrics of final rollouts
@@ -663,7 +663,7 @@ if worker_index == 0:
                                             lm,                                         
                                             [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
                                             all_chosen_questions,
-                                            all_predicted_answers, # TODO: this returns an informativeness metric which says how much different success probability is for a yes or no answer - should we just look at probability of entailment if it's a success example, and contradiction if it's a mistake?
+                                            answers=all_predicted_answers, # TODO: this returns an informativeness metric which says how much different success probability is for a yes or no answer - should we just look at probability of entailment if it's a success example, and contradiction if it's a mistake?
                                             previous_questions=all_previous_questions,
                                             previous_answers=all_previous_answers,
                                             rephrase_batch_size=args.generation_batch_size)
