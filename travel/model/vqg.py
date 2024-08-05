@@ -248,7 +248,9 @@ def correct_vqg_outputs_with_nli(vqg_outputs: dict[Union[str, int], VQGOutputs],
 
     return new_vqg_outputs
 
-            
-
-
-
+def cleanup_generated_question(question):
+    """Cleanup method for generated questions in iterative VQA pipeline."""
+    question = question.split("?")[0].strip() + "?"
+    if "." in question:
+        question = question.split(".")[1].strip()    
+    return question

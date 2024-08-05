@@ -54,7 +54,7 @@ class VQAOutputs:
     procedure_id: int
     frame: Union[Image.Image, str]
     prompt: str
-    expected_answer: VQAResponse
+    expected_answer: Optional[VQAResponse]
     response_token_ids: dict[VQAResponse, int]
     logits: Optional[torch.FloatTensor] # (vocab size) 
     question: Optional[str] = None

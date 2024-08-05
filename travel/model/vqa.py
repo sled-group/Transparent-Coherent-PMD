@@ -1,8 +1,10 @@
 from collections import defaultdict
 import json
+import numpy as np
 import os
 import pickle
 from PIL import Image
+from pprint import pprint
 import shelve
 from spacy.lang.en import English
 import torch
