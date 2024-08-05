@@ -61,6 +61,8 @@ all_correctness = [[] for _ in results_fnames]
 all_error = [[] for _ in results_fnames]
 mistake_error = [[] for _ in results_fnames]
 success_error = [[] for _ in results_fnames]
+n_turns = [[] for _ in results_fnames]
+turn_success_probs = [[] for _ in results_fnames]
 for i, result_fname in enumerate(results_fnames):
     result_preds = json.load(open(result_fname, "r"))
     for pred in result_preds.values():
@@ -83,6 +85,43 @@ for i, result_fname in enumerate(results_fnames):
         all_correctness[i].append(True if (mistake_prob >= metrics_accuracy[i]["best_threshold"] and mistake) or (mistake_prob < metrics_accuracy[i]["best_threshold"] and not mistake) else False)
         all_error[i].append(mistake_prob if not mistake else 1 - mistake_prob)
 
+        n_turns[i].append(pred['final_turn'] + 1)
+        turn_success_probs[i].append(pred['success_probs'])
+
+# Analysis 0: save number of turns spent on each example (efficiency)
+lines = []
+for i in range(len(results_fnames)):
+    lines.append(f"{results_names[i]} average number of turns: {np.mean(n_turns[i])}")
+
+    correct_prob_gained_per_question = []
+    all_turn_gains = []
+    for label_idx, label in enumerate(all_labels[i]):
+        turn_gains = []
+        for turn_idx in range(n_turns[i][label_idx]):
+            last_turn_success_prob = turn_success_probs[i][label_idx][turn_idx - 1] if turn_idx > 0 else None
+            this_turn_success_prob = turn_success_probs[i][label_idx][turn_idx]
+
+            turn_gain = this_turn_success_prob
+            if last_turn_success_prob:
+                turn_gain -= last_turn_success_prob # how much closer we got to 1.0 probability in this turn
+            
+            if label == True:
+                turn_gain = -turn_gain # want how much closer we got to 0.0 probability
+
+            turn_gain = np.abs(turn_gain)
+
+            turn_gains.append(turn_gain)
+        all_turn_gains.append(np.mean(turn_gains))
+
+    mean_turn_gain = np.mean(all_turn_gains)
+    lines.append(f"{results_names[i]} average confidence gained toward correct label per turn: {mean_turn_gain}")
+    lines.append("")
+
+output_fname = f"efficiency_metrics_{'_'.join(results_names).replace(' ', '-')}.txt"
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+for save_path in save_paths:
+    with open(save_path, 'w') as f:
+        f.write("\n".join(lines))
 
 # Analysis 1: Plot confidence and variance for model predictions on success and mistake predictions
 print("(1) Beginning confidence graph generation...")
