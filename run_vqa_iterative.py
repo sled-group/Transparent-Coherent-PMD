@@ -162,16 +162,25 @@ nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
 
 # Load approopriate evaluation dataset
-print(f"({worker_index}) Loading evaluation dataset...")
-if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
-    dataset = CaptainCook4DDataset(data_split=args.eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
-    dataset = Ego4DMistakeDetectionDataset(data_split=args.eval_partition, 
-                                           mismatch_augmentation=True,
-                                           multi_frame=False,
-                                           debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-else:
-    raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")
+dataset = None
+for retry in range(5):
+    print(f"({worker_index}) Loading evaluation dataset (try {retry})...")
+    try:
+        if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
+            dataset = CaptainCook4DDataset(data_split=args.eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
+        elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
+            dataset = Ego4DMistakeDetectionDataset(data_split=args.eval_partition, 
+                                                mismatch_augmentation=True,
+                                                multi_frame=False,
+                                                debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
+        else:
+            raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")
+    except Exception as e:
+        print("Encountered error during data loading:")
+        pprint(e)
+    break
+if dataset is None:
+    raise ValueError("Could not load dataset after retrying!")
 
 
 print(f"({worker_index}) Beginning iterative VQA inference...")
@@ -194,6 +203,7 @@ last_batch_idx = -1
 if os.path.exists(cache_path):
     is_complete, last_batch_idx, all_questions, all_frames, all_candidate_questions, all_candidate_questions_scores, all_scores, all_answers, all_answer_probs, all_success_probs, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
 
+batch_idx = None
 if not is_complete:
     for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK_SIZE, 
                                                                         n_workers=n_workers, 
@@ -407,7 +417,6 @@ if not is_complete:
                 prompt + f' USER: Q: Based on the above information, has the procedure "{procedure}" been successfully executed? ASSISTANT: A:'
                 for prompt, procedure in zip(prompts, batch_procedures)
             ]
-            pprint(prompt_success)
             # TODO: should SuccessVQA stepalso incorporate visual filter?
             success_vqa_outputs = run_vqa(
                 vlm, 
@@ -435,7 +444,6 @@ if not is_complete:
                 success_probs[batch_sub_idx].append(
                     round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
                 )
-            pprint(success_probs)
 
             # Clear out VQA outputs now because they occupy a lot of memory
             del new_answers
@@ -492,21 +500,22 @@ all_results = [
 assert all(len(l) == len(all_results[0]) for l in all_results), f"Expected to get same number of all outputs! ({', '.join([str(len(l)) for l in all_results])})"
 
 # Cache one more time to indicate the generation is finished
-pickle.dump((    
-    True,
-    batch_idx,
-    all_questions, 
-    all_frames,
-    all_candidate_questions, 
-    all_candidate_questions_scores, 
-    all_scores, 
-    all_answers, 
-    all_answer_probs, 
-    all_success_probs,
-    all_example_ids,
-    all_procedures,
-    all_labels,
-), open(cache_path, "wb"))
+if batch_idx is not None:
+    pickle.dump((    
+        True,
+        batch_idx,
+        all_questions, 
+        all_frames,
+        all_candidate_questions, 
+        all_candidate_questions_scores, 
+        all_scores, 
+        all_answers, 
+        all_answer_probs, 
+        all_success_probs,
+        all_example_ids,
+        all_procedures,
+        all_labels,
+    ), open(cache_path, "wb"))
 
 print(f"({worker_index}) Done running iterative VQA inference!")
 
@@ -518,7 +527,7 @@ if worker_index == 0:
         print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
         delay_per_try = 10
         delay_so_far = 0
-        max_delay = 1800
+        max_delay = 7200 # TODO: change this to a lower number
         while True:
             other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
             if os.path.exists(other_cache_path):
