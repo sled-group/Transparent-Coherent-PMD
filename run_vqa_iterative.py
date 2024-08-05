@@ -79,7 +79,7 @@ if args.resume_dir is None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{args.run_id}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
-    if worker_index == 0:
+    if worker_index == 0 and not os.path.exists(this_results_dir):
         os.makedirs(this_results_dir)
 else:
     this_results_dir = args.resume_dir
@@ -368,7 +368,7 @@ if not is_complete:
                     frames[batch_sub_idx].append(frame_path)
 
             # Run VQA on base image (yes/no)
-            prompts_a = [prompt + f'{question} ASSISTANT: A (yes/no): ' for prompt, question in zip(prompts_q, new_questions)]
+            prompts_a = [prompt + f'{question} ASSISTANT: A: ' for prompt, question in zip(prompts_q, new_questions)]
             new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
 
             # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
@@ -404,9 +404,10 @@ if not is_complete:
 
             # Ask VLM probability of success
             prompt_success = [
-                prompt + f' USER: Q: Based on the above information, is the procedure "{procedure}" 100% finished?'
+                prompt + f' USER: Q: Based on the above information, has the procedure "{procedure}" been successfully executed? ASSISTANT: A:'
                 for prompt, procedure in zip(prompts, batch_procedures)
             ]
+            pprint(prompt_success)
             # TODO: should SuccessVQA stepalso incorporate visual filter?
             success_vqa_outputs = run_vqa(
                 vlm, 
@@ -434,6 +435,7 @@ if not is_complete:
                 success_probs[batch_sub_idx].append(
                     round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
                 )
+            pprint(success_probs)
 
             # Clear out VQA outputs now because they occupy a lot of memory
             del new_answers
@@ -579,10 +581,7 @@ if worker_index == 0:
             # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
             final_success_prob = success_prob
             if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
-                score_change = 0.0
-                for i in range(success_prob_idx - 2, success_prob_idx):
-                    score_change += scores[i+1] - scores[i]
-                if score_change < args.early_stop_delta:
+                if np.abs(scores[success_prob_idx-1] - scores[success_prob_idx-2]) < args.early_stop_delta and np.abs(scores[success_prob_idx] - scores[success_prob_idx-1]) < args.early_stop_delta:
                     break
         all_probs.append(round(final_success_prob, 6))   
 
