@@ -598,7 +598,7 @@ if worker_index == 0:
             final_success_prob = success_prob
             if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
                 # TODO: this doesn't seem to be working as expected
-                if np.abs(scores[success_prob_idx-1] - scores[success_prob_idx-2]) < args.early_stop_delta and np.abs(scores[success_prob_idx] - scores[success_prob_idx-1]) < args.early_stop_delta:
+                if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
                     break
         all_probs.append(round(final_success_prob, 6))   
 
@@ -655,8 +655,8 @@ if worker_index == 0:
     all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
     all_previous_questions = [results_dict['questions'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
-    all_predicted_answers = [VQAResponse(answer).name for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
-    all_previous_answers = [results_dict['answers'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+    all_predicted_answers = [VQAResponse(answer) for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
+    all_previous_answers = [[VQAResponse(a) for a in results_dict['answers'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
     all_metrics = question_coherence_metrics(nli_tokenizer,
                                             nli_model,
