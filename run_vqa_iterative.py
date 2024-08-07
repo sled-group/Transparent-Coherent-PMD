@@ -179,11 +179,11 @@ for retry in range(5):
                                                    debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
         else:
             raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")
+        break
     except Exception as e:
         print("Encountered error during data loading:")
         pprint(e)
-        time.sleep(10)
-    break
+        time.sleep(60)
 if dataset is None:
     raise ValueError("Could not load dataset after retrying!")
 
