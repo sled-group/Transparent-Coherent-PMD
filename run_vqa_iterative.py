@@ -15,6 +15,7 @@ import time
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint
+from typing import Optional
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
@@ -30,6 +31,47 @@ from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa 
 from travel.model.vqg import cleanup_generated_question
+
+
+def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, batch_size, visual_filter=None, visual_filter_mode=None, frame_cache_dir=None):
+    # Apply visual filter to frames for VQA
+    if visual_filter:
+        if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
+            batch_frames_filtered = visual_filter(nlp, batch_frames, new_questions)
+        elif visual_filter_mode == VisualFilterTypes.Visual_Contrastive:
+            batch_frames_filtered = visual_filter(batch_frames)
+        elif visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
+            batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
+        elif visual_filter_mode == VisualFilterTypes.AGLA:
+            batch_frames_filtered = visual_filter(batch_frames, new_questions)
+
+    # Cache paths to frames (if using a visual filter, save filtered frames and cache paths to them)
+    if visual_filter is None or frame_cache_dir is None:
+        for batch_sub_idx in range(this_batch_size):
+            frames[batch_sub_idx].append(batch_examples[batch_sub_idx].frames[0])
+    else:
+        for batch_sub_idx, (frame, example) in enumerate(zip(batch_frames_filtered, batch_examples)):
+            frame_cache_dir = os.path.join(frame_cache_dir, f"vqa_frames/{example.example_id}")
+            if not os.path.exists(frame_cache_dir):
+                os.makedirs(frame_cache_dir)
+            frame_path = os.path.join(frame_cache_dir, f"frame_q{question_idx}.jpg")
+            resized_frame = resize_with_aspect(frame, CACHED_FRAME_DIMENSION)
+            resized_frame.save(frame_path)
+            frames[batch_sub_idx].append(frame_path)
+
+    # Run VQA on base image (yes/no)
+    if not (visual_filter and visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]):
+        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=batch_size)
+    else:
+        # Spatial filter doesn't need original image logits, so don't get them for efficiency
+        new_answers_logits = None
+
+    # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
+    if visual_filter:
+        new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=batch_size)
+        new_answers_logits = visual_filter.combine_logits(new_answers_logits, new_answers_logits_filtered)
+
+    return new_answers_logits
 
 
 parser = argparse.ArgumentParser()
@@ -369,44 +411,18 @@ if not is_complete:
             for batch_sub_idx in range(this_batch_size):
                 questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
-            # Apply visual filter to frames
-            if visual_filter:
-                if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-                    batch_frames_filtered = visual_filter(nlp, batch_frames, new_questions)
-                elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
-                    batch_frames_filtered = visual_filter(batch_frames)
-                elif VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
-                    batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
-                elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.AGLA:
-                    batch_frames_filtered = visual_filter(batch_frames, new_questions)
-
-            # Cache paths to frames (if using a visual filter, save filtered frames and cache paths to them)
-            if args.visual_filter_mode is None or not args.cache_vqa_frames:
-                for batch_sub_idx in range(this_batch_size):
-                    frames[batch_sub_idx].append(batch_examples[batch_sub_idx].frames[0])
-            else:
-                for batch_sub_idx, (frame, example) in enumerate(zip(batch_frames_filtered, batch_examples)):
-                    frame_cache_dir = os.path.join(this_results_dir, f"vqa_frames/{example.example_id}")
-                    if not os.path.exists(frame_cache_dir):
-                        os.makedirs(frame_cache_dir)
-                    frame_path = os.path.join(frame_cache_dir, f"frame_q{question_idx}.jpg")
-                    resized_frame = resize_with_aspect(frame, CACHED_FRAME_DIMENSION)
-                    resized_frame.save(frame_path)
-                    frames[batch_sub_idx].append(frame_path)
-
-            # Run VQA on base image (yes/no)
+            # Run VQA with generated questions (and optional spatial filter)
             prompts_a = [prompt + f'{question} ASSISTANT: A: ' for prompt, question in zip(prompts_q, new_questions)]
-            if not (visual_filter and VisualFilterTypes(args.visual_filter_mode) in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]):
-                new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
-            else:
-                # Spatial filter doesn't need original image logits, so don't get them for efficiency
-                new_answers_logits = None
-
-            # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
-            # TODO: write a method in each visual filter class to do this
-            if visual_filter:
-                new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1))
-                new_answers_logits = visual_filter.combine_logits(new_answers_logits, new_answers_logits_filtered)
+            new_answers_logits = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
+                                                            vlm=vlm, 
+                                                            batch_examples=batch_examples, 
+                                                            batch_frames=batch_frames, 
+                                                            prompts_a=prompts_a, 
+                                                            new_questions=new_questions, 
+                                                            batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
+                                                            visual_filter=visual_filter,
+                                                            visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
+                                                            frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
 
             # Gather up VQA outputs (which automatically calculates answer probabilities from logits)
             new_answers = [
@@ -432,18 +448,24 @@ if not is_complete:
             prompts = [prompt + output.predicted_answer.name for prompt, output in zip(prompts_a, new_answers)]
 
             # Ask VLM probability of success
-            prompt_success = [
-                prompt + f' USER: Q: Based on the above information, has the procedure "{procedure}" been successfully executed? ASSISTANT: A:'
-                for prompt, procedure in zip(prompts, batch_procedures)
+            questions_success = [
+                f'Based on the above information, has the procedure "{procedure}" been successfully executed?'
+                for procedure in batch_procedures
             ]
-            # TODO: should SuccessVQA stepalso incorporate visual filter?
-            success_vqa_outputs = run_vqa(
-                vlm, 
-                vlm_processor, 
-                prompt_success, 
-                batch_frames, 
-                batch_size=args.vqa_batch_size
-            )
+            prompts_success = [
+                prompt + f' USER: Q: {question} ASSISTANT: A:'
+                for prompt, question in zip(prompts, questions_success)
+            ]
+            success_vqa_outputs = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
+                                                             vlm=vlm, 
+                                                             batch_examples=batch_examples, 
+                                                             batch_frames=batch_frames, 
+                                                             prompts_a=prompts_success, 
+                                                             new_questions=questions_success, 
+                                                             batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
+                                                             visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
+                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
+                                                             frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
             success_vqa_outputs = [
                 VQAOutputs(
                     task_name=MistakeDetectionTasks(args.task),
