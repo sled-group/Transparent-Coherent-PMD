@@ -16,11 +16,11 @@ from sklearn.metrics import brier_score_loss
 from tqdm import tqdm
 
 from travel.constants import RESULTS_DIR
-from travel.model.metrics import generate_risk_coverage_plot, calculate_abstention_metrics, plot_abstention_metrics
+from travel.model.metrics import generate_risk_coverage_plot, calculate_abstention_metrics, plot_abstention_metrics, generate_det_curves
 from travel.model.utils import expected_calibration_error
 
 # Configure results to graph here
-TASK = "ego4d"
+TASK = "ego4d_single"
 timestamp = datetime.datetime.now()
 run_folder_name = f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}"
 output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name)
@@ -29,9 +29,9 @@ if not os.path.exists(output_dir):
 
 # Configure arguments here
 results_fnames = [
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805122212/outputs_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805180404/outputs_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_20240805002323/outputs_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240805093958/outputs_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240805190642/outputs_val.json",
     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240804224634/outputs_val.json",
 ]
 for results_fname in results_fnames:
@@ -41,6 +41,8 @@ for results_fname in results_fnames:
 metrics_accuracy = [
     json.load(open(fname.replace("outputs_", "metrics_accuracy_"), "r")) for fname in results_fnames
 ]
+pprint(metrics_accuracy)
+metrics_det = [{float(k): v for k, v in metrics.items() if k not in ["best_metrics", "best_threshold"]} for metrics in metrics_accuracy]
 results_names = [
     "Likelihood Ranking",
     "Likelihood Ranking (+ ICL candidates)",
@@ -48,7 +50,13 @@ results_names = [
     "Coherence Ranking (+ ICL candidates)",
 ]
 
-print("(0) Compiling pred data...")
+# Analysis 0: Generate DET curves
+print("(0) Generating DET curves...")
+output_fname = f"det_comparison_{'_'.join(results_names).replace(' ', '-')}.pdf"
+save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+generate_det_curves(metrics_det, results_names, save_paths=save_paths)
+
+print("Compiling pred data...")
 mistake_probs = [[] for _ in results_fnames]
 success_probs = [[] for _ in results_fnames]
 all_probs = [[] for _ in results_fnames]
@@ -87,7 +95,8 @@ for i, result_fname in enumerate(results_fnames):
         n_turns[i].append(pred['final_turn'] + 1)
         turn_success_probs[i].append(pred['success_probs'])
 
-# Analysis 0: save number of turns spent on each example (efficiency)
+# Analysis 1: save number of turns spent on each example (efficiency)
+print("(1) Running efficiency analysis...")
 def entropy(binary_prob):
     if binary_prob == 0.0 or binary_prob == 1.0:
         return 1.0
@@ -100,6 +109,7 @@ for i in range(len(results_fnames)):
     lines.append(f"{results_names[i]} average number of turns: {np.mean(n_turns[i])}")
 
     all_turn_prob_gains = []
+    all_dialog_info_gains = []
     all_turn_info_gains = []
     for label_idx, label in enumerate(all_labels[i]):
         turn_prob_gains = []
@@ -126,13 +136,16 @@ for i in range(len(results_fnames)):
             turn_info_gains.append(turn_info_gain)
 
         all_turn_prob_gains.append(np.mean(turn_prob_gains))
-        all_turn_info_gains.append(np.sum(turn_info_gains))
+        all_dialog_info_gains.append(np.sum(turn_info_gains))
+        all_turn_info_gains.append(np.mean(turn_info_gains))
 
     mean_turn_gain = np.mean(all_turn_prob_gains)
-    mean_info_gain = np.mean(all_turn_info_gains)
+    mean_dialog_info_gain = np.mean(all_dialog_info_gains)
+    mean_turn_info_gain = np.mean(all_turn_info_gains)
 
     lines.append(f"{results_names[i]} average confidence gained toward correct label per turn: {mean_turn_gain}")
-    lines.append(f"{results_names[i]} average information gained per dialog: {mean_info_gain}")
+    lines.append(f"{results_names[i]} average information gained per turn: {mean_turn_info_gain}")
+    lines.append(f"{results_names[i]} average information gained per dialog: {mean_dialog_info_gain}")
     lines.append("")
 
 output_fname = f"efficiency_metrics_{'_'.join(results_names).replace(' ', '-')}.txt"
@@ -140,9 +153,10 @@ save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, out
 for save_path in save_paths:
     with open(save_path, 'w') as f:
         f.write("\n".join(lines))
+print("(1) Done!")
 
-# Analysis 1: Plot confidence and variance for model predictions on success and mistake predictions
-print("(1) Beginning confidence graph generation...")
+# Analysis 2: Plot confidence and variance for model predictions on success and mistake predictions
+print("(2) Beginning confidence graph generation...")
 
 # Bar graph comparing mistake probability for mistake and success examples
 x = np.arange(len(results_names))  # the label locations
@@ -265,10 +279,10 @@ for i, result_fname in enumerate(results_fnames):
     for path in save_paths:
         fig.savefig(path)
 
-print("(1) Confidence graphs generated!")
+print("(2) Confidence graphs generated!")
 
-# Analysis 2: Correlation of confidences with mistake labels, calibration curves, etc.
-print("(2) Beginning correlation analysis of confidences...")
+# Analysis 3: Correlation of confidences with mistake labels, calibration curves, etc.
+print("(3) Beginning correlation analysis of confidences...")
 lines = []
 for i in range(len(results_fnames)):
     # pprint(all_probs[i])
@@ -311,9 +325,10 @@ save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, out
 for path in save_paths:
     plt.savefig(path)
 
-print("(2) Done!")
+print("(3) Done!")
 
-# Analysis 3: Selective prediction metrics
+# Analysis 4: Selective prediction metrics
+print("(4) Running selective prediction metrics...")
 penalty = 1
 thresholds = np.linspace(0.0, 1.0, 101) # [0.0, 0.01, 0.02, 0.03, ..., 0.98, 0.99, 1.0]
 thresholds = [t for t in thresholds if t >= 0.5] # [0.50, 0.51, ..., 0.98, 0.99, 1.0] (only keep thresholds at least 0.5 because every class is predicted with at least 0.5 likelihood in binary classification)
@@ -368,4 +383,4 @@ for i in range(len(results_fnames)):
 output_fname = f"risk_coverage_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
 save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
 generate_risk_coverage_plot(all_coverages, all_risks, results_names, save_paths)
-
+print("(4) Done!")

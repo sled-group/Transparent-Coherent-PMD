@@ -129,7 +129,7 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
         y = false_negative_rates
 
         # Plot DET curve
-        plt.plot(x, y, marker='o', linestyle='-', color=colors(i), label=name)
+        plt.plot(x, y, marker='.', linestyle='-', color=colors(i), label=name)
 
     # Label axes with normal deviate scale
     # plt.xlabel('False Positive Rate (Normal Deviate Scale)')
@@ -416,7 +416,7 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
         # Flatten and rephrase past questions and answers into statements, then un-flatten
         rephrased_past = rephrase_question_answer(
             [question for p_questions in previous_questions for question in p_questions],
-            [answer.name for p_answers in previous_answers for answer in p_answers],
+            [answer for p_answers in previous_answers for answer in p_answers],
             lm_tokenizer,
             lm_model,
             generation_batch_size=rephrase_batch_size

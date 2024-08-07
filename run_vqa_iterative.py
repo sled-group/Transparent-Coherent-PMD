@@ -165,6 +165,7 @@ nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
 
 # Load approopriate evaluation dataset
+# TODO: sometimes this fails due to JSON decode error, but there's no problem with the json...
 dataset = None
 for retry in range(5):
     print(f"({worker_index}) Loading evaluation dataset (try {retry})...")
@@ -173,14 +174,15 @@ for retry in range(5):
             dataset = CaptainCook4DDataset(data_split=args.eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
         elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
             dataset = Ego4DMistakeDetectionDataset(data_split=args.eval_partition, 
-                                                mismatch_augmentation=True,
-                                                multi_frame=False,
-                                                debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
+                                                   mismatch_augmentation=True,
+                                                   multi_frame=False,
+                                                   debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
         else:
             raise NotImplementedError(f"Haven't implemented usage of {args.task} dataset yet!")
     except Exception as e:
         print("Encountered error during data loading:")
         pprint(e)
+        time.sleep(10)
     break
 if dataset is None:
     raise ValueError("Could not load dataset after retrying!")
@@ -191,6 +193,7 @@ all_questions = []
 all_frames = []
 all_candidate_questions = []
 all_candidate_questions_scores = []
+all_candidate_questions_sources = []
 all_scores = []
 all_answers = []
 all_answer_probs = []
@@ -204,7 +207,7 @@ cache_path = os.path.join(this_results_dir, f"cached_outputs{worker_index}.pkl")
 is_complete = False
 last_batch_idx = -1
 if os.path.exists(cache_path):
-    is_complete, last_batch_idx, all_questions, all_frames, all_candidate_questions, all_candidate_questions_scores, all_scores, all_answers, all_answer_probs, all_success_probs, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
+    is_complete, last_batch_idx, all_questions, all_frames, all_candidate_questions, all_candidate_questions_scores, all_candidate_questions_sources, all_scores, all_answers, all_answer_probs, all_success_probs, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
 
 batch_idx = None
 if not is_complete:
@@ -233,6 +236,7 @@ if not is_complete:
         frames = [[] for _ in range(this_batch_size)]
         candidate_questions = [[] for _ in range(this_batch_size)]
         candidate_questions_scores = [[] for _ in range(this_batch_size)]
+        candidate_questions_sources = [[] for _ in range(this_batch_size)]
         scores = [[] for _ in range(this_batch_size)]
         answer_probs = [[] for _ in range(this_batch_size)] 
         answers = [[] for _ in range(this_batch_size)]
@@ -250,6 +254,7 @@ if not is_complete:
                                                             batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                             generation_kwargs=generation_kwargs)
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
+            new_questions_sources = [["vlm"] * len(beam_search_questions) for beam_search_questions in new_questions]
 
             # Optionally inject more candidates from original VQG ICL code
             if args.n_icl_demonstrations > 0:
@@ -266,19 +271,26 @@ if not is_complete:
                                                                     generation_kwargs=generation_kwargs)
                 
                 icl_new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in icl_new_questions]
+                
                 for batch_sub_idx in range(this_batch_size):
                     new_questions[batch_sub_idx] += icl_new_questions[batch_sub_idx]
+                    new_questions_sources[batch_sub_idx] += ["icl"] * len(icl_new_questions[batch_sub_idx])
 
             # Remove duplicate candidates
-            new_questions = [[question for question_idx, question in enumerate(beam_search_outputs) if question.strip() not in beam_search_outputs[:question_idx]] for beam_search_outputs in new_questions]
+            keep_idxs = [[question_idx for question_idx, question in enumerate(beam_search_outputs) if question not in beam_search_outputs[:question_idx]] for beam_search_outputs in new_questions]
 
             # Try to remove any candidates that we've seen before (if we've seen all the candidates before, don't remove any)
-            new_questions_filtered = [[question for question in beam_search_outputs if question.strip() not in questions[batch_sub_idx]] for batch_sub_idx, beam_search_outputs in enumerate(new_questions)]
-            new_questions = [new_questions_filtered[batch_sub_idx] if len(new_questions_filtered[batch_sub_idx]) > 0 else new_questions[batch_sub_idx] for batch_sub_idx in range(this_batch_size)]
+            keep_idxs_filtered = [[question_idx for question_idx, question in enumerate(beam_search_outputs) if question_idx in keep_idxs[batch_sub_idx] and question not in questions[batch_sub_idx]] for batch_sub_idx, beam_search_outputs in enumerate(new_questions)]
+            keep_idxs = [keep_idxs_filtered[batch_sub_idx] if len(keep_idxs_filtered[batch_sub_idx]) > 0 else keep_idxs[batch_sub_idx] for batch_sub_idx in range(this_batch_size)]
+
+            # Apply kept indices to new questions and their sources
+            new_questions = [[new_questions[batch_sub_idx][question_idx] for question_idx in this_keep_idxs] for batch_sub_idx, this_keep_idxs in enumerate(keep_idxs)]
+            new_questions_sources = [[new_questions_sources[batch_sub_idx][question_idx] for question_idx in this_keep_idxs] for batch_sub_idx, this_keep_idxs in enumerate(keep_idxs)]
 
             # Save all candidates from beam search
             for batch_sub_idx in range(len(candidate_questions)):
                 candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
+                candidate_questions_sources[batch_sub_idx].append(new_questions_sources[batch_sub_idx])
 
             # Select best candidate question from pool
             if args.question_selection_strategy == "likelihood":
@@ -461,6 +473,7 @@ if not is_complete:
         all_frames += frames
         all_candidate_questions += candidate_questions
         all_candidate_questions_scores += candidate_questions_scores
+        all_candidate_questions_sources += candidate_questions_sources
         all_scores += scores
         all_answers += answers
         all_answer_probs += answer_probs
@@ -481,6 +494,7 @@ if not is_complete:
             all_frames,
             all_candidate_questions, 
             all_candidate_questions_scores, 
+            all_candidate_questions_sources,
             all_scores, 
             all_answers, 
             all_answer_probs, 
@@ -496,6 +510,7 @@ all_results = [
     all_frames,
     all_candidate_questions, 
     all_candidate_questions_scores, 
+    all_candidate_questions_sources,
     all_scores, 
     all_answers, 
     all_answer_probs, 
@@ -515,6 +530,7 @@ if batch_idx is not None:
         all_frames,
         all_candidate_questions, 
         all_candidate_questions_scores, 
+        all_candidate_questions_sources,
         all_scores, 
         all_answers, 
         all_answer_probs, 
@@ -544,6 +560,7 @@ if worker_index == 0:
                 other_frames, \
                 other_candidate_questions, \
                 other_candidate_questions_scores, \
+                other_candidate_questions_sources, \
                 other_scores, \
                 other_answers, \
                 other_answer_probs, \
@@ -557,6 +574,7 @@ if worker_index == 0:
                     all_frames += other_frames
                     all_candidate_questions += other_candidate_questions
                     all_candidate_questions_scores += other_candidate_questions_scores
+                    all_candidate_questions_sources += other_candidate_questions_sources
                     all_scores += other_scores
                     all_answers += other_answers
                     all_answer_probs += other_answer_probs
@@ -577,11 +595,12 @@ if worker_index == 0:
     # Collect key information from results rollouts and final success probabilities
     all_results_dicts = {}
     all_probs = []
-    for questions, frames, candidate_questions, candidate_questions_scores, scores, answers, answer_probs, success_probs, example_id, procedure, label \
+    for questions, frames, candidate_questions, candidate_questions_scores, candidate_questions_sources, scores, answers, answer_probs, success_probs, example_id, procedure, label \
         in tqdm(zip(all_questions,
                     all_frames,
                     all_candidate_questions,
                     all_candidate_questions_scores,
+                    all_candidate_questions_sources,
                     all_scores,
                     all_answers,
                     all_answer_probs,
@@ -597,7 +616,6 @@ if worker_index == 0:
             # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
             final_success_prob = success_prob
             if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
-                # TODO: this doesn't seem to be working as expected
                 if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
                     break
         all_probs.append(round(final_success_prob, 6))   
@@ -615,6 +633,7 @@ if worker_index == 0:
             "final_success_prob": final_success_prob,
             "candidate_questions": candidate_questions,
             "candidate_questions_scores": candidate_questions_scores,
+            "candidate_questions_sources": candidate_questions_sources,
         }
         all_results_dicts[example_id] = results_dict
 

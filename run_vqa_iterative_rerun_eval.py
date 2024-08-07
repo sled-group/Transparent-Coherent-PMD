@@ -23,8 +23,10 @@ parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", 
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
-parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch size for question generation with LM.")
+parser.add_argument("--generation_batch_size", type=int, default=60, help="Batch size for question generation with LM.")
 parser.add_argument("--nli_batch_size", type=int, default=NLI_BATCH_SIZE, help="Batch size for scoring candidate questions with NLI model.")
+parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
+parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 args = parser.parse_args()
 
 bnb_config = BitsAndBytesConfig(
@@ -54,6 +56,8 @@ nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 # Set up results directory
 vlm_name = args.vlm_name.split('/')[-1]
 task_name = args.task
+if args.debug:
+    task_name += f"_debug{args.debug_n_examples}"
 results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", task_name, vlm_name)
 
 all_questions = []
@@ -69,11 +73,13 @@ all_example_ids = []
 all_procedures = []
 all_labels = []
 
-for this_results_dir in os.listdir(results_dir):
-    if not os.path.exists(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json")):
+for this_results_dir in tqdm(os.listdir(results_dir)):
+    if not os.path.exists(os.path.join(results_dir, this_results_dir, f"metrics_accuracy_{args.eval_partition}.json")):
         # Only rerun if we've evaluated before
+        print(f"Could not find a metrics file {os.path.join(results_dir, this_results_dir, f'metrics_accuracy_{args.eval_partition}.json')}.")
         continue
-    for fname in os.listdir(this_results_dir):
+
+    for fname in os.listdir(os.path.join(results_dir, this_results_dir)):
         if fname.endswith(".pkl"):
             is_complete, \
             _, \
@@ -87,7 +93,7 @@ for this_results_dir in os.listdir(results_dir):
             other_success_probs, \
             other_example_ids, \
             other_procedures, \
-            other_labels = pickle.load(open(os.path.join(this_results_dir, fname), "rb"))
+            other_labels = pickle.load(open(os.path.join(results_dir, this_results_dir, fname), "rb"))
             if is_complete:
                 # Add other process results to our results
                 all_questions += other_questions
@@ -101,7 +107,22 @@ for this_results_dir in os.listdir(results_dir):
                 all_example_ids += other_example_ids
                 all_procedures += other_procedures
                 all_labels += other_labels
-                break
+
+    # Verify we got correct number of outputs
+    all_results = [
+        all_questions, 
+        all_frames,
+        all_candidate_questions, 
+        all_candidate_questions_scores, 
+        all_scores, 
+        all_answers, 
+        all_answer_probs, 
+        all_success_probs,
+        all_example_ids,
+        all_procedures,
+        all_labels,
+    ]
+    assert all(len(l) == len(all_results[0]) for l in all_results), f"Expected to get same number of all outputs! ({', '.join([str(len(l)) for l in all_results])})"
 
     # Collect key information from results rollouts and final success probabilities
     all_results_dicts = {}
@@ -148,7 +169,7 @@ for this_results_dir in os.listdir(results_dir):
         all_results_dicts[example_id] = results_dict
 
     json.dump(all_results_dicts, 
-            open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
+            open(os.path.join(results_dir, this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
             indent=4)
 
     metrics = {}
@@ -171,11 +192,11 @@ for this_results_dir in os.listdir(results_dir):
     accuracy_metrics['best_threshold'] = best_threshold
 
     json.dump(accuracy_metrics, 
-            open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
+            open(os.path.join(results_dir, this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
             indent=4)
 
     # Generate DET curve
-    generate_det_curve(accuracy_metrics, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
+    generate_det_curve(accuracy_metrics, os.path.join(results_dir, this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
 
     # Calculate coherence metrics of final rollouts
     all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
@@ -213,5 +234,5 @@ for this_results_dir in os.listdir(results_dir):
         "metrics_by_example": coherence_metrics_by_example,
     }
     json.dump(coherence_metrics, 
-            open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "w"),
+            open(os.path.join(results_dir, this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "w"),
             indent=4)
