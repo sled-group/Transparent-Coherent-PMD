@@ -51,10 +51,10 @@ def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames,
             frames[batch_sub_idx].append(batch_examples[batch_sub_idx].frames[0])
     else:
         for batch_sub_idx, (frame, example) in enumerate(zip(batch_frames_filtered, batch_examples)):
-            frame_cache_dir = os.path.join(frame_cache_dir, f"vqa_frames/{example.example_id}")
-            if not os.path.exists(frame_cache_dir):
-                os.makedirs(frame_cache_dir)
-            frame_path = os.path.join(frame_cache_dir, f"frame_q{question_idx}.jpg")
+            this_frame_cache_dir = os.path.join(frame_cache_dir, f"vqa_frames/{example.example_id}")
+            if not os.path.exists(this_frame_cache_dir):
+                os.makedirs(this_frame_cache_dir)
+            frame_path = os.path.join(this_frame_cache_dir, f"frame_q{question_idx}.jpg")
             resized_frame = resize_with_aspect(frame, CACHED_FRAME_DIMENSION)
             resized_frame.save(frame_path)
             frames[batch_sub_idx].append(frame_path)
