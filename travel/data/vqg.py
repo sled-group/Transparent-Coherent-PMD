@@ -96,7 +96,7 @@ VQG_DEMONSTRATIONS = [
         questions=[
             "Can you see a baking tray?",
             "Is the baking tray on the table?",
-            "Is the baking tray somewhere not on the table?",
+            "Is the baking tray picked up by someone?",
         ],
         answers_str=[
             "Yes",
@@ -236,7 +236,7 @@ VQG_DEMONSTRATIONS = [
         questions=[
             "Is there a dust bin?",
             "Is there dirt in the dust bin?",
-            "Is there any dirt that is not in the dust bin?",
+            "Is there any dirt outside of the dust bin?",
         ],
         answers_str=[
             "Yes",

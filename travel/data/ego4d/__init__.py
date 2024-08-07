@@ -70,6 +70,7 @@ EGO4D_IGNORE_VERBS = [
     "clap", # Clapping hands
     "move_(transfer,_pass,_exchange)", # Move an object
     "arrange_(straighten,_sort,_distribute,_align)", # Arrange objects (non-specific movement)
+    "shuffle", # Shuffle objects, e.g., cards (non-specific movement)
 ] 
 
 # Similarly, some verb noun pairs don't involve meaningful state changes (e.g., put hand)

@@ -356,7 +356,7 @@ def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], t
         "Question: Is there a bowl on the table?\nAnswer: Yes\nStatement: There is a bowl on the table.",
         "Question: Are the eggs cracked?\nAnswer: No\nStatement: The eggs are not cracked.",
         "Question: Does the cardboard box look open?\nAnswer: Yes\nStatement: The cardboard box looks open.",
-        "Question: Are there any leaves that are not in the basket?\nAnswer: No\nStatement: There are not any leaves that are not in the basket.",
+        "Question: Are there any leaves outside of the basket?\nAnswer: No\nStatement: There are not any leaves outside of the basket.",
         "Question: Is the orange peeled?\nAnswer: Yes\nStatement: The orange is peeled.",
         "Question: Is the mug empty?\nAnswer: No\nStatement: The mug is not empty.",
         "Question: Are there hedge trimmers in the image?\nAnswer: Yes\nStatement: There are hedge trimmers in the image.",
