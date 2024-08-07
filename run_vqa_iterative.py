@@ -696,14 +696,15 @@ if worker_index == 0:
             if k in all_metrics:
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
-                    this_metrics.append(all_metrics[k][parallel_idx])
-                coherence_metrics_by_example[k].append(round(float(np.mean(this_metrics)), 6))
+                    this_metrics.append(round(float(all_metrics[k][parallel_idx]), 6))
+                coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
+                coherence_metrics_by_example[k + "_by_turn"].append(this_metrics)
         parallel_idx += 1
 
     coherence_metrics = {
-        k: round(float(np.mean(coherence_metrics_by_example[k])), 6) for k in coherence_metric_names if k in coherence_metrics_by_example
+        k: round(float(np.mean(coherence_metrics_by_example[k + "_by_example"])), 6) for k in coherence_metric_names if k + "_by_example" in coherence_metrics_by_example
     } | {
-        "metrics_by_example": coherence_metrics_by_example,
+        "metrics_breakdown": coherence_metrics_by_example,
     }
     json.dump(coherence_metrics, 
             open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "w"),

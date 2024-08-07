@@ -369,6 +369,21 @@ def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], t
     rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
     return rephrased_texts
 
+def entropy(binary_prob):
+    if binary_prob == 0.0 or binary_prob == 1.0:
+        return 0.0
+    ent = binary_prob * np.log2(binary_prob)
+    ent += (1.0 - binary_prob) * np.log2(1.0 - binary_prob)
+    return -ent
+
+def entropy_tensor(binary_prob):
+    ent = -binary_prob
+    ent[binary_prob != 0.0] *= torch.log2(binary_prob[binary_prob != 0.0])
+    ent[binary_prob != 1.0] -= (1.0 - binary_prob[binary_prob != 1.0]) * torch.log2(1.0 - binary_prob[binary_prob != 1.0])
+    ent[binary_prob == 0.0] = 0.0
+    ent[binary_prob == 1.0] = 0.0
+    return ent
+
 def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]]=None, previous_answers: Optional[list[list[VQAResponse]]]=None, rephrase_batch_size=20):
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
@@ -404,12 +419,12 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
 
     # Expected informativeness: on average (or for actual answer), how confident are we that the answer to the question would indicate a success or mistake
     if not answers:
-        informativeness = torch.abs(probs_yes[:, 0].unsqueeze(1) - probs_yes[:, 1].unsqueeze(1))
-        informativeness += torch.abs(probs_no[:, 0].unsqueeze(1) - probs_no[:, 1].unsqueeze(1))
+        informativeness = entropy_tensor(probs_yes[:, 0])
+        informativeness += entropy_tensor(probs_no[:, 0])
         informativeness /= 2.0
         informativeness = informativeness
     else:
-        informativeness = torch.abs(probs_actual[:, 0].unsqueeze(1) - probs_actual[:, 1].unsqueeze(1))
+        informativeness = entropy_tensor(probs_actual[:, 0])
     metrics['informativeness'] = informativeness.numpy()
 
     if previous_questions:
@@ -442,28 +457,24 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
             probs_past_actual = torch.stack([probs_past_yes[i] if answers[i] == VQAResponse.Yes else probs_past_no[i] for i in range(len(answers))])
         
         # Marginal relevance: how much probability of success changes depending on the answer AND information we already extracted from the image
-        relevance_marginal = torch.abs(probs_past_yes[:, 0].unsqueeze(1) - probs_past_no[:, 0].unsqueeze(1))
+        relevance_marginal = torch.abs(probs_past_yes[:, 0] - probs_past_no[:, 0])
         metrics['relevance_marginal'] = relevance_marginal.numpy()
 
         # Marginal expected informativeness: with past questions and answers, how informative could (or is) the answer to this question be toward the final decision
         if not answers:
-            informativeness_marginal = torch.abs(probs_past_yes[:, 0].unsqueeze(1) - probs_past_yes[:, 1].unsqueeze(1))
-            informativeness_marginal += torch.abs(probs_past_no[:, 0].unsqueeze(1) - probs_past_no[:, 1].unsqueeze(1))
+            informativeness_marginal = entropy_tensor(probs_past_yes[:, 0])
+            informativeness_marginal += entropy_tensor(probs_past_no[:, 0])
             informativeness_marginal /= 2.0
         else:
-            informativeness_marginal = torch.abs(probs_past_actual[:, 0].unsqueeze(1) - probs_past_actual[:, 1].unsqueeze(1))
+            informativeness_marginal = torch.abs(probs_past_actual[:, 0] - probs_past_actual[:, 1])
         metrics['informativeness_marginal'] = informativeness_marginal.numpy()
-
-        # TODO: can consider an "information gain"-like metric which looks at how the probability of success changes from only having previous facts to also having this fact
-        # - this is challenging though because the actual answer we'll get very much dictates this, e.g., if we contradict past information this would make this metric high
-        # TODO: given entailment/contradiction distribution, we can actually calculate entropy in bits - would this make sense?
     else:
         metrics['relevance_marginal'] = metrics['relevance']
         metrics['informativeness_marginal'] = metrics['informativeness']
 
     # Convert to floats to ensure json serializable
     metrics = {
-        k: [round(float(val[0]), 6) for val in v]
+        k: [round(float(val), 6) for val in v]
         for k, v in metrics.items()
     }
     return metrics
