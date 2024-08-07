@@ -2,6 +2,7 @@
 from travel import init_travel
 init_travel()
 
+from collections import Counter
 import datetime
 import json
 import numpy as np
@@ -28,11 +29,14 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 # Configure arguments here
+# results_fnames = [
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805180404/outputs_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_20240805002323/outputs_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240805190642/outputs_val.json",
+#     "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240804224634/outputs_val.json",
+# ]
 results_fnames = [
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805180404/outputs_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_20240805002323/outputs_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240805190642/outputs_val.json",
-    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240804224634/outputs_val.json",
+    "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug20/llava-1.5-7b-hf/IterativeVQA_q2_ego4d_single_debug20_llava-1.5-7b-hf_likelihood_icl10_202408061111/outputs_val.json"
 ]
 for results_fname in results_fnames:
     if not os.path.exists(os.path.join(os.path.join("/".join(results_fname.split("/")[:-1]), run_folder_name))):
@@ -43,11 +47,14 @@ metrics_accuracy = [
 ]
 pprint(metrics_accuracy)
 metrics_det = [{float(k): v for k, v in metrics.items() if k not in ["best_metrics", "best_threshold"]} for metrics in metrics_accuracy]
+# results_names = [
+#     "Likelihood Ranking",
+#     "Likelihood Ranking (+ ICL candidates)",
+#     "Coherence Ranking",
+#     "Coherence Ranking (+ ICL candidates)",
+# ]
 results_names = [
-    "Likelihood Ranking",
-    "Likelihood Ranking (+ ICL candidates)",
-    "Coherence Ranking",
-    "Coherence Ranking (+ ICL candidates)",
+    "Test",
 ]
 
 # Analysis 0: Generate DET curves
@@ -70,6 +77,8 @@ mistake_error = [[] for _ in results_fnames]
 success_error = [[] for _ in results_fnames]
 n_turns = [[] for _ in results_fnames]
 turn_success_probs = [[] for _ in results_fnames]
+turn_questions = [[] for _ in results_fnames]
+turn_questions_sources = [[] for _ in results_fnames]
 for i, result_fname in enumerate(results_fnames):
     result_preds = json.load(open(result_fname, "r"))
     for pred in result_preds.values():
@@ -94,8 +103,11 @@ for i, result_fname in enumerate(results_fnames):
 
         n_turns[i].append(pred['final_turn'] + 1)
         turn_success_probs[i].append(pred['success_probs'])
+        turn_questions[i].append(pred['questions'])
+        if 'candidate_questions_sources' in pred:
+            turn_questions_sources[i].append([cs[cq.index(q)] for q, cq, cs in zip(pred['questions'], pred['candidate_questions'], pred['candidate_questions_sources'])])
 
-# Analysis 1: save number of turns spent on each example (efficiency)
+# Analysis 1: save number of turns spent on each example and other stats about VQG->VQA turns
 print("(1) Running efficiency analysis...")
 def entropy(binary_prob):
     if binary_prob == 0.0 or binary_prob == 1.0:
@@ -111,6 +123,7 @@ for i in range(len(results_fnames)):
     all_turn_prob_gains = []
     all_dialog_info_gains = []
     all_turn_info_gains = []
+    question_sources = Counter()
     for label_idx, label in enumerate(all_labels[i]):
         turn_prob_gains = []
         turn_info_gains = []
@@ -135,6 +148,10 @@ for i in range(len(results_fnames)):
             turn_prob_gains.append(turn_prob_gain)
             turn_info_gains.append(turn_info_gain)
 
+            if len(turn_questions_sources[i]) > 0:
+                q_source = turn_questions_sources[i][label_idx][turn_idx]
+                question_sources[q_source] += 1
+
         all_turn_prob_gains.append(np.mean(turn_prob_gains))
         all_dialog_info_gains.append(np.sum(turn_info_gains))
         all_turn_info_gains.append(np.mean(turn_info_gains))
@@ -146,9 +163,12 @@ for i in range(len(results_fnames)):
     lines.append(f"{results_names[i]} average confidence gained toward correct label per turn: {mean_turn_gain}")
     lines.append(f"{results_names[i]} average information gained per turn: {mean_turn_info_gain}")
     lines.append(f"{results_names[i]} average information gained per dialog: {mean_dialog_info_gain}")
+    
+    for source in question_sources:
+        lines.append(f"{results_names[i]} percent of turns from source '{source}': {question_sources[source] / sum(list(question_sources.values()))}")
     lines.append("")
 
-output_fname = f"efficiency_metrics_{'_'.join(results_names).replace(' ', '-')}.txt"
+output_fname = f"turn_metrics_{'_'.join(results_names).replace(' ', '-')}.txt"
 save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
 for save_path in save_paths:
     with open(save_path, 'w') as f:
