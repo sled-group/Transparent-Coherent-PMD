@@ -3,7 +3,7 @@ from enum import Enum
 import os
 from PIL import Image
 import torch
-from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
+from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, Phi3ForCausalLM
 from typing import Optional, Union
 import uuid
 
@@ -33,6 +33,33 @@ CAPTION_VQA_PROMPT_TEMPLATES = {
 
 VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES = {
     LlavaForConditionalGeneration: "USER: <image>\n{question1} ASSISTANT: {answer1} USER: {question2} ASSISTANT: {answer2} USER: " + f"{SUCCESSVQA_QUESTION_TEMPLATE} ASSISTANT: "
+}
+
+# Important prompt components for iterative VQA
+IMAGE_TOKENS = {
+    InstructBlipForConditionalGeneration: "",
+    LlavaForConditionalGeneration: "<image>\n",
+    Phi3ForCausalLM: "<|image_1|>\n",
+}
+USER_START_TOKENS = {
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: "USER: ",
+    Phi3ForCausalLM: "<|user|>\n",
+}
+USER_END_TOKENS = {
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: " ",
+    Phi3ForCausalLM: "<|end|>\n",
+}
+ASSISTANT_START_TOKENS = {
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: "ASSISTANT: ",
+    Phi3ForCausalLM: "<|assistant|>\n",
+}
+ASSISTANT_END_TOKENS = {
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: " ",
+    Phi3ForCausalLM: "<|end|>\n",
 }
 
 

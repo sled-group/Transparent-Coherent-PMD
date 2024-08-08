@@ -14,15 +14,15 @@ import spacy
 import time
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint, \
-                         InstructBlipForConditionalGeneration, LlavaForConditionalGeneration, Phi3ForCausalLM
+from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint
+                         
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
-from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
+from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, compute_completion_log_likelihoods
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
@@ -32,32 +32,6 @@ from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa 
 from travel.model.vqg import cleanup_generated_question
 
-# Import prompt components for iterative VQA
-IMAGE_TOKENS = {
-    InstructBlipForConditionalGeneration: "",
-    LlavaForConditionalGeneration: "<image>\n",
-    Phi3ForCausalLM: "<|image_1|>\n",
-}
-USER_START_TOKENS = {
-    InstructBlipForConditionalGeneration: " ",
-    LlavaForConditionalGeneration: "USER: ",
-    Phi3ForCausalLM: "<|user|>\n",
-}
-USER_END_TOKENS = {
-    InstructBlipForConditionalGeneration: " ",
-    LlavaForConditionalGeneration: " ",
-    Phi3ForCausalLM: "<|end|>\n",
-}
-ASSISTANT_START_TOKENS = {
-    InstructBlipForConditionalGeneration: " ",
-    LlavaForConditionalGeneration: "ASSISTANT: ",
-    Phi3ForCausalLM: "<|assistant|>\n",
-}
-ASSISTANT_END_TOKENS = {
-    InstructBlipForConditionalGeneration: " ",
-    LlavaForConditionalGeneration: " ",
-    Phi3ForCausalLM: "<|end|>\n",
-}
 
 def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, batch_size, visual_filter=None, visual_filter_mode=None, frame_cache_dir=None):
     # Apply visual filter to frames for VQA
@@ -114,7 +88,7 @@ parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch
 parser.add_argument("--vqa_batch_size", type=int, default=10, help="Batch size for VQA with VLM.")
 parser.add_argument("--nli_batch_size", type=int, default=NLI_BATCH_SIZE, help="Batch size for scoring candidate questions with NLI model.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
-parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of generating frameVQA examples.")
+parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")

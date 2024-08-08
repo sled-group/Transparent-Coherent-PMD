@@ -84,6 +84,66 @@ def run_vqa(vlm: PreTrainedModel,
 
     return logits
 
+def run_qa(lm: PreTrainedModel, 
+            tokenizer,
+            prompts: list[str],
+            batch_size: int=1,
+            cache_path: Optional[str]=None) -> torch.FloatTensor:
+    """
+    Runs VQA for given prompts and frames in batches with a given VLM and its processor.
+
+    :param vlm: VLM for conditional generation from `transformers`.
+    :param tokenizer: VLM processor from `transformers`, including tokenizer and image processor.
+    :param prompts: List of prompts including questions.
+    :param batch_size: Batch size for running inference.
+    :param cache_path: .pt file to cache incomplete logits in.
+    :return: Full tensor of logits output from each question. The process of mapping this into VQAOutputs instances requires task/process-specific information, so it should be done outside of this method.
+    """
+
+    # Run QA in batches
+    logits = torch.zeros((0, lm.vocab_size)).float()
+    if cache_path is not None:
+        assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
+        if os.path.exists(cache_path):
+            try:
+                logits = torch.load(cache_path)
+            except:
+                pass
+        else:
+            if not os.path.exists("/".join(cache_path.split("/")[:-1])):
+                os.makedirs("/".join(cache_path.split("/")[:-1]))
+
+    last_save = 0
+    with torch.inference_mode():
+        # Start at logits.shape[0] so we don't rerun any logits that were already cached (resuming logic)
+        for i in tqdm(range(logits.shape[0], len(prompts), batch_size), desc=f"running QA ({str(lm.device)})"):
+            # Prepare the batch
+            batch_prompts = prompts[i:i+batch_size]
+
+            # Run through VLM to get logits
+            inputs = tokenizer(batch_prompts, padding=True, return_tensors="pt")
+            inputs = inputs.to(lm.device)
+            this_logits = lm(**inputs).logits
+            inputs = inputs.to('cpu')
+            this_logits = this_logits[:, -1].detach().cpu()
+            logits = torch.cat([logits, this_logits], dim=0)
+            del this_logits
+            del inputs
+
+            # Cache logits so far
+            if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
+                torch.save(logits, cache_path)
+                last_save = i
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    # Cache one more time
+    if cache_path is not None:
+        torch.save(logits, cache_path) 
+
+    return logits
+
 def clean_up_captions(captions: list[str],
                     model_type: type,
                     processor: ProcessorMixin):
