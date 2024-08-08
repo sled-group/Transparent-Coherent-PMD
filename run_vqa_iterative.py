@@ -15,7 +15,6 @@ import time
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint
-from typing import Optional
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
@@ -80,7 +79,7 @@ parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.va
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
-parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "consistency", "verifiability", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
+parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
@@ -360,7 +359,7 @@ if not is_complete:
 
                 new_questions = selected_questions
 
-            elif args.question_selection_strategy in ["consistency", "verifiability", "coherence"]:
+            elif args.question_selection_strategy == "coherence":
                 # Calculate coherence metrics for each candidate question
                 nli_outputs = question_coherence_metrics(
                     nli_tokenizer, 
@@ -383,19 +382,10 @@ if not is_complete:
                     candidate_questions_scores[batch_sub_idx].append(this_nli_outputs)
                     parallel_idx += len(beam_search_questions)
 
-                    # Use marginal relevance (consistency) and/or expected informativeness (verifiability)
-                    if args.question_selection_strategy == "consistency":
-                        candidate_scores = np.array(
-                            [candidate_metrics['relevance_marginal'] for candidate_metrics in this_nli_outputs]
-                        )
-                    elif args.question_selection_strategy == "verifiability":
-                        candidate_scores = np.array(
-                            [candidate_metrics['informativeness_marginal'] for candidate_metrics in this_nli_outputs]
-                        )
-                    elif args.question_selection_strategy == "coherence":
-                        candidate_scores = np.array(
-                            [candidate_metrics['relevance_marginal'] * candidate_metrics['informativeness_marginal'] for candidate_metrics in this_nli_outputs]
-                        )
+                    # Use marginal relevance (consistency) and expected informativeness (verifiability) to rank candidates
+                    candidate_scores = np.array(
+                        [candidate_metrics['informativeness_marginal_x_relevance'] for candidate_metrics in this_nli_outputs]
+                    )
 
                     best_candidate = np.argmax(candidate_scores)
                     selected_questions.append(beam_search_questions[best_candidate])
