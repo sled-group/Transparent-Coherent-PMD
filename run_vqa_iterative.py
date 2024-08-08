@@ -492,7 +492,7 @@ if not is_complete:
         all_success_probs += success_probs
         all_example_ids += [example.example_id for example in batch_examples]
         all_procedures += [example.procedure_description for example in batch_examples]
-        all_labels += [example.mistake for example in batch_examples]
+        all_labels += [example.mistake_type for example in batch_examples]
 
         for frame in batch_frames:
             frame.close()
@@ -634,7 +634,8 @@ if worker_index == 0:
 
         results_dict = {
             "procedure": procedure,
-            "mistake": label,
+            "mistake": True if label is not None else False,
+            "mistake_type": label,
             "questions": questions,
             "frame_paths": frames,
             "answers": [a.value for a in answers],
@@ -679,7 +680,6 @@ if worker_index == 0:
             indent=4)
 
     # Generate DET curve
-    # TODO: add more thresholds? e.g., every 0.01
     generate_det_curve(accuracy_metrics, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
 
     # Calculate coherence metrics of final rollouts
