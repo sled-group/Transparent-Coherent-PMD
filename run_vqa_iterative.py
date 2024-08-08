@@ -712,7 +712,7 @@ if worker_index == 0:
 
     parallel_idx = 0
     coherence_metrics_by_example = defaultdict(list)
-    coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal']
+    coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance']
     for results_dict in all_results_dicts.values():
         for k in coherence_metric_names:
             if k in all_metrics:

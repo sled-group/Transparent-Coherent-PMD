@@ -472,6 +472,9 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
         metrics['relevance_marginal'] = metrics['relevance']
         metrics['informativeness_marginal'] = metrics['informativeness']
 
+    # "Verifiability" metric: weight marginal informativeness by relevance
+    metrics['informativeness_marginal_x_relevance'] = metrics['informativeness_marginal'] * metrics['relevance']
+
     # Convert to floats to ensure json serializable
     metrics = {
         k: [round(float(val), 6) for val in v]
