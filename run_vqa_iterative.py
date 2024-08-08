@@ -14,7 +14,8 @@ import spacy
 import time
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint
+from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint, \
+                         LlavaForConditionalGeneration
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
@@ -31,6 +32,23 @@ from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa 
 from travel.model.vqg import cleanup_generated_question
 
+# Import prompt components for iterative VQA
+IMAGE_TOKENS = {
+    LlavaForConditionalGeneration: "<image>\n"
+}
+USER_START_TOKENS = {
+    LlavaForConditionalGeneration: "USER: "
+}
+USER_END_TOKENS = {
+    LlavaForConditionalGeneration: " "
+}
+ASSISTANT_START_TOKENS = {
+    LlavaForConditionalGeneration: "ASSISTANT: "
+}
+ASSISTANT_END_TOKENS = {
+    LlavaForConditionalGeneration: " "
+}
+# TODO: support more LMs above
 
 def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, batch_size, visual_filter=None, visual_filter_mode=None, frame_cache_dir=None):
     # Apply visual filter to frames for VQA
@@ -91,6 +109,7 @@ parser.add_argument("--resume_dir", type=str, help="Path to results directory fo
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
+parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
 args = parser.parse_args()
 
 assert torch.cuda.device_count() == 1, "Iterative VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
@@ -138,8 +157,11 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4",
 )
 
-# Load VLM
-vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config)   
+# Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
+try:
+    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config)   
+except:
+    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config)
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
 vlm_processor.tokenizer.padding_side = "left"
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
@@ -206,7 +228,6 @@ nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
 
 # Load approopriate evaluation dataset
-# TODO: sometimes this fails due to JSON decode error, but there's no problem with the json...
 dataset = None
 for retry in range(5):
     print(f"({worker_index}) Loading evaluation dataset (try {retry})...")
@@ -268,11 +289,12 @@ if not is_complete:
 
         this_batch_size = len(batch_examples)
 
-        # TODO: enable more prompt template types for other VLMs
         prompts = [
-            f'USER: <image>\nThis is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions about the state of the scene to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.' 
+            f'{USER_START_TOKENS[type(vlm)]}{IMAGE_TOKENS[type(vlm)]}This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions about the state of the scene to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.' 
             for procedure in batch_procedures
         ]
+        if args.print_prompts:
+            pprint(prompts[0])
         questions = [[] for _ in range(this_batch_size)]
         frames = [[] for _ in range(this_batch_size)]
         candidate_questions = [[] for _ in range(this_batch_size)]
@@ -287,10 +309,10 @@ if not is_complete:
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
 
             # Generate a question (with beam search so we have several candidates)
-            prompts_q = [prompt + " USER: Q: " for prompt in prompts]
+            prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[type(vlm)] if question_idx != 0 else USER_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: " for prompt in prompts]
             new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
                                                             vlm_processor.tokenizer,
-                                                            [prompt.replace("<image>\n", "") for prompt in prompts_q],
+                                                            [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q],
                                                             max_new_tokens=20,
                                                             batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                             generation_kwargs=generation_kwargs)
@@ -413,7 +435,9 @@ if not is_complete:
                 questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
             # Run VQA with generated questions (and optional spatial filter)
-            prompts_a = [prompt + f'{question} ASSISTANT: A: ' for prompt, question in zip(prompts_q, new_questions)]
+            prompts_a = [prompt + f'{question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A: ' for prompt, question in zip(prompts_q, new_questions)]
+            if args.print_prompts:
+                pprint(prompts_a[0])
             new_answers_logits = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
                                                             vlm=vlm, 
                                                             batch_examples=batch_examples, 
@@ -454,9 +478,11 @@ if not is_complete:
                 for procedure in batch_procedures
             ]
             prompts_success = [
-                prompt + f' USER: Q: {question} ASSISTANT: A:'
+                prompt + f'{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:'
                 for prompt, question in zip(prompts, questions_success)
             ]
+            if args.print_prompts:
+                pprint(prompts_success[0])
             success_vqa_outputs = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
                                                              vlm=vlm, 
                                                              batch_examples=batch_examples, 
@@ -573,7 +599,7 @@ if worker_index == 0:
         print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
         delay_per_try = 10
         delay_so_far = 0
-        max_delay = 7200 # TODO: change this to a lower number
+        max_delay = 7200 if args.resume_dir is not None else 1800 # Allow a longer delay in case some processes are already finished in resumed run
         while True:
             other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
             if os.path.exists(other_cache_path):
@@ -674,9 +700,9 @@ if worker_index == 0:
     best_threshold = None
     accuracy_metrics = {}
     for threshold in MISTAKE_DETECTION_THRESHOLDS:
-        preds = [1.0 - p >= threshold for p in all_probs]
+        preds = [1.0 - p >= threshold for p in all_probs] # Have to do 1.0 - probability since we got "success" probability from VLM
         assert len(preds) == len(all_probs) == len(all_labels), "Expected same number of preds, probs, and labels."
-        this_metrics = mistake_detection_metrics(all_labels, preds)
+        this_metrics = mistake_detection_metrics([True if l is not None else False for l in all_labels], preds)
         accuracy_metrics[threshold] = this_metrics
 
         if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
@@ -706,7 +732,7 @@ if worker_index == 0:
                                             lm,                                         
                                             [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
                                             all_chosen_questions,
-                                            answers=all_predicted_answers, # TODO: this returns an informativeness metric which says how much different success probability is for a yes or no answer - should we just look at probability of entailment if it's a success example, and contradiction if it's a mistake?
+                                            answers=all_predicted_answers,
                                             previous_questions=all_previous_questions,
                                             previous_answers=all_previous_answers,
                                             rephrase_batch_size=args.generation_batch_size)

@@ -414,7 +414,7 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
         probs_actual = torch.stack([probs_yes[i] if answers[i] == VQAResponse.Yes else probs_no[i] for i in range(len(answers))])
 
     # Individual relevance: how much probability of success changes depending on the answer
-    relevance = torch.abs(probs_yes[:, 0].unsqueeze(1) - probs_no[:, 0].unsqueeze(1))
+    relevance = torch.abs(probs_yes[:, 0] - probs_no[:, 0])
     metrics['relevance'] = relevance.numpy()
 
     # Expected informativeness: on average (or for actual answer), how confident are we that the answer to the question would indicate a success or mistake
