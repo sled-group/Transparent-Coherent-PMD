@@ -337,8 +337,19 @@ if not is_complete:
             if args.question_selection_strategy == "likelihood":
 
                 # First recalculate likelihood of each cleaned up question in iterative VQA context
+
                 # (this is mostly important when we're using ICL injected questions)
-                # TODO: why not just use beam search transition scores? These don't seem to match likelihood of forward pass with model, but need to understand why this is
+                # NOTE: for some (unknown at this time) reason, LLaVA's LM likelihoods calculated during beam search (returned by output.scores) do not
+                # match the likelihoods we get from a forward pass (which is unlike other models, e.g., T5). As such, we need to recompute completion
+                # log likelihoods no matter what when using the "likelihood" candidate selection strategy. 
+                # 
+                # While this doesn't seem to affect the ordering of contextually generated candidates, the scores used here are slightly different. It's also 
+                # worth noting that this step is especially important when ranking ICL-generated candidates among contextually generated candidates, as they may 
+                # reasonably have higher likelihood than beam search candidates, but we need to be sure scores are calculated consistently. Further, since 
+                # questions aren't "cleaned up" in initial generation, scores can be affected by this and at minimum need to be clipped at "?" token that ends
+                # each question.
+                # 
+                # Some relevant discussion on this issue here: https://discuss.huggingface.co/t/compute-log-probabilities-of-any-sequence-provided/11710/10
                 generation_scores = compute_completion_log_likelihoods(lm, tokenizer, prompts_q, new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
 
                 # Select most likely question (first one in list)
