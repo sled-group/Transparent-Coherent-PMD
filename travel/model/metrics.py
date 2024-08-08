@@ -230,6 +230,54 @@ def generate_roc_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
         with open(save_path.replace(".pdf", ".txt"), "w") as f:
             f.write("\n".join([f"{result_name}: {auc_metric}\n" for auc_metric, result_name in zip(aurocs, curve_names)]))
 
+
+def generate_tiered_metric_curves(thresholds: list[float], accuracies: list[float], consistencies: list[float], verifiabilities: list[float], save_paths: list[str]):
+    """
+    Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`.
+     A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point 
+     to set the threshold in the bottom left corner.
+
+    :param metrics: List of `metrics` objects returned by `evaluate_mistake_detection()`.
+    :param curve_names: List of names of the approach associated with each passed entry of `metrics`, e.g., ["Random", "SuccessVQA", "VQG2VQA"].
+    :param save_paths: Paths to save copies of the PDF of the DET curve.
+    """
+    assert len(thresholds) == len(accuracies) == len(consistencies) == len(verifiabilities), "Expected same number of all metrics!"
+
+    colors = plt.get_cmap('tab10', 3)
+    plt.figure(figsize=(8, 6))
+
+    # Plot DET curve
+    plt.plot(thresholds, accuracies, marker='.', linestyle='-', color=colors(0), label="Accuracy")
+    plt.plot(thresholds, consistencies, marker='.', linestyle='-', color=colors(1), label="Consistency")
+    plt.plot(thresholds, verifiabilities, marker='.', linestyle='-', color=colors(2), label="Verifiability")
+
+    plt.xlabel('Confidence Threshold')
+    plt.ylabel('Metric Value')
+
+    # Set grid and title
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    
+    # Customize axes for better readability
+    tick_vals = np.linspace(0.00, 1.0, 11)
+    # ticks = norm.ppf(tick_vals)
+    ticks = tick_vals
+    tick_labels = [f"{round(val, 2)}" for val in tick_vals]
+    plt.xticks(ticks, tick_labels)
+    plt.yticks(ticks, tick_labels)
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
+
+    # Add legend
+    plt.legend()
+
+    # Save to files
+    for save_path in save_paths:
+        if not os.path.exists("/".join(save_path.split("/")[:-1])):
+            os.makedirs("/".join(save_path.split("/")[:-1]))
+        plt.savefig(save_path)
+
+
 def calculate_abstention_metrics(mistake_probs, labels, threshold, error_cost=1):
     """Code adapted from ReCoVERR repo: https://github.com/tejas1995/ReCoVERR/blob/0cbd88de4e5782dc16092ad3dad82a33544ce827/src/VanillaSelectivePrediction.ipynb#L110"""
     num_covered, total_risk, effective_reliability, num_covered_correct, num_correct = 0, 0, 0, 0, 0

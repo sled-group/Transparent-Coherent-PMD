@@ -15,7 +15,7 @@ import time
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint, \
-                         LlavaForConditionalGeneration
+                         InstructBlipForConditionalGeneration, LlavaForConditionalGeneration, Phi3ForCausalLM
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
@@ -26,7 +26,7 @@ from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, compute_completion_log_likelihoods
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
-from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve
+from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve, generate_tiered_metric_curves
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa 
@@ -34,21 +34,30 @@ from travel.model.vqg import cleanup_generated_question
 
 # Import prompt components for iterative VQA
 IMAGE_TOKENS = {
-    LlavaForConditionalGeneration: "<image>\n"
+    InstructBlipForConditionalGeneration: "",
+    LlavaForConditionalGeneration: "<image>\n",
+    Phi3ForCausalLM: "<|image_1|>\n",
 }
 USER_START_TOKENS = {
-    LlavaForConditionalGeneration: "USER: "
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: "USER: ",
+    Phi3ForCausalLM: "<|user|>\n",
 }
 USER_END_TOKENS = {
-    LlavaForConditionalGeneration: " "
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: " ",
+    Phi3ForCausalLM: "<|end|>\n",
 }
 ASSISTANT_START_TOKENS = {
-    LlavaForConditionalGeneration: "ASSISTANT: "
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: "ASSISTANT: ",
+    Phi3ForCausalLM: "<|assistant|>\n",
 }
 ASSISTANT_END_TOKENS = {
-    LlavaForConditionalGeneration: " "
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: " ",
+    Phi3ForCausalLM: "<|end|>\n",
 }
-# TODO: support more LMs above
 
 def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, batch_size, visual_filter=None, visual_filter_mode=None, frame_cache_dir=None):
     # Apply visual filter to frames for VQA
@@ -187,7 +196,7 @@ if args.visual_filter_mode is not None:
         visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')            
     elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.AGLA:
-        visual_filter = AGLAFilter(alpha=args.visual_filter_strength, beta=0.5, device=f"cuda:0")
+        visual_filter = AGLAFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
         nlp = None
     else:
         raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with iterative VQA!")
@@ -210,6 +219,7 @@ yes_no_q_tokens = [
     vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
 ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
 
@@ -695,30 +705,6 @@ if worker_index == 0:
     print(f"({worker_index}) Evaluating outputs...")
     metrics = {}
 
-    # Calculate accuracy metrics
-    best_metrics = None
-    best_threshold = None
-    accuracy_metrics = {}
-    for threshold in MISTAKE_DETECTION_THRESHOLDS:
-        preds = [1.0 - p >= threshold for p in all_probs] # Have to do 1.0 - probability since we got "success" probability from VLM
-        assert len(preds) == len(all_probs) == len(all_labels), "Expected same number of preds, probs, and labels."
-        this_metrics = mistake_detection_metrics([True if l is not None else False for l in all_labels], preds)
-        accuracy_metrics[threshold] = this_metrics
-
-        if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
-            best_metrics = this_metrics
-            best_threshold = threshold
-
-    accuracy_metrics['best_metrics'] = best_metrics
-    accuracy_metrics['best_threshold'] = best_threshold
-
-    json.dump(accuracy_metrics, 
-            open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
-            indent=4)
-
-    # Generate DET curve
-    generate_det_curve(accuracy_metrics, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
-
     # Calculate coherence metrics of final rollouts
     all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
     all_previous_questions = [results_dict['questions'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
@@ -739,6 +725,7 @@ if worker_index == 0:
 
     parallel_idx = 0
     coherence_metrics_by_example = defaultdict(list)
+    coherence_metrics_by_turn = defaultdict(list)
     coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance']
     for results_dict in all_results_dicts.values():
         for k in coherence_metric_names:
@@ -747,17 +734,57 @@ if worker_index == 0:
                 for question_idx in range(results_dict['final_turn'] + 1):
                     this_metrics.append(round(float(all_metrics[k][parallel_idx]), 6))
                 coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
-                coherence_metrics_by_example[k + "_by_turn"].append(this_metrics)
+                coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
         parallel_idx += 1
+    
+    # Calculate accuracy metrics
+    best_metrics = None
+    best_threshold = None
+    accuracy_metrics_by_threshold = {}
+    coherence_metrics_by_threshold = {}
+    all_labels_binary = [True if l is not None else False for l in all_labels]
+    for threshold in MISTAKE_DETECTION_THRESHOLDS:
+        preds = [1.0 - p >= threshold for p in all_probs] # Have to do 1.0 - probability since we got "success" probability from VLM
+        assert len(preds) == len(all_probs) == len(all_labels), "Expected same number of preds, probs, and labels."
+        this_metrics = mistake_detection_metrics(all_labels_binary, preds)
+        accuracy_metrics_by_threshold[threshold] = this_metrics
 
+        # Calculate consistency and verifiability for this example, which are conditional on correctness
+        verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
+        consistency = np.mean([coherence_metrics_by_example['relevance_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
+        coherence_metrics_by_threshold[threshold] = {"verifiability": verifiability, "consistency": consistency,}
+
+        if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
+            best_metrics = this_metrics
+            best_threshold = threshold
+
+    accuracy_metrics_by_threshold['best_metrics'] = best_metrics
+    accuracy_metrics_by_threshold['best_threshold'] = best_threshold
+
+    # Save accuracy and coherence metrics
+    json.dump(accuracy_metrics_by_threshold, 
+            open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
+            indent=4)
+    
     coherence_metrics = {
         k: round(float(np.mean(coherence_metrics_by_example[k + "_by_example"])), 6) for k in coherence_metric_names if k + "_by_example" in coherence_metrics_by_example
     } | {
-        "metrics_breakdown": coherence_metrics_by_example,
+        "metrics_by_threshold": coherence_metrics_by_threshold,
+        "metrics_by_example": coherence_metrics_by_example,
+        "metrics_by_turn": coherence_metrics_by_turn,
     }
     json.dump(coherence_metrics, 
             open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "w"),
             indent=4)
 
+    # Generate DET curves for accuracy
+    generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
+
+    # Generate curves for all metrics by threshold
+    generate_tiered_metric_curves(MISTAKE_DETECTION_THRESHOLDS, 
+                                  [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
+                                  [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
+                                  [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
+                                  [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.eval_partition}.pdf")])
     
     print(f"({worker_index}) Done!")
