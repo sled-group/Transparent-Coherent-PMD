@@ -837,11 +837,13 @@ class AGLAFilter(AdaptiveVisualFilter):
         return augmented_images
 
     def combine_logits(self, original_frame_logits, new_frame_logits):
+        # NOTE: We disable the step in AGLA to preserve only high probability tokens from original frame, since this may cause NaNs in probability distribution over "yes" and "no" tokens
         # AGLA combines logits using alpha, preserving highest-probability tokens from original frame using probability cutoff beta
-        cutoff = torch.log(torch.tensor(self.beta)) + original_frame_logits.max(dim=-1, keepdim=True).values
+        # cutoff = torch.log(torch.tensor(self.beta)) + original_frame_logits.max(dim=-1, keepdim=True).values
         diffs = original_frame_logits + self.alpha * new_frame_logits
-        cd_logits = diffs.masked_fill(original_frame_logits < cutoff, -float("inf"))
-        return cd_logits
+        # cd_logits = diffs.masked_fill(original_frame_logits < cutoff, -float("inf"))
+        # return cd_logits
+        return diffs
 
 class VisualFilterTypes(Enum):
     Spatial = "spatial" # Default spatial filter that crops and masks images in black based on target objects and spatial relations mentioned in questions, then rephrases questions based on the information that has been abstracted away
