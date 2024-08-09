@@ -134,3 +134,4 @@ class VQAOutputs:
     def uncache_frame(self):
         assert type(self.frame) == str and self.frame.endswith(".jpg"), "Can only uncache string .jpg filenames!"
         self.frame = Image.open(self.frame)
+

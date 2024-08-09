@@ -432,7 +432,7 @@ def entropy_tensor(binary_prob):
     ent[binary_prob == 1.0] = 0.0
     return ent
 
-def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]]=None, previous_answers: Optional[list[list[VQAResponse]]]=None, rephrase_batch_size=20):
+def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]]=None, previous_answers: Optional[list[list[VQAResponse]]]=None, rephrase_batch_size=20):
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
     """

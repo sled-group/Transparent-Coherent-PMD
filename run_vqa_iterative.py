@@ -26,7 +26,7 @@ from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs,
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, compute_completion_log_likelihoods
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
-from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics, generate_det_curve, generate_tiered_metric_curves
+from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, generate_det_curve, generate_tiered_metric_curves
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa 
@@ -80,7 +80,7 @@ parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.va
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
-parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
+parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence_nli"], help="Strategy to use to choose question to generate from beam search candidates.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
@@ -376,9 +376,9 @@ if not is_complete:
 
                 new_questions = selected_questions
 
-            elif args.question_selection_strategy == "coherence":
+            elif args.question_selection_strategy == "coherence_nli":
                 # Calculate coherence metrics for each candidate question
-                nli_outputs = question_coherence_metrics(
+                nli_outputs = question_coherence_metrics_nli(
                     nli_tokenizer, 
                     nli_model,
                     tokenizer,
@@ -686,7 +686,7 @@ if worker_index == 0:
     all_predicted_answers = [VQAResponse(answer) for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
     all_previous_answers = [[VQAResponse(a) for a in results_dict['answers'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
-    all_metrics = question_coherence_metrics(nli_tokenizer,
+    all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
                                             nli_model,
                                             tokenizer,
                                             lm,                                         
@@ -703,10 +703,10 @@ if worker_index == 0:
     coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance']
     for results_dict in all_results_dicts.values():
         for k in coherence_metric_names:
-            if k in all_metrics:
+            if k in all_coherence_metrics:
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
-                    this_metrics.append(round(float(all_metrics[k][parallel_idx]), 6))
+                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx]), 6))
                 coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
         parallel_idx += 1
