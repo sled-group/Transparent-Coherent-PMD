@@ -36,7 +36,7 @@ parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.va
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
-parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence_nli"], help="Strategy to use to choose question to generate from beam search candidates.")
+parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
 parser.add_argument("--coherence_evaluation_strategy", type=str, default="vlm", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
@@ -334,7 +334,7 @@ if not is_complete:
 
                 new_questions = selected_questions
 
-            elif args.question_selection_strategy == "coherence_nli":
+            elif args.question_selection_strategy == "coherence":
                 # Calculate coherence metrics for each candidate question
                 nli_outputs = question_coherence_metrics_nli(
                     nli_tokenizer, 
