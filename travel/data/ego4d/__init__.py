@@ -486,7 +486,7 @@ class MisalignSRL:
                 # Sample single narration frame or 8 second clip around narration frame
                 if not multi_frame:
                     effect_frame = extract_frames(video_cap, [frame_time])[0]
-                    if effect_frame:
+                    if effect_frame is not None:
                         sample['effect_frame'] = Image.fromarray(effect_frame)
                     else:
                         # If we failed to retrieve the frame, just try the next one
