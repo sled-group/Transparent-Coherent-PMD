@@ -27,56 +27,67 @@ run_folder_name = f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}"
 parent_output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name)
 
 for results_fnames, results_names, analysis_subdir in [
+    # (
+    #     [
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805180404/outputs_val.json",
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240807080723/outputs_val.json",
+    #     ],
+    #     [
+    #         "Likelihood Ranking",
+    #         "Coherence Ranking",
+    #     ],
+    #     "likelihood_vs_coherence"
+    # ),
+    # (
+    #     [
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240807080723/outputs_val.json",
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240806224704/outputs_val.json",
+    #     ],
+    #     [
+    #         "Coherence Ranking",
+    #         "Coherence Ranking (+ ICL candidates)",
+    #     ],
+    #     "introducing_icl"
+    # ),
+    # (
+    #     [
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240804224634/outputs_val.json",
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_contrastive_region1.0_20240805163803/outputs_val.json",
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_agla2.0_20240806115545/outputs_val.json",
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_spatial_blur55.0_20240807112322/outputs_val.json",
+    #     ],
+    #     [
+    #         "No Filter",
+    #         "CRG",
+    #         "AGLA",
+    #         "Spatial",
+    #     ],
+    #     "visual_filters_coherence"
+    # ),
+    # (
+    #     [
+    #         # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805122212/outputs_val.json",
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_20240805002323/outputs_val.json",
+    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_contrastive_region1.0_20240806132636/outputs_val.json",
+    #     ],
+    #     [
+    #         # "No ICL",
+    #         "No Filter",
+    #         "CRG",
+    #     ],
+    #     "visual_filters_likelihood"
+    # ),    
     (
         [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805180404/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240807080723/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug20/llava-1.5-7b-hf/IterativeVQA_q2_ego4d_single_debug20_llava-1.5-7b-hf_coherence_nli_icl10_202408090000/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug20/llava-1.5-7b-hf/IterativeVQA_q2_ego4d_single_debug20_llava-1.5-7b-hf_likelihood_icl10_202408090002/outputs_val.json",
         ],
         [
             "Likelihood Ranking",
-            "Coherence Ranking",
+            "Coherence Ranking"
         ],
         "likelihood_vs_coherence"
-    ),
-    (
-        [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240807080723/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240806224704/outputs_val.json",
-        ],
-        [
-            "Coherence Ranking",
-            "Coherence Ranking (+ ICL candidates)",
-        ],
-        "introducing_icl"
-    ),
-    (
-        [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240804224634/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_contrastive_region1.0_20240805163803/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_agla2.0_20240806115545/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_spatial_blur55.0_20240807112322/outputs_val.json",
-        ],
-        [
-            "No Filter",
-            "CRG",
-            "AGLA",
-            "Spatial",
-        ],
-        "visual_filters_coherence"
-    ),
-    (
-        [
-            # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805122212/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_20240805002323/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_contrastive_region1.0_20240806132636/outputs_val.json",
-        ],
-        [
-            # "No ICL",
-            "No Filter",
-            "CRG",
-        ],
-        "visual_filters_likelihood"
-    ),    
+    )
 ]:
     # Set up subdirectory
     output_dir = os.path.join(parent_output_dir, analysis_subdir)
@@ -115,11 +126,16 @@ for results_fnames, results_names, analysis_subdir in [
     success_error = [[] for _ in results_fnames]
     n_turns = [[] for _ in results_fnames]
     turn_success_probs = [[] for _ in results_fnames]
+    turn_success_probs_noimg = [[] for _ in results_fnames]
     turn_questions = [[] for _ in results_fnames]
     turn_questions_sources = [[] for _ in results_fnames]
     for i, result_fname in enumerate(results_fnames):
         result_preds = json.load(open(result_fname, "r"))
-        for pred in result_preds.values():
+        result_preds_noimg = None
+        if os.path.exists(result_fname.replace("outputs_val.json", "/results_image_free_SuccessVQA/outputs_val.json")):
+            result_preds_noimg = json.load(open(result_fname.replace("outputs_val.json", "/results_image_free_SuccessVQA/outputs_val.json"), "r"))
+
+        for pred_idx, pred in enumerate(result_preds.values()):
             mistake = pred['mistake']
             
             mistake_prob = 1.0 - pred['success_probs'][pred['final_turn']]
@@ -141,6 +157,8 @@ for results_fnames, results_names, analysis_subdir in [
 
             n_turns[i].append(pred['final_turn'] + 1)
             turn_success_probs[i].append(pred['success_probs'])
+            if result_preds_noimg:
+                turn_success_probs_noimg[i].append(list(result_preds_noimg.values())[pred_idx]['success_probs'])
             turn_questions[i].append(pred['questions'])
             if 'candidate_questions_sources' in pred:
                 turn_questions_sources[i].append([cs[cq.index(q)] for q, cq, cs in zip(pred['questions'], pred['candidate_questions'], pred['candidate_questions_sources'])])
@@ -151,50 +169,73 @@ for results_fnames, results_names, analysis_subdir in [
     for i in range(len(results_fnames)):
         lines.append(f"{results_names[i]} average number of turns: {np.mean(n_turns[i])}")
 
-        all_turn_prob_gains = []
         all_dialog_info_gains = []
         all_turn_info_gains = []
+
+        all_dialog_info_gains_noimg = []
+        all_turn_info_gains_noimg = []
+
+        all_dialog_info_diffs = []
+        all_turn_info_diffs = []
+
         question_sources = Counter()
         for label_idx, label in enumerate(all_labels[i]):
-            turn_prob_gains = []
             turn_info_gains = []
+            turn_info_gains_noimg = []
+            turn_info_diffs = []
             for turn_idx in range(n_turns[i][label_idx]):
+
+                # Get information gain for this turn
                 last_turn_success_prob = turn_success_probs[i][label_idx][turn_idx - 1] if turn_idx > 0 else None
                 this_turn_success_prob = turn_success_probs[i][label_idx][turn_idx]
 
-                turn_prob_gain = this_turn_success_prob
-                if last_turn_success_prob:
-                    turn_prob_gain -= last_turn_success_prob # how much closer we got to 1.0 probability in this turn
-                
-                if label == True:
-                    turn_prob_gain = -turn_prob_gain # want how much closer we got to 0.0 probability
-
-                turn_prob_gain = np.abs(turn_prob_gain)
-
-                # also get information gain
                 last_turn_info = (1.0 - entropy(last_turn_success_prob)) if turn_idx > 0 else 0.0
                 this_turn_info = 1.0 - entropy(this_turn_success_prob)
                 turn_info_gain = this_turn_info - last_turn_info
-
-                turn_prob_gains.append(turn_prob_gain)
                 turn_info_gains.append(turn_info_gain)
+
+                # If possible, get information gain for this turn without an image available in success VQA step
+                if len(turn_success_probs_noimg[i]) > 0:
+                    last_turn_success_prob_noimg = turn_success_probs_noimg[i][label_idx][turn_idx - 1] if turn_idx > 0 else None
+                    this_turn_success_prob_noimg = turn_success_probs_noimg[i][label_idx][turn_idx]
+                    
+                    last_turn_info_noimg = (1.0 - entropy(last_turn_success_prob_noimg)) if turn_idx > 0 else 0.0
+                    this_turn_info_noimg = 1.0 - entropy(this_turn_success_prob_noimg)
+                    turn_info_gain_noimg = this_turn_info_noimg - last_turn_info_noimg
+                    turn_info_gains_noimg.append(turn_info_gain_noimg)
+
+                    turn_info_diffs.append(turn_info_gain - turn_info_gain_noimg)
 
                 if len(turn_questions_sources[i]) > 0:
                     q_source = turn_questions_sources[i][label_idx][turn_idx]
                     question_sources[q_source] += 1
 
-            all_turn_prob_gains.append(np.mean(turn_prob_gains))
             all_dialog_info_gains.append(np.sum(turn_info_gains))
             all_turn_info_gains.append(np.mean(turn_info_gains))
 
-        mean_turn_gain = np.mean(all_turn_prob_gains)
+            if len(turn_success_probs_noimg[0]) > 0:
+                all_dialog_info_gains_noimg.append(np.sum(turn_info_gains_noimg))
+                all_turn_info_gains_noimg.append(np.mean(turn_info_gains_noimg))
+
+                all_dialog_info_diffs.append(np.sum(turn_info_gains) - np.sum(turn_info_gains_noimg))
+                all_turn_info_diffs.append(np.mean(turn_info_gains) - np.mean(turn_info_gains_noimg))
+
         mean_dialog_info_gain = np.mean(all_dialog_info_gains)
         mean_turn_info_gain = np.mean(all_turn_info_gains)
-
-        lines.append(f"{results_names[i]} average confidence gained toward correct label per turn: {mean_turn_gain}")
         lines.append(f"{results_names[i]} average information gained per turn: {mean_turn_info_gain}")
         lines.append(f"{results_names[i]} average information gained per dialog: {mean_dialog_info_gain}")
-        
+
+        if len(turn_success_probs_noimg[0]) > 0:
+            mean_dialog_info_gain_noimg = np.mean(all_dialog_info_gains_noimg)
+            mean_turn_info_gain_noimg = np.mean(all_turn_info_gains_noimg)
+            lines.append(f"{results_names[i]} average information gained per turn (no image): {mean_turn_info_gain_noimg}")
+            lines.append(f"{results_names[i]} average information gained per dialog (no image): {mean_dialog_info_gain_noimg}")
+
+            mean_dialog_info_diff = np.mean(all_dialog_info_diffs)
+            mean_turn_info_diff = np.mean(all_turn_info_diffs)
+            lines.append(f"{results_names[i]} average information lost per turn by having no image: {mean_turn_info_diff}")
+            lines.append(f"{results_names[i]} average information lost per dialog by having no image: {mean_dialog_info_diff}")            
+
         for source in question_sources:
             lines.append(f"{results_names[i]} percent of turns from source '{source}': {question_sources[source] / sum(list(question_sources.values()))}")
         lines.append("")
@@ -405,30 +446,31 @@ for results_fnames, results_names, analysis_subdir in [
         all_risks.append(risks)
 
         # Apply Platt scaling and re-run
-        calibration_indices = random.sample(list(range(len(all_probs[i]))), 100)
+        if len(all_probs[i]) > 100:
+            calibration_indices = random.sample(list(range(len(all_probs[i]))), 100)
 
-        calibration_probs = [prob for j, prob in enumerate(all_probs[i]) if j in calibration_indices]
-        calibration_labels = [label for j, label in enumerate(all_labels[i]) if j in calibration_indices]
+            calibration_probs = [prob for j, prob in enumerate(all_probs[i]) if j in calibration_indices]
+            calibration_labels = [label for j, label in enumerate(all_labels[i]) if j in calibration_indices]
 
-        evaluation_probs = [prob for j, prob in enumerate(all_probs[i]) if j not in calibration_indices]
-        evaluation_labels = [label for j, label in enumerate(all_labels[i]) if j not in calibration_indices]
+            evaluation_probs = [prob for j, prob in enumerate(all_probs[i]) if j not in calibration_indices]
+            evaluation_labels = [label for j, label in enumerate(all_labels[i]) if j not in calibration_indices]
 
-        clf = LogisticRegression().fit(np.expand_dims(np.array(calibration_probs), 1), calibration_labels)
-        calibrated_probs = clf.predict_proba(np.expand_dims(np.array(evaluation_probs), 1))[:, 1]
-        pprint(calibrated_probs)
+            clf = LogisticRegression().fit(np.expand_dims(np.array(calibration_probs), 1), calibration_labels)
+            calibrated_probs = clf.predict_proba(np.expand_dims(np.array(evaluation_probs), 1))[:, 1]
+            pprint(calibrated_probs)
 
-        coverages, risks, eff_reliabilities, sp_recalls = [], [], [], []
-        for t in tqdm(thresholds, desc="thresholds"):
-            c, r, e, spr, _ = calculate_abstention_metrics(calibrated_probs, [1 if l else 0 for l in evaluation_labels], t, penalty)
-            coverages.append(c)
-            risks.append(r)
-            eff_reliabilities.append(e)
-            sp_recalls.append(spr)
+            coverages, risks, eff_reliabilities, sp_recalls = [], [], [], []
+            for t in tqdm(thresholds, desc="thresholds"):
+                c, r, e, spr, _ = calculate_abstention_metrics(calibrated_probs, [1 if l else 0 for l in evaluation_labels], t, penalty)
+                coverages.append(c)
+                risks.append(r)
+                eff_reliabilities.append(e)
+                sp_recalls.append(spr)
 
-        output_fname = f"selective_prediction_calibrated_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
-        save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
+            output_fname = f"selective_prediction_calibrated_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
+            save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
 
-        plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)    
+            plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)    
 
 
     output_fname = f"risk_coverage_val_{'_'.join(results_names).replace(' ', '-')}.pdf"

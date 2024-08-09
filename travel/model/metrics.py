@@ -1,3 +1,4 @@
+from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -10,7 +11,7 @@ from typing import Union, Optional, Any
 
 from travel.data.mistake_detection import MistakeDetectionExample
 from travel.data.utils import time_based_exponential_moving_average
-from travel.data.vqa import VQAResponse, VQAOutputs
+from travel.data.vqa import VQAResponse, VQAOutputs, generate_iterative_vqa_success_prompt
 from travel.data.vqg import VQGOutputs
 from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE
 from travel.model import simple_lm_prompt
@@ -467,12 +468,12 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
 
     # Expected informativeness: on average (or for actual answer), how confident are we that the answer to the question would indicate a success or mistake
     if not answers:
-        informativeness = entropy_tensor(probs_yes[:, 0])
-        informativeness += entropy_tensor(probs_no[:, 0])
+        informativeness = 1.0 - entropy_tensor(probs_yes[:, 0])
+        informativeness += 1.0 - entropy_tensor(probs_no[:, 0])
         informativeness /= 2.0
         informativeness = informativeness
     else:
-        informativeness = entropy_tensor(probs_actual[:, 0])
+        informativeness = 1.0 - entropy_tensor(probs_actual[:, 0])
     metrics['informativeness'] = informativeness.numpy()
 
     if previous_questions:
@@ -510,18 +511,56 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
 
         # Marginal expected informativeness: with past questions and answers, how informative could (or is) the answer to this question be toward the final decision
         if not answers:
-            informativeness_marginal = entropy_tensor(probs_past_yes[:, 0])
-            informativeness_marginal += entropy_tensor(probs_past_no[:, 0])
+            informativeness_marginal = 1.0 - entropy_tensor(probs_past_yes[:, 0])
+            informativeness_marginal += 1.0 - entropy_tensor(probs_past_no[:, 0])
             informativeness_marginal /= 2.0
         else:
-            informativeness_marginal = torch.abs(probs_past_actual[:, 0] - probs_past_actual[:, 1])
+            informativeness_marginal = 1.0 - entropy_tensor(probs_past_actual[:, 0])
         metrics['informativeness_marginal'] = informativeness_marginal.numpy()
     else:
         metrics['relevance_marginal'] = metrics['relevance']
         metrics['informativeness_marginal'] = metrics['informativeness']
 
-    # "Verifiability" metric: weight marginal informativeness by relevance
-    metrics['informativeness_marginal_x_relevance'] = metrics['informativeness_marginal'] * metrics['relevance']
+    # "Verifiability" metric: weight marginal informativeness by marginal relevance
+    metrics['informativeness_marginal_x_relevance_marginal'] = metrics['informativeness_marginal'] * metrics['relevance_marginal']
+
+    # Convert to floats to ensure json serializable
+    metrics = {
+        k: [round(float(val), 6) for val in v]
+        for k, v in metrics.items()
+    }
+    return metrics
+
+def question_coherence_metrics_vlm(success_probs, success_probs_negated):
+    """
+    Calculates coherence metrics for candidate questions about procedures in iterative VQA.
+    """
+    metrics = {}
+    
+    # Generate VLM prompts
+    assert len(success_probs) == len(success_probs_negated), "Expected same number of success probs and negated success probs."
+
+    for example_success_probs, example_success_probs_negated in zip(success_probs, success_probs_negated):
+        assert len(example_success_probs) == len(example_success_probs_negated), "Expected same number of success probs and negated success probs for each example."
+
+        example_success_probs = np.array(example_success_probs)
+        example_success_probs_negated = np.array(example_success_probs_negated)
+    
+        # NOTE: unless we were to run success VQA on each individual question without prior questions/answers, it's impossible to get individual relevance and informativeness (so just use marginal for now)
+
+        # Marginal relevance: how much probability of success changes depending on the answer
+        relevance_marginal = np.abs(example_success_probs - example_success_probs_negated)
+        metrics['relevance_marginal'] = np.concatenate((metrics['relevance_marginal'], relevance_marginal), axis=0) if 'relevance_marginal' in metrics else relevance_marginal
+
+        # Marginal informativeness: with all previous information we have, how much information does the actual answer to the question give us about success?
+        informativeness_marginal = 1.0 - entropy_tensor(torch.tensor(example_success_probs)).numpy()
+        metrics['informativeness_marginal'] = np.concatenate((metrics['informativeness_marginal'], informativeness_marginal), axis=0) if 'informativeness_marginal' in metrics else informativeness_marginal
+
+        # "Verifiability" metric: weight marginal informativeness by marginal relevance
+        metrics['informativeness_marginal_x_relevance_marginal'] = np.concatenate((metrics['informativeness_marginal_x_relevance_marginal'], informativeness_marginal * relevance_marginal), axis=0) if 'informativeness_marginal_x_relevance_marginal' in metrics else informativeness_marginal * relevance_marginal
+
+    for k in metrics:
+        assert metrics[k].shape[0] == len(success_probs) * len(success_probs[0]), "Didn't get correct number of VLM coherence metrics."
 
     # Convert to floats to ensure json serializable
     metrics = {

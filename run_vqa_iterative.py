@@ -2,8 +2,7 @@ from travel import init_travel
 init_travel()
 
 import argparse
-from collections import defaultdict
-import datetime
+from collections import defaultdict, Counter
 import json
 import numpy as np
 import os
@@ -14,64 +13,21 @@ import spacy
 import time
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint
-                         
+from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
-from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS
+from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, compute_completion_log_likelihoods
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
-from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, generate_det_curve, generate_tiered_metric_curves
+from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
-from travel.model.vqa import run_vqa 
+from travel.model.vqa import run_vqa_with_visual_filter
 from travel.model.vqg import cleanup_generated_question
-
-
-def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, batch_size, visual_filter=None, visual_filter_mode=None, frame_cache_dir=None):
-    # Apply visual filter to frames for VQA
-    if visual_filter:
-        if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
-            batch_frames_filtered = visual_filter(nlp, batch_frames, new_questions)
-        elif visual_filter_mode == VisualFilterTypes.Visual_Contrastive:
-            batch_frames_filtered = visual_filter(batch_frames)
-        elif visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
-            batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
-        elif visual_filter_mode == VisualFilterTypes.AGLA:
-            batch_frames_filtered = visual_filter(batch_frames, new_questions)
-
-    # Cache paths to frames (if using a visual filter, save filtered frames and cache paths to them)
-    if visual_filter is None or frame_cache_dir is None:
-        for batch_sub_idx in range(this_batch_size):
-            frames[batch_sub_idx].append(batch_examples[batch_sub_idx].frames[0])
-    else:
-        for batch_sub_idx, (frame, example) in enumerate(zip(batch_frames_filtered, batch_examples)):
-            this_frame_cache_dir = os.path.join(frame_cache_dir, f"vqa_frames/{example.example_id}")
-            if not os.path.exists(this_frame_cache_dir):
-                os.makedirs(this_frame_cache_dir)
-            frame_path = os.path.join(this_frame_cache_dir, f"frame_q{question_idx}.jpg")
-            resized_frame = resize_with_aspect(frame, CACHED_FRAME_DIMENSION)
-            resized_frame.save(frame_path)
-            frames[batch_sub_idx].append(frame_path)
-
-    # Run VQA on base image (yes/no)
-    if not (visual_filter and visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]):
-        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=batch_size)
-    else:
-        # Spatial filter doesn't need original image logits, so don't get them for efficiency
-        new_answers_logits = None
-
-    # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
-    if visual_filter:
-        new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=batch_size)
-        new_answers_logits = visual_filter.combine_logits(new_answers_logits, new_answers_logits_filtered)
-
-    return new_answers_logits
 
 
 parser = argparse.ArgumentParser()
@@ -81,6 +37,7 @@ parser.add_argument("--eval_partition", type=str, default="val", choices=["val",
 parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence_nli"], help="Strategy to use to choose question to generate from beam search candidates.")
+parser.add_argument("--coherence_evaluation_strategy", type=str, default="vlm", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
@@ -236,7 +193,6 @@ if dataset is None:
 
 print(f"({worker_index}) Beginning iterative VQA inference...")
 all_questions = []
-all_frames = []
 all_candidate_questions = []
 all_candidate_questions_scores = []
 all_candidate_questions_sources = []
@@ -244,6 +200,7 @@ all_scores = []
 all_answers = []
 all_answer_probs = []
 all_success_probs = []
+all_success_probs_negated = []
 
 all_example_ids = []
 all_procedures = []
@@ -253,7 +210,7 @@ cache_path = os.path.join(this_results_dir, f"cached_outputs{worker_index}.pkl")
 is_complete = False
 last_batch_idx = -1
 if os.path.exists(cache_path):
-    is_complete, last_batch_idx, all_questions, all_frames, all_candidate_questions, all_candidate_questions_scores, all_candidate_questions_sources, all_scores, all_answers, all_answer_probs, all_success_probs, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
+    is_complete, last_batch_idx, all_questions, all_candidate_questions, all_candidate_questions_scores, all_candidate_questions_sources, all_scores, all_answers, all_answer_probs, all_success_probs, all_success_probs_negated, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
 
 batch_idx = None
 if not is_complete:
@@ -274,7 +231,7 @@ if not is_complete:
         this_batch_size = len(batch_examples)
 
         prompts = [
-            f'{USER_START_TOKENS[type(vlm)]}{IMAGE_TOKENS[type(vlm)]}This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions about the state of the scene to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.' 
+            f'{USER_START_TOKENS[type(vlm)]}{IMAGE_TOKENS[type(vlm)]}{IVQA_PREAMBLE.format(procedure=procedure)}' 
             for procedure in batch_procedures
         ]
         if args.print_prompts:
@@ -288,6 +245,7 @@ if not is_complete:
         answer_probs = [[] for _ in range(this_batch_size)] 
         answers = [[] for _ in range(this_batch_size)]
         success_probs = [[] for _ in range(this_batch_size)]
+        success_probs_negated = [[] for _ in range(this_batch_size)]
 
         # Iteratively generate questions
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
@@ -401,7 +359,7 @@ if not is_complete:
 
                     # Use marginal relevance (consistency) and expected informativeness (verifiability) to rank candidates
                     candidate_scores = np.array(
-                        [candidate_metrics['informativeness_marginal_x_relevance'] for candidate_metrics in this_nli_outputs]
+                        [candidate_metrics['informativeness_marginal_x_relevance_marginal'] for candidate_metrics in this_nli_outputs]
                     )
 
                     best_candidate = np.argmax(candidate_scores)
@@ -428,8 +386,10 @@ if not is_complete:
                                                             batch_frames=batch_frames, 
                                                             prompts_a=prompts_a, 
                                                             new_questions=new_questions, 
+                                                            question_idx=question_idx,
                                                             batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
                                                             visual_filter=visual_filter,
+                                                            nlp=nlp if visual_filter else None,
                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
                                                             frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
 
@@ -454,11 +414,14 @@ if not is_complete:
                 answers[batch_sub_idx].append(new_answers[batch_sub_idx].predicted_answer)
 
             # Update prompts with answers
+            if args.coherence_evaluation_strategy == "vlm":
+                # Save negated version of new prompt if we're using VLM-based coherence evaluation
+                prompts_negated = [prompt + VQAResponse(1 - output.predicted_answer.value).name for prompt, output in zip(prompts_a, new_answers)] 
             prompts = [prompt + output.predicted_answer.name for prompt, output in zip(prompts_a, new_answers)]
 
             # Ask VLM probability of success
             questions_success = [
-                f'Based on the above information, has the procedure "{procedure}" been successfully executed?'
+                IVQA_SUCCESS_QUESTION.format(procedure=procedure)
                 for procedure in batch_procedures
             ]
             prompts_success = [
@@ -473,6 +436,7 @@ if not is_complete:
                                                              batch_frames=batch_frames, 
                                                              prompts_a=prompts_success, 
                                                              new_questions=questions_success, 
+                                                             question_idx=f"{question_idx}_success",
                                                              batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
                                                              visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
                                                              visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
@@ -489,7 +453,7 @@ if not is_complete:
                     logits=logits,
                     question=question,
                 ) for logits, example, prompt, question in zip(success_vqa_outputs, batch_examples, prompts_a, new_questions)
-            ]
+            ]               
 
             # Save success probability for this turn
             for batch_sub_idx in range(this_batch_size):
@@ -501,9 +465,48 @@ if not is_complete:
             del new_answers
             del success_vqa_outputs
 
+            # If using VLM-based coherence evaluation, also need to get success probability for negated answers
+            if args.coherence_evaluation_strategy == "vlm":
+                prompts_success_negated = [
+                    prompt + f'{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:'
+                    for prompt, question in zip(prompts_negated, questions_success)
+                ]
+                success_vqa_outputs_negated = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
+                                                                         vlm=vlm, 
+                                                                         batch_examples=batch_examples, 
+                                                                         batch_frames=batch_frames, 
+                                                                         prompts_a=prompts_success_negated, 
+                                                                         new_questions=questions_success, 
+                                                                         question_idx=f"{question_idx}_success_negated",
+                                                                         batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
+                                                                         visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
+                                                                         visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None)
+                success_vqa_outputs_negated = [
+                    VQAOutputs(
+                        task_name=MistakeDetectionTasks(args.task),
+                        example_id=example.example_id,
+                        procedure_id=example.procedure_id,
+                        frame=example.frames[0],
+                        prompt=prompt,
+                        expected_answer=None,
+                        response_token_ids=response_token_ids,
+                        logits=logits,
+                        question=question,
+                    ) for logits, example, prompt, question in zip(success_vqa_outputs_negated, batch_examples, prompts_a, new_questions)
+                ]
+
+                # Save success probability for negated question answers for this turn
+                for batch_sub_idx in range(this_batch_size):
+                    success_probs_negated[batch_sub_idx].append(
+                        round(float(success_vqa_outputs_negated[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
+                    )
+
+                # Delete VQAOutputs now since they occupy a lot of memory
+                del success_vqa_outputs_negated
+
+
         # Update global lists of tracked outputs
         all_questions += questions
-        all_frames += frames
         all_candidate_questions += candidate_questions
         all_candidate_questions_scores += candidate_questions_scores
         all_candidate_questions_sources += candidate_questions_sources
@@ -511,6 +514,7 @@ if not is_complete:
         all_answers += answers
         all_answer_probs += answer_probs
         all_success_probs += success_probs
+        all_success_probs_negated += success_probs_negated
         all_example_ids += [example.example_id for example in batch_examples]
         all_procedures += [example.procedure_description for example in batch_examples]
         all_labels += [example.mistake_type for example in batch_examples]
@@ -524,7 +528,6 @@ if not is_complete:
             False,
             batch_idx,
             all_questions, 
-            all_frames,
             all_candidate_questions, 
             all_candidate_questions_scores, 
             all_candidate_questions_sources,
@@ -532,6 +535,7 @@ if not is_complete:
             all_answers, 
             all_answer_probs, 
             all_success_probs,
+            all_success_probs_negated,
             all_example_ids,
             all_procedures,
             all_labels,
@@ -540,7 +544,6 @@ if not is_complete:
 # Verify we got correct number of outputs
 all_results = [
     all_questions, 
-    all_frames,
     all_candidate_questions, 
     all_candidate_questions_scores, 
     all_candidate_questions_sources,
@@ -548,6 +551,7 @@ all_results = [
     all_answers, 
     all_answer_probs, 
     all_success_probs,
+    all_success_probs_negated,
     all_example_ids,
     all_procedures,
     all_labels,
@@ -560,7 +564,6 @@ if batch_idx is not None:
         True,
         batch_idx,
         all_questions, 
-        all_frames,
         all_candidate_questions, 
         all_candidate_questions_scores, 
         all_candidate_questions_sources,
@@ -568,6 +571,7 @@ if batch_idx is not None:
         all_answers, 
         all_answer_probs, 
         all_success_probs,
+        all_success_probs_negated,
         all_example_ids,
         all_procedures,
         all_labels,
@@ -590,7 +594,6 @@ if worker_index == 0:
                 is_complete, \
                 _, \
                 other_questions, \
-                other_frames, \
                 other_candidate_questions, \
                 other_candidate_questions_scores, \
                 other_candidate_questions_sources, \
@@ -598,13 +601,13 @@ if worker_index == 0:
                 other_answers, \
                 other_answer_probs, \
                 other_success_probs, \
+                other_success_probs_negated, \
                 other_example_ids, \
                 other_procedures, \
                 other_labels = pickle.load(open(other_cache_path, "rb"))
                 if is_complete:
                     # Add other process results to our results
                     all_questions += other_questions
-                    all_frames += other_frames
                     all_candidate_questions += other_candidate_questions
                     all_candidate_questions_scores += other_candidate_questions_scores
                     all_candidate_questions_sources += other_candidate_questions_sources
@@ -612,6 +615,7 @@ if worker_index == 0:
                     all_answers += other_answers
                     all_answer_probs += other_answer_probs
                     all_success_probs += other_success_probs
+                    all_success_probs_negated += other_success_probs_negated
                     all_example_ids += other_example_ids
                     all_procedures += other_procedures
                     all_labels += other_labels
@@ -628,9 +632,8 @@ if worker_index == 0:
     # Collect key information from results rollouts and final success probabilities
     all_results_dicts = {}
     all_probs = []
-    for questions, frames, candidate_questions, candidate_questions_scores, candidate_questions_sources, scores, answers, answer_probs, success_probs, example_id, procedure, label \
+    for questions, candidate_questions, candidate_questions_scores, candidate_questions_sources, scores, answers, answer_probs, success_probs, success_probs_negated, example_id, procedure, label \
         in tqdm(zip(all_questions,
-                    all_frames,
                     all_candidate_questions,
                     all_candidate_questions_scores,
                     all_candidate_questions_sources,
@@ -638,6 +641,7 @@ if worker_index == 0:
                     all_answers,
                     all_answer_probs,
                     all_success_probs,
+                    all_success_probs_negated,
                     all_example_ids,
                     all_procedures,
                     all_labels), desc="compiling results"):
@@ -658,11 +662,12 @@ if worker_index == 0:
             "mistake": True if label is not None else False,
             "mistake_type": label,
             "questions": questions,
-            "frame_paths": frames,
+            "frame_dir": os.path.join(this_results_dir, f"vqa_frames/{example_id}"),
             "answers": [a.value for a in answers],
             "answer_probs": answer_probs,
             "scores": scores,
             "success_probs": success_probs,
+            "success_probs_negated": success_probs_negated,
             "final_turn": success_prob_idx,
             "final_success_prob": final_success_prob,
             "candidate_questions": candidate_questions,
@@ -686,21 +691,27 @@ if worker_index == 0:
     all_predicted_answers = [VQAResponse(answer) for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
     all_previous_answers = [[VQAResponse(a) for a in results_dict['answers'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
-    all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
-                                            nli_model,
-                                            tokenizer,
-                                            lm,                                         
-                                            [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
-                                            all_chosen_questions,
-                                            answers=all_predicted_answers,
-                                            previous_questions=all_previous_questions,
-                                            previous_answers=all_previous_answers,
-                                            rephrase_batch_size=args.generation_batch_size)
+    if args.coherence_evaluation_strategy == "nli":
+        all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
+                                                nli_model,
+                                                tokenizer,
+                                                lm,                                         
+                                                [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
+                                                all_chosen_questions,
+                                                answers=all_predicted_answers,
+                                                previous_questions=all_previous_questions,
+                                                previous_answers=all_previous_answers,
+                                                rephrase_batch_size=args.generation_batch_size)
+    elif args.coherence_evaluation_strategy == "vlm":
+        all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs, all_success_probs_negated)
+    else:
+        raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
 
+    # Aggregate coherence metrics by example and by turn
     parallel_idx = 0
     coherence_metrics_by_example = defaultdict(list)
     coherence_metrics_by_turn = defaultdict(list)
-    coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance']
+    coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']
     for results_dict in all_results_dicts.values():
         for k in coherence_metric_names:
             if k in all_coherence_metrics:
@@ -710,7 +721,7 @@ if worker_index == 0:
                 coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
         parallel_idx += 1
-    
+
     # Calculate accuracy metrics
     best_metrics = None
     best_threshold = None
@@ -724,8 +735,8 @@ if worker_index == 0:
         accuracy_metrics_by_threshold[threshold] = this_metrics
 
         # Calculate consistency and verifiability for this example, which are conditional on correctness
-        verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
-        consistency = np.mean([coherence_metrics_by_example['relevance_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
+        verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
+        consistency = np.mean([coherence_metrics_by_example['relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
         coherence_metrics_by_threshold[threshold] = {"verifiability": verifiability, "consistency": consistency,}
 
         if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
@@ -748,7 +759,7 @@ if worker_index == 0:
         "metrics_by_turn": coherence_metrics_by_turn,
     }
     json.dump(coherence_metrics, 
-            open(os.path.join(this_results_dir, f"metrics_coherence_{args.eval_partition}.json"), "w"),
+            open(os.path.join(this_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
             indent=4)
 
     # Generate DET curves for accuracy

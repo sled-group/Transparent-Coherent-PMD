@@ -470,3 +470,55 @@ def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
     return shifted_input_ids
 
 
+def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, question_idx, batch_size, visual_filter=None, nlp=None, visual_filter_mode=None, frame_cache_dir=None):
+    """
+    VQA and visual filter wrapper method for iterative VQA experiments.
+
+    :param vlm_processor: VLM processor.
+    :param vlm: VLM.
+    :param batch_examples: Batch of MistakeDetectionExample.
+    :param batch_frames: Batch of frames (PIL images).
+    :param prompts_a: Full string prompts to get a yes/no answer.
+    :param new_questions: Last generated questions to use with text-conditioned visual filters.
+    :param question_idx: Index or identifier of the current question. This is only used to save modified frames from the visual filter.
+    :param batch_size: Batch size for VQA.
+    :param visual_filter: Optional training free visual filter to modify images and possibly run VQA twice.
+    :param nlp: spaCy NLP pipeline.
+    :param visual_filter_mode: Type of visual filter.
+    :param frame_cache_dir: Directory to cache visual filter modified frames for later inspection. If not passed, will not save any frames.
+    :return: Logits from VQA.
+    """
+    # Apply visual filter to frames for VQA
+    if visual_filter:
+        if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
+            batch_frames_filtered = visual_filter(nlp, batch_frames, new_questions)
+        elif visual_filter_mode == VisualFilterTypes.Visual_Contrastive:
+            batch_frames_filtered = visual_filter(batch_frames)
+        elif visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
+            batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
+        elif visual_filter_mode == VisualFilterTypes.AGLA:
+            batch_frames_filtered = visual_filter(batch_frames, new_questions)
+
+    # Cache paths to frames (if using a visual filter, save filtered frames and cache paths to them)
+    if not(visual_filter is None or frame_cache_dir is None):
+        for batch_sub_idx, (frame, example) in enumerate(zip(batch_frames_filtered, batch_examples)):
+            this_frame_cache_dir = os.path.join(frame_cache_dir, f"vqa_frames/{example.example_id}")
+            if not os.path.exists(this_frame_cache_dir):
+                os.makedirs(this_frame_cache_dir)
+            frame_path = os.path.join(this_frame_cache_dir, f"frame_q{question_idx}.jpg")
+            resized_frame = resize_with_aspect(frame, CACHED_FRAME_DIMENSION)
+            resized_frame.save(frame_path)
+
+    # Run VQA on base image (yes/no)
+    if not (visual_filter and visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]):
+        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=batch_size)
+    else:
+        # Spatial filter doesn't need original image logits, so don't get them for efficiency
+        new_answers_logits = None
+
+    # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
+    if visual_filter:
+        new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=batch_size)
+        new_answers_logits = visual_filter.combine_logits(new_answers_logits, new_answers_logits_filtered)
+
+    return new_answers_logits
