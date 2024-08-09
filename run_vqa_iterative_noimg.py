@@ -104,7 +104,7 @@ for example_idx, (questions, candidate_questions, candidate_questions_scores, ca
     question_success = IVQA_SUCCESS_QUESTION.format(procedure=procedure)
     success_prompt = f'{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: {question_success}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:'
 
-    # Iteratively generate questions
+    # Iteratively generate questions - make sure image tokens aren't included since we aren't passing in any images
     for question_idx in tqdm(range(len(questions)), desc="generating iterative QA prompts"):
         prompt = f'{USER_START_TOKENS[type(vlm)]}{IVQA_PREAMBLE.format(procedure=procedure)}'
         for question, answer in zip(questions[:question_idx + 1], answers[:question_idx + 1]):

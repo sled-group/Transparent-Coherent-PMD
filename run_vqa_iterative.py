@@ -21,7 +21,7 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
 from travel.data.vqg import generate_vqg_prompt_icl
-from travel.model import simple_lm_prompt_beam_search, compute_completion_log_likelihoods
+from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_vlm
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
 from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
@@ -36,6 +36,7 @@ parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.va
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
+parser.add_argument("--condition_questions_with_frames", action="store_true", help="Pass this argument to pass frame into VLM while generating questions (usually off by default since this hurts performance).")
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
 parser.add_argument("--coherence_evaluation_strategy", type=str, default="vlm", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
@@ -73,6 +74,8 @@ if args.resume_dir is None:
         task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
     this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}"
+    if args.condition_questions_with_frames:
+        this_results_dir += f"_cqframe"
     this_results_dir += f"_{args.question_selection_strategy}"
     if args.n_icl_demonstrations > 0:
         this_results_dir += f"_icl{args.n_icl_demonstrations}"
@@ -252,12 +255,21 @@ if not is_complete:
 
             # Generate a question (with beam search so we have several candidates)
             prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[type(vlm)] if question_idx != 0 else USER_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: " for prompt in prompts]
-            new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
-                                                            vlm_processor.tokenizer,
-                                                            [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q],
-                                                            max_new_tokens=20,
-                                                            batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
-                                                            generation_kwargs=generation_kwargs)
+            if not args.condition_questions_with_frames:
+                new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
+                                                                vlm_processor.tokenizer,
+                                                                [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q],
+                                                                max_new_tokens=20,
+                                                                batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
+                                                                generation_kwargs=generation_kwargs)
+            else:
+                new_questions, _ = simple_vlm_prompt_beam_search(vlm,
+                                                                 vlm_processor,
+                                                                 prompts_q,
+                                                                 batch_frames,
+                                                                 max_new_tokens=20,
+                                                                 batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
+                                                                 generation_kwargs=generation_kwargs)
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
             new_questions_sources = [["vlm"] * len(beam_search_questions) for beam_search_questions in new_questions]
 
@@ -314,7 +326,10 @@ if not is_complete:
                 # each question.
                 # 
                 # Some relevant discussion on this issue here: https://discuss.huggingface.co/t/compute-log-probabilities-of-any-sequence-provided/11710/10
-                generation_scores = compute_completion_log_likelihoods(lm, tokenizer, prompts_q, new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
+                if not args.condition_questions_with_frames:
+                    generation_scores = compute_completion_log_likelihoods(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
+                else:
+                    generation_scores = compute_completion_log_likelihoods_vlm(vlm, vlm_processor, prompts_q, batch_frames, new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
 
                 # Select most likely question (first one in list)
                 selected_questions = []

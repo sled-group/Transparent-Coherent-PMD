@@ -485,7 +485,12 @@ class MisalignSRL:
 
                 # Sample single narration frame or 8 second clip around narration frame
                 if not multi_frame:
-                    sample['effect_frame'] = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
+                    effect_frame = extract_frames(video_cap, [frame_time])[0]
+                    if effect_frame:
+                        sample['effect_frame'] = Image.fromarray(effect_frame)
+                    else:
+                        # If we failed to retrieve the frame, just try the next one
+                        continue
                 else:
                     # This follows SuccessVQA paper's approach for sampling positive example videos
                     post_start_time = max(frame_time - 4.0, 0.0)
