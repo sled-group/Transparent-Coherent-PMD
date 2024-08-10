@@ -160,7 +160,7 @@ begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_siz
 generation_kwargs = {
     "do_sample": False,
     "num_beams": 8,
-    "num_return_sequences": 4,
+    "num_return_sequences": 4 if not args.condition_questions_with_frames else 2,
     "constraints": question_generation_constraints,
     "begin_suppress_tokens": begin_suppress_tokens,    
     "pad_token_id": tokenizer.eos_token_id,

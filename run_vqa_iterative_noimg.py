@@ -115,13 +115,21 @@ for example_idx, (questions, candidate_questions, candidate_questions_scores, ca
 
 # Update results dir to be a subdirectory of original results dir
 this_results_dir = os.path.join(this_results_dir, "results_image_free_SuccessVQA")
-if not os.path.exists(this_results_dir):
-    os.makedirs(this_results_dir)
+try:
+    if not os.path.exists(this_results_dir):
+        os.makedirs(this_results_dir)
+except:
+    # Probably already exists because another process created it too
+    pass
 
 # Run QA and cache logits
 cache_dir = os.path.join(this_results_dir, "noimg_qa_cache")
-if not os.path.exists(cache_dir):
-    os.makedirs(cache_dir)
+try:
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+except:
+    # Probably already exists because another process created it too
+    pass
 
 logits = defaultdict(int)
 logits_negated = defaultdict(int)
@@ -143,7 +151,7 @@ if worker_index == 0:
     print(f"({worker_index}) Gathering all results...")
     for other_worker_index in range(1, n_workers):
         print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
-        for question_idx in len(logits):
+        for question_idx in range(len(logits)):
             delay_per_try = 10
             delay_so_far = 0
             max_delay = 1800
