@@ -121,6 +121,7 @@ tokenizer.pad_token_id = tokenizer.eos_token_id
 
 # Set up visual filter if needed
 visual_filter = None
+nlp = None
 if args.visual_filter_mode is not None:
     if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
         visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=f"cuda:0")
@@ -409,7 +410,7 @@ if not is_complete:
                                                             question_idx=question_idx,
                                                             batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
                                                             visual_filter=visual_filter,
-                                                            nlp=nlp if visual_filter else None,
+                                                            nlp=nlp,
                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
                                                             frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
 
@@ -459,6 +460,7 @@ if not is_complete:
                                                              question_idx=f"{question_idx}_success",
                                                              batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
                                                              visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
+                                                             nlp=nlp,
                                                              visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
                                                              frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
             success_vqa_outputs = [
@@ -500,6 +502,7 @@ if not is_complete:
                                                                          question_idx=f"{question_idx}_success_negated",
                                                                          batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
                                                                          visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
+                                                                         nlp=nlp,
                                                                          visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None)
                 success_vqa_outputs_negated = [
                     VQAOutputs(

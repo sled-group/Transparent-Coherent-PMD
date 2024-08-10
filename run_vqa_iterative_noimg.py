@@ -154,7 +154,7 @@ if worker_index == 0:
         for question_idx in range(len(logits)):
             delay_per_try = 10
             delay_so_far = 0
-            max_delay = 1800
+            max_delay = 18000
             while True:
                 other_cache_path = os.path.join(cache_dir, f"noimg_qa_logits{worker_index}-{question_idx}.pt")
                 if os.path.exists(other_cache_path):
