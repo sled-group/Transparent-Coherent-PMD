@@ -35,6 +35,8 @@ parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", 
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
+parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)), help="Number of beams in beam search.")
+parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
 parser.add_argument("--condition_questions_with_frames", action="store_true", help="Pass this argument to pass frame into VLM while generating questions (usually off by default since this hurts performance).")
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
@@ -81,6 +83,9 @@ if args.resume_dir is None:
         this_results_dir += f"_icl{args.n_icl_demonstrations}"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
+    if args.num_beams != 8 or args.num_return_sequences != 4:
+        # If we have non-default beam search parameters, tack them onto the end
+        this_results_dir += f"_beam{args.num_beams}-{args.num_return_sequences}"
     this_results_dir += f"_{args.run_id}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     if worker_index == 0 and not os.path.exists(this_results_dir):
@@ -159,8 +164,8 @@ begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_siz
 
 generation_kwargs = {
     "do_sample": False,
-    "num_beams": 8,
-    "num_return_sequences": 4 if not args.condition_questions_with_frames else 2,
+    "num_beams": args.num_beams,
+    "num_return_sequences": args.num_return_sequences,
     "constraints": question_generation_constraints,
     "begin_suppress_tokens": begin_suppress_tokens,    
     "pad_token_id": tokenizer.eos_token_id,
