@@ -263,13 +263,13 @@ if not is_complete:
                                                                 batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                                 generation_kwargs=generation_kwargs)
             else:
-                new_questions, _ = simple_vlm_prompt_beam_search(vlm,
-                                                                 vlm_processor,
-                                                                 prompts_q,
-                                                                 batch_frames,
-                                                                 max_new_tokens=20,
-                                                                 batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
-                                                                 generation_kwargs=generation_kwargs)
+                new_questions = simple_vlm_prompt_beam_search(vlm,
+                                                              vlm_processor,
+                                                              prompts_q,
+                                                              batch_frames,
+                                                              max_new_tokens=20,
+                                                              batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
+                                                              generation_kwargs=generation_kwargs)
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
             new_questions_sources = [["vlm"] * len(beam_search_questions) for beam_search_questions in new_questions]
 

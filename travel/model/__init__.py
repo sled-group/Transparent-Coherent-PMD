@@ -58,7 +58,6 @@ def simple_vlm_prompt_beam_search(vlm, processor, prompts, frames, max_new_token
         num_seq = 1
 
     all_outputs = []
-    all_scores = []
     for i in tqdm(range(0, len(prompts), batch_size), desc=f"running generation ({str(vlm.device)})"):
         # Prepare the batch
         batch_prompts = prompts[i:i+batch_size]
@@ -70,25 +69,19 @@ def simple_vlm_prompt_beam_search(vlm, processor, prompts, frames, max_new_token
         with torch.inference_mode():
             outputs = vlm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
 
-        scores = vlm.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False).cpu().numpy()
-        all_scores += [round(float(np.mean(s)), 6) for s in scores] # Save sequence probability
         outputs = processor.tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
         
         all_outputs += [output.replace(batch_prompts[output_idx // num_seq], "") for output_idx, output in enumerate(outputs)]
 
     # Collate generated texts and scores from beam search
     all_outputs_collated = []
-    all_scores_collated = []
     for beam_search_idx in range(len(all_outputs) // num_seq):
         this_outputs = []
-        this_scores = []
         for i in range(num_seq):
             this_outputs.append(all_outputs[beam_search_idx * num_seq + i])
-            this_scores.append(all_scores[beam_search_idx * num_seq + i])
         all_outputs_collated.append(this_outputs)
-        all_scores_collated.append(this_scores)
 
-    return all_outputs_collated, all_scores_collated
+    return all_outputs_collated
 
 
 def simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=20, generation_kwargs={}):
