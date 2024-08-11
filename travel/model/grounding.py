@@ -733,9 +733,11 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
         return new_frames
 
     def combine_logits(self, original_frame_logits, new_frame_logits):
-        # CRG subtracts original and filtered frame logits
+        # CRG subtracts original and filtered frame logits (but if the frames are the same, just return original frame logits)
+        diff_sums = torch.sum(original_frame_logits - new_frame_logits, dim=-1)
+        new_frame_logits = torch.clone(new_frame_logits)
+        new_frame_logits[diff_sums < 1.0] = 0.0
         return original_frame_logits - new_frame_logits
-
 
 class VisualContrastiveFilter(AdaptiveVisualFilter):
     def __init__(self, alpha: float=1.0, **kwargs: dict[str, Any]):

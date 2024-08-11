@@ -79,8 +79,8 @@ for results_fnames, results_names, analysis_subdir in [
     # ),    
     (
         [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug20/llava-1.5-7b-hf/IterativeVQA_q2_ego4d_single_debug20_llava-1.5-7b-hf_coherence_nli_icl10_202408090000/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug20/llava-1.5-7b-hf/IterativeVQA_q2_ego4d_single_debug20_llava-1.5-7b-hf_likelihood_icl10_202408090002/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240809173527/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240809180923/outputs_val.json",
         ],
         [
             "Likelihood Ranking",
