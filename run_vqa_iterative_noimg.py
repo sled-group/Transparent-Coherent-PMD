@@ -114,16 +114,16 @@ for example_idx, (questions, candidate_questions, candidate_questions_scores, ca
             all_prompts[question_idx].append(prompt + success_prompt)
 
 # Update results dir to be a subdirectory of original results dir
-this_results_dir = os.path.join(this_results_dir, "results_image_free_SuccessVQA")
+this_results_dir_noimg = os.path.join(this_results_dir, "results_image_free_SuccessVQA")
 try:
-    if not os.path.exists(this_results_dir):
-        os.makedirs(this_results_dir)
+    if not os.path.exists(this_results_dir_noimg):
+        os.makedirs(this_results_dir_noimg)
 except:
     # Probably already exists because another process created it too
     pass
 
 # Run QA and cache logits
-cache_dir = os.path.join(this_results_dir, "noimg_qa_cache")
+cache_dir = os.path.join(this_results_dir_noimg, "noimg_qa_cache")
 try:
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
@@ -144,7 +144,7 @@ for question_idx in range(n_questions_per_example):
                                               tokenizer, 
                                               all_prompts[question_idx], 
                                               batch_size=max(args.qa_batch_size // (2 ** question_idx), 1),
-                                              cache_path=os.path.join(cache_dir, f"noimg_qa_logits{worker_index}-{question_idx}.pt"))
+                                              cache_path=os.path.join(cache_dir, f"noimg_qa_logits_negated{worker_index}-{question_idx}.pt"))
 
 # Gather up results across processes and evaluate
 if worker_index == 0:
@@ -159,6 +159,7 @@ if worker_index == 0:
             for question_idx in range(len(logits)):
 
                 # First, grab other worker's logits from success QA for each question index
+                delay_so_far = 0
                 while True:
                     other_cache_path = os.path.join(cache_dir, f"noimg_qa_logits{other_worker_index}-{question_idx}.pt")
                     if os.path.exists(other_cache_path):
@@ -174,7 +175,26 @@ if worker_index == 0:
                     time.sleep(delay_per_try)
                     delay_so_far += delay_per_try
 
+                if args.coherence_evaluation_strategy == "vlm":
+                    # Grab negated logits if needed
+                    delay_so_far = 0
+                    while True:
+                        other_cache_path = os.path.join(cache_dir, f"noimg_qa_logits{other_worker_index}-{question_idx}.pt")
+                        if os.path.exists(other_cache_path):
+                            other_logits = torch.load(other_cache_path)
+                            logits_negated[question_idx] = torch.cat((logits_negated[question_idx], other_logits), dim=0)
+                            print(f"({worker_index}) Collected question {question_idx} logits from worker {other_worker_index}.")
+                            break
+
+                        # Decide whether to try again
+                        if delay_so_far >= max_delay:
+                            raise TimeoutError(f"Waited for {max_delay} seconds for results from worker {other_worker_index}. Process may have failed.")
+                        print(f"({worker_index}) Still waiting for results from worker {other_worker_index} ({delay_so_far} sec.)!")
+                        time.sleep(delay_per_try)
+                        delay_so_far += delay_per_try
+
             # Then grab everything else
+            delay_so_far = 0
             while True:
                 other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
                 if os.path.exists(other_cache_path):
@@ -192,22 +212,24 @@ if worker_index == 0:
                     other_example_ids, \
                     other_procedures, \
                     other_labels = pickle.load(open(other_cache_path, "rb"))
-                    if is_complete:
-                        # Add other process results to our results
-                        all_questions += other_questions
-                        all_candidate_questions += other_candidate_questions
-                        all_candidate_questions_scores += other_candidate_questions_scores
-                        all_candidate_questions_sources += other_candidate_questions_sources
-                        all_scores += other_scores
-                        all_answers += other_answers
-                        all_answer_probs += other_answer_probs
-                        all_success_probs += other_success_probs
-                        all_success_probs_negated += other_success_probs_negated
-                        all_example_ids += other_example_ids
-                        all_procedures += other_procedures
-                        all_labels += other_labels
-                        print(f"({worker_index}) Collected original results from worker {other_worker_index}.")
-                        break
+
+                    assert is_complete 
+
+                    # Add other process results to our results
+                    all_questions += other_questions
+                    all_candidate_questions += other_candidate_questions
+                    all_candidate_questions_scores += other_candidate_questions_scores
+                    all_candidate_questions_sources += other_candidate_questions_sources
+                    all_scores += other_scores
+                    all_answers += other_answers
+                    all_answer_probs += other_answer_probs
+                    all_success_probs += other_success_probs
+                    all_success_probs_negated += other_success_probs_negated
+                    all_example_ids += other_example_ids
+                    all_procedures += other_procedures
+                    all_labels += other_labels
+                    print(f"({worker_index}) Collected original results from worker {other_worker_index}.")
+                    break
 
                 # Decide whether to try again
                 if delay_so_far >= max_delay:
@@ -250,7 +272,7 @@ if worker_index == 0:
                     logits=logits_negated[question_idx][example_idx],
                     question="",
                 ).answer_probs[VQAResponse.Yes]), 6) for question_idx in range(n_questions_per_example)
-            ] for example_idx in range(len(all_example_ids))
+            ] for example_idx in range(len(logits[0]))
         ]
 
     # Collect key information from results rollouts and final success probabilities
@@ -301,7 +323,7 @@ if worker_index == 0:
         all_results_dicts[example_id] = results_dict
 
     json.dump(all_results_dicts, 
-            open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
+            open(os.path.join(this_results_dir_noimg, f"outputs_{args.eval_partition}.json"), "w"),
             indent=4)
 
 
@@ -373,7 +395,7 @@ if worker_index == 0:
 
     # Save accuracy and coherence metrics
     json.dump(accuracy_metrics_by_threshold, 
-            open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
+            open(os.path.join(this_results_dir_noimg, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
             indent=4)
     
     coherence_metrics = {
@@ -384,17 +406,17 @@ if worker_index == 0:
         "metrics_by_turn": coherence_metrics_by_turn,
     }
     json.dump(coherence_metrics, 
-            open(os.path.join(this_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
+            open(os.path.join(this_results_dir_noimg, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
             indent=4)
 
     # Generate DET curves for accuracy
-    generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
+    generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir_noimg, f"det_accuracy_{args.eval_partition}.pdf"))
 
     # Generate curves for all metrics by threshold
     generate_tiered_metric_curves(MISTAKE_DETECTION_THRESHOLDS, 
                                   [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
                                   [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
                                   [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                  [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
+                                  [os.path.join(this_results_dir_noimg, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
     
     print(f"({worker_index}) Done!")

@@ -455,6 +455,8 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
         lm_model, 
         generation_batch_size=rephrase_batch_size
     )    
+    metrics['rephrased_questions_yes'] = rephrased_yes
+    metrics['rephrased_questions_no'] = rephrased_no
     premise_yes = rephrased_yes
     premise_no = rephrased_no
     probs_yes = run_nli(nli_tokenizer, nli_model, list(zip(premise_yes, hypothesis_procedure)))
@@ -526,7 +528,7 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
 
     # Convert to floats to ensure json serializable
     metrics = {
-        k: [round(float(val), 6) for val in v]
+        k: [round(float(val), 6) for val in v] if type(v[0]) != str else v
         for k, v in metrics.items()
     }
     return metrics

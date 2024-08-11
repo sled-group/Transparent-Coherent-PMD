@@ -158,13 +158,15 @@ yes_no_q_tokens = [
     vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
 ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
+bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]]]
 
 generation_kwargs = {
     "do_sample": False,
     "num_beams": args.num_beams,
     "num_return_sequences": args.num_return_sequences,
     "constraints": question_generation_constraints,
-    "begin_suppress_tokens": begin_suppress_tokens,    
+    "begin_suppress_tokens": begin_suppress_tokens,   
+    "bad_words_ids": bad_words_ids, 
     "pad_token_id": tokenizer.eos_token_id,
 }
 
@@ -419,7 +421,7 @@ if not is_complete:
                 new_scores = []
                 parallel_idx = 0
                 for batch_sub_idx, beam_search_questions in enumerate(new_questions):
-                    this_nli_outputs = [{k: round(float(nli_outputs[k][i]), 3) for k in nli_outputs} for i in range(parallel_idx, parallel_idx + len(beam_search_questions))]
+                    this_nli_outputs = [{k: round(float(nli_outputs[k][i]), 3) if type(nli_outputs[k][i]) != str else nli_outputs[k][i] for k in nli_outputs} for i in range(parallel_idx, parallel_idx + len(beam_search_questions))]
                     candidate_questions_scores[batch_sub_idx].append(this_nli_outputs)
                     parallel_idx += len(beam_search_questions)
 
