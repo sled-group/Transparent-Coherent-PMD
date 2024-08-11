@@ -40,8 +40,6 @@ parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
 parser.add_argument("--condition_questions_with_frames", action="store_true", help="Pass this argument to pass frame into VLM while generating questions (usually off by default since this hurts performance).")
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
-parser.add_argument("--coherence_evaluation_strategy", type=str, default="vlm", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
-parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
 parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch size for question generation with LM.")
@@ -74,7 +72,7 @@ if args.resume_dir is None:
     task_name = args.task
     if args.debug:
         task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
-    this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
+    this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_topdown_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}"
     this_results_dir += f"_beam{args.num_beams}-{args.num_return_sequences}"
     if args.condition_questions_with_frames:
@@ -243,6 +241,7 @@ if not is_complete:
         ]
         if args.print_prompts:
             pprint(prompts[0])
+
         questions = [[] for _ in range(this_batch_size)]
         frames = [[] for _ in range(this_batch_size)]
         candidate_questions = [[] for _ in range(this_batch_size)]
@@ -254,11 +253,58 @@ if not is_complete:
         success_probs = [[] for _ in range(this_batch_size)]
         success_probs_negated = [[] for _ in range(this_batch_size)]
 
+        # Ask VLM probability of success
+        questions_success = [
+            IVQA_SUCCESS_QUESTION.format(procedure=procedure)
+            for procedure in batch_procedures
+        ]
+        prompts_success = [
+            prompt + f'{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:'
+            for prompt, question in zip(prompts, questions_success)
+        ]
+        if args.print_prompts:
+            pprint(prompts_success[0])
+        success_vqa_outputs = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
+                                                            vlm=vlm, 
+                                                            batch_examples=batch_examples, 
+                                                            batch_frames=batch_frames, 
+                                                            prompts_a=prompts_success, 
+                                                            new_questions=questions_success, 
+                                                            question_idx=f"success",
+                                                            batch_size=args.vqa_batch_size,
+                                                            visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
+                                                            nlp=nlp,
+                                                            visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
+                                                            frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
+        success_vqa_outputs = [
+            VQAOutputs(
+                task_name=MistakeDetectionTasks(args.task),
+                example_id=example.example_id,
+                procedure_id=example.procedure_id,
+                frame=example.frames[0],
+                prompt="",
+                expected_answer=None,
+                response_token_ids=response_token_ids,
+                logits=logits,
+                question="",
+            ) for logits, example in zip(success_vqa_outputs, batch_examples)
+        ]
+
+        # Inject success question and answer into prompts
+        prompts = [f"{prompt} {output.predicted_answer.name}" for prompt, output in zip(prompts_success, success_vqa_outputs)]            
+        success_vqa_outputs = [output.answer_probs[VQAResponse.Yes] for output in success_vqa_outputs]
+
         # Iteratively generate questions
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
 
+            # Save success probability for this turn (just save another copy of them)
+            for batch_sub_idx in range(this_batch_size):
+                success_probs[batch_sub_idx].append(
+                    round(float(success_vqa_outputs[batch_sub_idx]), 6)
+                )
+
             # Generate a question (with beam search so we have several candidates)
-            prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[type(vlm)] if question_idx != 0 else USER_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q:" for prompt in prompts]
+            prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q:" for prompt in prompts]
             if not args.condition_questions_with_frames:
                 new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
                                                                 vlm_processor.tokenizer,
@@ -434,98 +480,7 @@ if not is_complete:
                 answers[batch_sub_idx].append(new_answers[batch_sub_idx].predicted_answer)
 
             # Update prompts with answers
-            if args.coherence_evaluation_strategy == "vlm":
-                # Save negated version of new prompt if we're using VLM-based coherence evaluation
-                prompts_negated = [prompt + VQAResponse(1 - output.predicted_answer.value).name for prompt, output in zip(prompts_a, new_answers)] 
             prompts = [prompt + " " + output.predicted_answer.name for prompt, output in zip(prompts_a, new_answers)]
-
-            # Ask VLM probability of success
-            questions_success = [
-                IVQA_SUCCESS_QUESTION.format(procedure=procedure)
-                for procedure in batch_procedures
-            ]
-            prompts_success = [
-                prompt + f'{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A: '
-                for prompt, question in zip(prompts, questions_success)
-            ]
-            if args.print_prompts:
-                pprint(prompts_success[0])
-            success_vqa_outputs = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
-                                                             vlm=vlm, 
-                                                             batch_examples=batch_examples, 
-                                                             batch_frames=batch_frames, 
-                                                             prompts_a=prompts_success, 
-                                                             new_questions=questions_success, 
-                                                             question_idx=f"{question_idx}_success",
-                                                             batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
-                                                             visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
-                                                             nlp=nlp,
-                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
-                                                             frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
-            success_vqa_outputs = [
-                VQAOutputs(
-                    task_name=MistakeDetectionTasks(args.task),
-                    example_id=example.example_id,
-                    procedure_id=example.procedure_id,
-                    frame=example.frames[0],
-                    prompt=prompt,
-                    expected_answer=None,
-                    response_token_ids=response_token_ids,
-                    logits=logits,
-                    question=question,
-                ) for logits, example, prompt, question in zip(success_vqa_outputs, batch_examples, prompts_a, new_questions)
-            ]               
-
-            # Save success probability for this turn
-            for batch_sub_idx in range(this_batch_size):
-                success_probs[batch_sub_idx].append(
-                    round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
-                )
-
-            # Clear out VQA outputs now because they occupy a lot of memory
-            del new_answers
-            del success_vqa_outputs
-
-            # If using VLM-based coherence evaluation, also need to get success probability for negated answers
-            if args.coherence_evaluation_strategy == "vlm":
-                prompts_success_negated = [
-                    prompt + f'{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:'
-                    for prompt, question in zip(prompts_negated, questions_success)
-                ]
-                success_vqa_outputs_negated = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
-                                                                         vlm=vlm, 
-                                                                         batch_examples=batch_examples, 
-                                                                         batch_frames=batch_frames, 
-                                                                         prompts_a=prompts_success_negated, 
-                                                                         new_questions=questions_success, 
-                                                                         question_idx=f"{question_idx}_success_negated",
-                                                                         batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
-                                                                         visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
-                                                                         nlp=nlp,
-                                                                         visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None)
-                success_vqa_outputs_negated = [
-                    VQAOutputs(
-                        task_name=MistakeDetectionTasks(args.task),
-                        example_id=example.example_id,
-                        procedure_id=example.procedure_id,
-                        frame=example.frames[0],
-                        prompt=prompt,
-                        expected_answer=None,
-                        response_token_ids=response_token_ids,
-                        logits=logits,
-                        question=question,
-                    ) for logits, example, prompt, question in zip(success_vqa_outputs_negated, batch_examples, prompts_a, new_questions)
-                ]
-
-                # Save success probability for negated question answers for this turn
-                for batch_sub_idx in range(this_batch_size):
-                    success_probs_negated[batch_sub_idx].append(
-                        round(float(success_vqa_outputs_negated[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
-                    )
-
-                # Delete VQAOutputs now since they occupy a lot of memory
-                del success_vqa_outputs_negated
-
 
         # Update global lists of tracked outputs
         all_questions += questions
@@ -670,13 +625,9 @@ if worker_index == 0:
         
         final_success_prob = None
         for success_prob_idx, success_prob in enumerate(success_probs):
-            # Early stopping mechanism: 
-            # if success score doesn't change enough over 3 turns, stop incorporating questions
-            # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
+            # Don't use early stopping
             final_success_prob = success_prob
-            if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
-                if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
-                    break
+
         all_probs.append(round(final_success_prob, 6))   
 
         results_dict = {
@@ -713,21 +664,16 @@ if worker_index == 0:
     all_predicted_answers = [VQAResponse(answer) for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
     all_previous_answers = [[VQAResponse(a) for a in results_dict['answers'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
-    if args.coherence_evaluation_strategy == "nli":
-        all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
-                                                nli_model,
-                                                tokenizer,
-                                                lm,                                         
-                                                [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
-                                                all_chosen_questions,
-                                                answers=all_predicted_answers,
-                                                previous_questions=all_previous_questions,
-                                                previous_answers=all_previous_answers,
-                                                rephrase_batch_size=args.generation_batch_size)
-    elif args.coherence_evaluation_strategy == "vlm":
-        all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs, all_success_probs_negated)
-    else:
-        raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
+    all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
+                                            nli_model,
+                                            tokenizer,
+                                            lm,                                         
+                                            [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
+                                            all_chosen_questions,
+                                            answers=all_predicted_answers,
+                                            previous_questions=all_previous_questions,
+                                            previous_answers=all_previous_answers,
+                                            rephrase_batch_size=args.generation_batch_size)
 
     # Aggregate coherence metrics by example and by turn
     parallel_idx = 0
@@ -781,7 +727,7 @@ if worker_index == 0:
         "metrics_by_turn": coherence_metrics_by_turn,
     }
     json.dump(coherence_metrics, 
-            open(os.path.join(this_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
+            open(os.path.join(this_results_dir, f"metrics_coherence_nli_{args.eval_partition}.json"), "w"),
             indent=4)
 
     # Generate DET curves for accuracy

@@ -149,17 +149,65 @@ for question_idx in range(n_questions_per_example):
 # Gather up results across processes and evaluate
 if worker_index == 0:
     print(f"({worker_index}) Gathering all results...")
-    for other_worker_index in range(1, n_workers):
-        print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
-        for question_idx in range(len(logits)):
+    if n_workers > 1:
+        for other_worker_index in range(1, n_workers):
             delay_per_try = 10
             delay_so_far = 0
-            max_delay = 18000
+            max_delay = 1800
+
+            print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
+            for question_idx in range(len(logits)):
+
+                # First, grab other worker's logits from success QA for each question index
+                while True:
+                    other_cache_path = os.path.join(cache_dir, f"noimg_qa_logits{other_worker_index}-{question_idx}.pt")
+                    if os.path.exists(other_cache_path):
+                        other_logits = torch.load(other_cache_path)
+                        logits[question_idx] = torch.cat((logits[question_idx], other_logits), dim=0)
+                        print(f"({worker_index}) Collected question {question_idx} logits from worker {other_worker_index}.")
+                        break
+
+                    # Decide whether to try again
+                    if delay_so_far >= max_delay:
+                        raise TimeoutError(f"Waited for {max_delay} seconds for results from worker {other_worker_index}. Process may have failed.")
+                    print(f"({worker_index}) Still waiting for results from worker {other_worker_index} ({delay_so_far} sec.)!")
+                    time.sleep(delay_per_try)
+                    delay_so_far += delay_per_try
+
+            # Then grab everything else
             while True:
-                other_cache_path = os.path.join(cache_dir, f"noimg_qa_logits{worker_index}-{question_idx}.pt")
+                other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
                 if os.path.exists(other_cache_path):
-                    other_logits = torch.load(other_cache_path)
-                    logits[question_idx] = torch.cat((logits[question_idx], other_logits), dim=0)
+                    is_complete, \
+                    _, \
+                    other_questions, \
+                    other_candidate_questions, \
+                    other_candidate_questions_scores, \
+                    other_candidate_questions_sources, \
+                    other_scores, \
+                    other_answers, \
+                    other_answer_probs, \
+                    other_success_probs, \
+                    other_success_probs_negated, \
+                    other_example_ids, \
+                    other_procedures, \
+                    other_labels = pickle.load(open(other_cache_path, "rb"))
+                    if is_complete:
+                        # Add other process results to our results
+                        all_questions += other_questions
+                        all_candidate_questions += other_candidate_questions
+                        all_candidate_questions_scores += other_candidate_questions_scores
+                        all_candidate_questions_sources += other_candidate_questions_sources
+                        all_scores += other_scores
+                        all_answers += other_answers
+                        all_answer_probs += other_answer_probs
+                        all_success_probs += other_success_probs
+                        all_success_probs_negated += other_success_probs_negated
+                        all_example_ids += other_example_ids
+                        all_procedures += other_procedures
+                        all_labels += other_labels
+                        print(f"({worker_index}) Collected original results from worker {other_worker_index}.")
+                        break
 
                 # Decide whether to try again
                 if delay_so_far >= max_delay:
@@ -167,6 +215,7 @@ if worker_index == 0:
                 print(f"({worker_index}) Still waiting for results from worker {other_worker_index} ({delay_so_far} sec.)!")
                 time.sleep(delay_per_try)
                 delay_so_far += delay_per_try
+
 
     # Update success probs with image-free QA results
     all_success_probs_noimg = [
@@ -183,7 +232,7 @@ if worker_index == 0:
                 logits=logits[question_idx][example_idx],
                 question="",
             ).answer_probs[VQAResponse.Yes]), 6) for question_idx in range(n_questions_per_example)
-        ] for example_idx in range(len(all_example_ids))
+        ] for example_idx in range(len(logits[0]))
     ]
     all_success_probs_negated_noimg = [[] for _ in range(len(all_example_ids))]
     if args.coherence_evaluation_strategy == "vlm":
@@ -305,6 +354,8 @@ if worker_index == 0:
     for threshold in MISTAKE_DETECTION_THRESHOLDS:
         preds = [1.0 - p >= threshold for p in all_probs] # Have to do 1.0 - probability since we got "success" probability from VLM
         assert len(preds) == len(all_probs) == len(all_labels), "Expected same number of preds, probs, and labels."
+        pprint(all_labels_binary)
+        pprint(preds)
         this_metrics = mistake_detection_metrics(all_labels_binary, preds)
         accuracy_metrics_by_threshold[threshold] = this_metrics
 
@@ -344,6 +395,6 @@ if worker_index == 0:
                                   [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
                                   [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
                                   [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                  [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.eval_partition}.pdf")])
+                                  [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
     
     print(f"({worker_index}) Done!")

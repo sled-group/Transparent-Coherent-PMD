@@ -46,7 +46,7 @@ def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batc
 
     return all_outputs_collated, all_scores_collated
 
-def simple_vlm_prompt_beam_search(vlm, processor, prompts, frames, max_new_tokens=20, batch_size=20, generation_kwargs={}):
+def simple_vlm_prompt_beam_search(vlm, processor, prompts, frames, image_token, max_new_tokens=20, batch_size=20, generation_kwargs={}):
     """
     Stripped down, generic LM prompting method. This method is only tested for constrained beam search, and might not work for other generation settings.
     """
@@ -70,8 +70,7 @@ def simple_vlm_prompt_beam_search(vlm, processor, prompts, frames, max_new_token
             outputs = vlm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
 
         outputs = processor.tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
-        
-        all_outputs += [output.replace(batch_prompts[output_idx // num_seq], "") for output_idx, output in enumerate(outputs)]
+        all_outputs += [output.replace(batch_prompts[output_idx // num_seq].replace(image_token.strip(), " "), "") for output_idx, output in enumerate(outputs)]
 
     # Collate generated texts and scores from beam search
     all_outputs_collated = []
