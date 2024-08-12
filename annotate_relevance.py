@@ -3,16 +3,22 @@ import datetime
 import json
 import os
 import pandas as pd
-from pprint import pprint
 import streamlit as st
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email import encoders
 
+# Parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_source_json", default=os.environ['data_source_json'] if 'data_source_json' in os.environ else None, type=str, help="Path to .json file with source data for annotation.")
 parser.add_argument("--n_annotators", default=os.environ['n_annotators'] if 'n_annotators' in os.environ else None, type=int, help="Number of annotators to split source file across.")
 parser.add_argument("--annotator_idx", default=os.environ['annotator_idx'] if 'annotator_idx' in os.environ else None, type=int, help="Index of annotator this form will be for.")
 args = parser.parse_args()
 
-pprint(args)
+# Ensure arguments are provided
+assert args.data_source_json is not None and args.n_annotators is not None and args.annotator_idx is not None
 
 # Get source data
 source_data = json.load(open(args.data_source_json, "r"))
@@ -55,7 +61,6 @@ st.write("""
 - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
 """)
 
-
 ratings = []
 for sample_idx, sample in enumerate(samples):
     st.write("---")
@@ -95,10 +100,50 @@ for sample_idx, sample in enumerate(samples):
 
 st.write("---")
 
-# Save the results
+# Function to send email with attachment
+def send_email_with_attachment(to_email, from_email, subject, body, attachment):
+    msg = MIMEMultipart()
+    msg['From'] = from_email
+    msg['To'] = to_email
+    msg['Subject'] = subject
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    part = MIMEBase('application', 'octet-stream')
+    part.set_payload(attachment)
+    encoders.encode_base64(part)
+    part.add_header('Content-Disposition', f'attachment; filename="annotation_results.csv"')
+
+    msg.attach(part)
+
+    # Set up the SMTP server
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)  # Example for Gmail, adjust as necessary
+        server.starttls()
+        server.login(from_email, st.secrets["email_password"])  # st.secrets["email_password"] should be set in Streamlit's secrets management
+        text = msg.as_string()
+        server.sendmail(from_email, to_email, text)
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"Failed to send email: {e}")
+        return False
+
 if st.button("Submit"):
     results_df = pd.DataFrame(ratings)
-    timestamp = datetime.datetime.now()
-    output_file = os.path.join(output_dir, f"response_{timestamp.strftime('%Y%m%d%H%M%S')}.csv")
-    results_df.to_csv(output_file, index=False)
-    st.success(f"Annotations saved to {output_file}")
+    csv_data = results_df.to_csv(index=False).encode()
+
+    # Retrieve email details from Streamlit secrets
+    to_email = st.secrets["mailto_address"]
+    from_email = st.secrets["from_email"]
+
+    if send_email_with_attachment(
+        to_email=to_email,
+        from_email=from_email,
+        subject=f"TRAVEl Annotation Results from Annotator {args.annotator_idx + 1}",
+        body="Please find the attached annotation results.",
+        attachment=csv_data
+    ):
+        st.success("Results submitted successfully!")
+    else:
+        st.error("Failed to submit results. Please press Submit again.")

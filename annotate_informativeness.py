@@ -10,9 +10,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--data_source_json", default=os.environ['data_source_json'] if 'data_source_json' in os.environ else None, type=str, help="Path to .json file with source data for annotation.")
 parser.add_argument("--n_annotators", default=os.environ['n_annotators'] if 'n_annotators' in os.environ else None, type=int, help="Number of annotators to split source file across.")
 parser.add_argument("--annotator_idx", default=os.environ['annotator_idx'] if 'annotator_idx' in os.environ else None, type=int, help="Index of annotator this form will be for.")
+parser.add_argument("--mailto_address", default=os.environ['mailto_address'] if 'mailto_address' in os.environ else None, type=int, help="Index of annotator this form will be for.")
 args = parser.parse_args()
 
 pprint(args)
+assert args.data_source_json is not None and args.n_annotators is not None and args.annotator_idx is not None and args.mailto_address is not None
 
 # Get source data
 source_data = json.load(open(args.data_source_json, "r"))
