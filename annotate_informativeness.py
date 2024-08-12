@@ -32,9 +32,9 @@ st.write("""
 
 st.write("""
 For each annotation task, you will be given the following information:
-- A sentence describing the procedure you're trying to perform.
-- An optional list of previous questions you already asked, and their answers.
-- The last question you just asked your friend, and its answer.
+- A **sentence** describing the procedure you're trying to perform.
+- An optional list of **previous questions** you already asked, and **their answers**.
+- The **last question** you just asked your friend, and **its answer**.
 """)
 
 st.write("""
@@ -59,7 +59,7 @@ ratings = []
 for sample_idx, sample in enumerate(samples):
     st.write("---")
     st.write(f"### Annotation {sample_idx + 1}")
-    st.write(f"**Instruction:** *{sample['procedure']}*")
+    st.write(f"**Sentence:** *{sample['procedure']}*")
     
     st.write("**Previous questions and answers:**")
     if len(sample['previous_questions_answers']) == 0:
