@@ -686,7 +686,7 @@ if worker_index == 0:
             "mistake": True if label is not None else False,
             "mistake_type": label,
             "questions": questions,
-            "frame_dir": os.path.join(this_results_dir, f"vqa_frames/{example_id}"),
+            "frame_dir": os.path.join(this_results_dir, f"vqa_frames/{example_id}") if args.cache_vqa_frames else dataset.get_example_dir(example_id),
             "answers": [a.value for a in answers],
             "answer_probs": answer_probs,
             "scores": scores,
@@ -732,19 +732,19 @@ if worker_index == 0:
         raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
 
     # Aggregate coherence metrics by example and by turn
-    parallel_idx = 0
     coherence_metrics_by_example = defaultdict(list)
     coherence_metrics_by_turn = defaultdict(list)
     coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']
-    for results_dict in all_results_dicts.values():
-        for k in coherence_metric_names:
-            if k in all_coherence_metrics:
+    for k in coherence_metric_names:
+        if k in all_coherence_metrics:
+            parallel_idx = 0
+            for results_dict in all_results_dicts.values():
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
                     this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx]), 6))
+                    parallel_idx += 1
                 coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
-        parallel_idx += 1
 
     # Calculate accuracy metrics
     best_metrics = None

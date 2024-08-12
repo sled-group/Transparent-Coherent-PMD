@@ -45,6 +45,7 @@ fairscale = "^0.4.13"
 diffusers = "^0.29.2"
 pycocoevalcap = "^1.2"
 scikit-image = "^0.24.0"
+streamlit = "^1.37.1"
 
 [build-system]
 requires = ["poetry-core"]

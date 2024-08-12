@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import os
 from pprint import pprint
 import random
-from scipy.stats import pointbiserialr
+from scipy.stats import pointbiserialr, spearmanr
 from sklearn.calibration import calibration_curve
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss
@@ -79,12 +79,18 @@ for results_fnames, results_names, analysis_subdir in [
     # ),    
     (
         [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_topdown_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_20240811173319/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240809173527/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240809180923/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_20240810121619/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240810135720/outputs_val.json",
         ],
         [
+            "Top Down Likelihood Ranking",
             "Likelihood Ranking",
-            "Coherence Ranking"
+            "Coherence Ranking",
+            "Likelihood Ranking + ICL",
+            "Coherence Ranking + ICL",
         ],
         "likelihood_vs_coherence"
     )
@@ -157,7 +163,7 @@ for results_fnames, results_names, analysis_subdir in [
 
             n_turns[i].append(pred['final_turn'] + 1)
             turn_success_probs[i].append(pred['success_probs'])
-            if result_preds_noimg:
+            if result_preds_noimg is not None:
                 turn_success_probs_noimg[i].append(list(result_preds_noimg.values())[pred_idx]['success_probs'])
             turn_questions[i].append(pred['questions'])
             if 'candidate_questions_sources' in pred:
@@ -171,9 +177,11 @@ for results_fnames, results_names, analysis_subdir in [
 
         all_dialog_info_gains = []
         all_turn_info_gains = []
+        all_turn_mse = []
 
         all_dialog_info_gains_noimg = []
         all_turn_info_gains_noimg = []
+        all_turn_mse_noimg = []
 
         all_dialog_info_diffs = []
         all_turn_info_diffs = []
@@ -183,6 +191,10 @@ for results_fnames, results_names, analysis_subdir in [
             turn_info_gains = []
             turn_info_gains_noimg = []
             turn_info_diffs = []
+
+            turn_mse = []
+            turn_mse_noimg = []
+
             for turn_idx in range(n_turns[i][label_idx]):
 
                 # Get information gain for this turn
@@ -193,6 +205,10 @@ for results_fnames, results_names, analysis_subdir in [
                 this_turn_info = 1.0 - entropy(this_turn_success_prob)
                 turn_info_gain = this_turn_info - last_turn_info
                 turn_info_gains.append(turn_info_gain)
+
+                target = 0.0 if label else 1.0
+                this_turn_mse = np.abs(turn_success_probs[i][label_idx][turn_idx] - target) ** 2
+                turn_mse.append(this_turn_mse)
 
                 # If possible, get information gain for this turn without an image available in success VQA step
                 if len(turn_success_probs_noimg[i]) > 0:
@@ -206,30 +222,39 @@ for results_fnames, results_names, analysis_subdir in [
 
                     turn_info_diffs.append(turn_info_gain - turn_info_gain_noimg)
 
+                    this_turn_mse_noimg = np.abs(turn_success_probs_noimg[i][label_idx][turn_idx] - target) ** 2
+                    turn_mse_noimg.append(this_turn_mse_noimg)
+
                 if len(turn_questions_sources[i]) > 0:
                     q_source = turn_questions_sources[i][label_idx][turn_idx]
                     question_sources[q_source] += 1
 
             all_dialog_info_gains.append(np.sum(turn_info_gains))
             all_turn_info_gains.append(np.mean(turn_info_gains))
+            all_turn_mse.append(turn_mse[-1]) # Just take last prediction MSE
 
-            if len(turn_success_probs_noimg[0]) > 0:
+            if len(turn_success_probs_noimg[i]) > 0:
                 all_dialog_info_gains_noimg.append(np.sum(turn_info_gains_noimg))
                 all_turn_info_gains_noimg.append(np.mean(turn_info_gains_noimg))
+                all_turn_mse_noimg.append(np.mean(turn_mse_noimg))
 
                 all_dialog_info_diffs.append(np.sum(turn_info_gains) - np.sum(turn_info_gains_noimg))
                 all_turn_info_diffs.append(np.mean(turn_info_gains) - np.mean(turn_info_gains_noimg))
 
         mean_dialog_info_gain = np.mean(all_dialog_info_gains)
         mean_turn_info_gain = np.mean(all_turn_info_gains)
+        mean_mse = np.mean(all_turn_mse)
         lines.append(f"{results_names[i]} average information gained per turn: {mean_turn_info_gain}")
         lines.append(f"{results_names[i]} average information gained per dialog: {mean_dialog_info_gain}")
+        lines.append(f"{results_names[i]} MSE across turns: {mean_mse}")
 
-        if len(turn_success_probs_noimg[0]) > 0:
+        if len(turn_success_probs_noimg[i]) > 0:
             mean_dialog_info_gain_noimg = np.mean(all_dialog_info_gains_noimg)
             mean_turn_info_gain_noimg = np.mean(all_turn_info_gains_noimg)
+            mean_mse_noimg = np.mean(all_turn_mse_noimg)
             lines.append(f"{results_names[i]} average information gained per turn (no image): {mean_turn_info_gain_noimg}")
             lines.append(f"{results_names[i]} average information gained per dialog (no image): {mean_dialog_info_gain_noimg}")
+            lines.append(f"{results_names[i]} MSE across turns (no image): {mean_mse_noimg}")
 
             mean_dialog_info_diff = np.mean(all_dialog_info_diffs)
             mean_turn_info_diff = np.mean(all_turn_info_diffs)
@@ -477,3 +502,32 @@ for results_fnames, results_names, analysis_subdir in [
     save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
     generate_risk_coverage_plot(all_coverages, all_risks, results_names, save_paths)
     print("(4) Done!")
+
+    # Analysis 5: Correlations between tiered metrics
+    print("(5) Beginning tiered metrics correlation analysis...")
+    lines = []
+    for i, result_fname in enumerate(results_fnames):
+        coherence_metrics_path = result_fname.replace("outputs_val.json", "metrics_coherence_nli_val.json")
+        coherence_metrics = None
+        if os.path.exists(coherence_metrics_path):
+            coherence_metrics = json.load(open(coherence_metrics_path, "r"))
+
+        if coherence_metrics is not None:
+            all_relevance = coherence_metrics['metrics_by_example']["relevance_marginal_by_example"]
+            all_informativeness = coherence_metrics['metrics_by_example']["informativeness_marginal_x_relevance_marginal_by_example"]
+
+            res = spearmanr(all_informativeness, all_error[i])
+            lines.append(f"{results_names[i]} Spearman correlation between informativeness x relevance and error: {res.statistic} (p={res.pvalue})")
+
+            res2 = pointbiserialr(all_correctness[i], all_informativeness)
+            lines.append(f"{results_names[i]} point-biserial correlation between informativeness x relevance and correctness: {res2[0]} (p={res2[1]})")
+                         
+            lines.append("")
+
+            output_fname = f"tiered_correlations_{'_'.join(results_names).replace(' ', '-')}.txt"
+            save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
+            for save_path in save_paths:
+                with open(save_path, 'w') as f:
+                    f.write("\n".join(lines))
+
+    print("(5) Done!")

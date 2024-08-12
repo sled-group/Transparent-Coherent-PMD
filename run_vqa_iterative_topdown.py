@@ -311,7 +311,7 @@ if not is_complete:
                 new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
                                                                 vlm_processor.tokenizer,
                                                                 [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q],
-                                                                max_new_tokens=20,
+                                                                max_new_tokens=30,
                                                                 batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                                 generation_kwargs=generation_kwargs)
             else:
@@ -320,7 +320,7 @@ if not is_complete:
                                                               prompts_q,
                                                               batch_frames,
                                                               IMAGE_TOKENS[type(vlm)],
-                                                              max_new_tokens=20,
+                                                              max_new_tokens=30,
                                                               batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                               generation_kwargs=generation_kwargs)
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
@@ -336,7 +336,7 @@ if not is_complete:
                 icl_new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
                                                                     vlm_processor.tokenizer,
                                                                     icl_prompts,
-                                                                    max_new_tokens=20,
+                                                                    max_new_tokens=30,
                                                                     batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1),
                                                                     generation_kwargs=generation_kwargs)
                 
@@ -637,7 +637,7 @@ if worker_index == 0:
             "mistake": True if label is not None else False,
             "mistake_type": label,
             "questions": questions,
-            "frame_dir": os.path.join(this_results_dir, f"vqa_frames/{example_id}"),
+            "frame_dir": os.path.join(this_results_dir, f"vqa_frames/{example_id}") if args.cache_vqa_frames else dataset.get_example_dir(example_id),
             "answers": [a.value for a in answers],
             "answer_probs": answer_probs,
             "scores": scores,
@@ -682,15 +682,15 @@ if worker_index == 0:
     coherence_metrics_by_example = defaultdict(list)
     coherence_metrics_by_turn = defaultdict(list)
     coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']
-    for results_dict in all_results_dicts.values():
-        for k in coherence_metric_names:
-            if k in all_coherence_metrics:
+    for k in coherence_metric_names:
+        if k in all_coherence_metrics:
+            for results_dict in all_results_dicts.values():
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
                     this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx]), 6))
+                    parallel_idx += 1
                 coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
-        parallel_idx += 1
 
     # Calculate accuracy metrics
     best_metrics = None
@@ -740,6 +740,6 @@ if worker_index == 0:
                                   [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
                                   [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
                                   [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                  [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
+                                  [os.path.join(this_results_dir, f"graph_tiered_metrics_nli_{args.eval_partition}.pdf")])
     
     print(f"({worker_index}) Done!")
