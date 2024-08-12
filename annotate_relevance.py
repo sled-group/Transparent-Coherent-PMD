@@ -81,7 +81,7 @@ for sample_idx, sample in enumerate(samples):
             "5 (very relevant)", 
             "Instructions Unclear"
         ],
-        index=sample_idx
+        index=2
     )
 
     ratings.append({
