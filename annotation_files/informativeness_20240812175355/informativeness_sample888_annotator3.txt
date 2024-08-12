@@ -1,0 +1,200 @@
+Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it.
+You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.
+
+For each annotation task, you will be given the following information:
+ - A sentence describing the procedure you're trying to perform.
+ - An optional list of previous questions you already asked, and their answers.
+ - The last question you just asked your friend, and its answer.
+
+You must rate how informative the last question and its answer are. By informative, we mean: compared to what you knew from the previous questions and answers, how much more sure would the last question and answer be about whether you succeeded?
+You can also choose to mark 'Instructions Unclear', which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+
+Some tips:
+ - Only judge the informativeness of the last question and answer, not the previous questions and answers (which may or may not be informative).
+ - A question may seem relevant to the task at hand, but you should consider it uninformative if it doesn't provide essential information to judge the success of the task.
+ - If a seemingly informative question is redundant with previous questions, you may consider it less informative.
+ - If the last answer contradicts critical information you had from previous questions and answers, you may consider it more informative.
+ - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
+ - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
+
+
+Annotation 1
+===============================
+Instruction: Pick the polaroid camera
+Previous questions and answers:
+Q1. Is the polaroid camera in the person's hand?     (Answer: No)
+Q2. Is the polaroid camera on the table in front of the person?     (Answer: Yes)
+Q3. Is the polaroid camera on the table next to the person?     (Answer: Yes)
+Q4. Is the polaroid camera on the table in front of the person's face?     (Answer: Yes)
+Q5. Is the polaroid camera on the table in front of the person's head?     (Answer: Yes)
+
+Last question: Is the polaroid camera on the table in front of the person's chest?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 2
+===============================
+Instruction: Wash a sauce pan in the sink
+Previous questions and answers:
+Q1. Is the person washing the saucepan in the sink?     (Answer: Yes)
+Q2. Is the person wearing gloves while washing the saucepan in the sink?     (Answer: No)
+
+Last question: Is the person wearing an apron while washing the saucepan in the sink?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 3
+===============================
+Instruction: Put items on the table
+Previous questions and answers:
+Q1. Is the table visible in the image?     (Answer: Yes)
+
+Last question: Is the table in the foreground of the image?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 4
+===============================
+Instruction: Drop a lid
+Previous questions and answers:
+Q1. Is the person wearing gloves?     (Answer: No)
+Q2. Is the person wearing safety goggles?     (Answer: No)
+
+Last question: Is the person wearing an apron?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 5
+===============================
+Instruction: Cut a plant with scissor
+Previous questions and answers:
+None
+
+Last question: Is the person holding a pair of scissors in their hand?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 6
+===============================
+Instruction: Pick up the plastic bowls in the cabinet
+Previous questions and answers:
+None
+
+Last question: Are the plastic bowls still in the cabinet?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 7
+===============================
+Instruction: File the nail using a nail file
+Previous questions and answers:
+Q1. Is the nail file being held in the person's right hand?     (Answer: Yes)
+Q2. Is the nail file being held in the person's left hand?     (Answer: No)
+
+Last question: Is the nail file being held by the person's right hand?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 8
+===============================
+Instruction: Hold a screw
+Previous questions and answers:
+Q1. Is the person wearing gloves?     (Answer: No)
+
+Last question: Is the person wearing any protective gear?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 9
+===============================
+Instruction: Cut the picture
+Previous questions and answers:
+Q1. Is the person wearing a white shirt?     (Answer: No)
+Q2. Is the person wearing a black shirt?     (Answer: Yes)
+Q3. Is the black shirt the person is wearing a short sleeve shirt?     (Answer: No)
+
+Last question: Is the black shirt the person is wearing a long sleeve shirt?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 10
+===============================
+Instruction: Drop dough on the clothed tray
+Previous questions and answers:
+Q1. Is the clothed tray visible in the photo?     (Answer: Yes)
+Q2. Is the dough on the clothed tray visible in the photo?     (Answer: Yes)
+Q3. Is the dough on the clothed tray shaped like a doughnut?     (Answer: No)
+
+Last question: Is the dough on the clothed tray shaped like a ball?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+

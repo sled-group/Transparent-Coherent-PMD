@@ -1,0 +1,197 @@
+Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it.
+You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.
+
+For each annotation task, you will be given the following information:
+ - A sentence describing the procedure you're trying to perform.
+ - An optional list of previous questions you already asked, and their answers.
+ - The last question you just asked your friend, and its answer.
+
+You must rate how informative the last question and its answer are. By informative, we mean: compared to what you knew from the previous questions and answers, how much more sure would the last question and answer be about whether you succeeded?
+You can also choose to mark 'Instructions Unclear', which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+
+Some tips:
+ - Only judge the informativeness of the last question and answer, not the previous questions and answers (which may or may not be informative).
+ - A question may seem relevant to the task at hand, but you should consider it uninformative if it doesn't provide essential information to judge the success of the task.
+ - If a seemingly informative question is redundant with previous questions, you may consider it less informative.
+ - If the last answer contradicts critical information you had from previous questions and answers, you may consider it more informative.
+ - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
+ - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
+
+
+Annotation 1
+===============================
+Instruction: Cut clay
+Previous questions and answers:
+Q1. Is the person wearing a blue shirt?     (Answer: No)
+Q2. Is the person wearing a white shirt?     (Answer: No)
+
+Last question: Is the person wearing a black shirt?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 2
+===============================
+Instruction: Insert your right hand into the mixed vegetable
+Previous questions and answers:
+Q1. Is the person's hand inside the mixed vegetable?     (Answer: Yes)
+
+Last question: Is the person's hand inside a bowl of mixed vegetables?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 3
+===============================
+Instruction: Pick a spoon on top of the carboard
+Previous questions and answers:
+Q1. Is the spoon on top of the carboard?     (Answer: Yes)
+Q2. Is the spoon on the carboard?     (Answer: Yes)
+
+Last question: Is the spoon on the top of the carboard?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 4
+===============================
+Instruction: Place the red lid on the red lid container with your hand
+Previous questions and answers:
+None
+
+Last question: Is the red lid on the red lid container?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 5
+===============================
+Instruction: Break out a part of the clay hump on the ground
+Previous questions and answers:
+None
+
+Last question: Is the clay hump on the ground still intact?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 6
+===============================
+Instruction: Pick the paper on the table
+Previous questions and answers:
+None
+
+Last question: Is the paper on the table in front of the person?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 7
+===============================
+Instruction: Drop the dough on the flour on the table
+Previous questions and answers:
+Q1. Has the dough been dropped on the flour?     (Answer: Yes)
+Q2. Is the dough on the flour on the table?     (Answer: Yes)
+
+Last question: Is the dough on top of the flour on the table?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 8
+===============================
+Instruction: Drop the piece of wood plank onto the shelf
+Previous questions and answers:
+None
+
+Last question: Is the piece of wood plank on the shelf?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 9
+===============================
+Instruction: Close the test - tube
+Previous questions and answers:
+Q1. Is the person wearing a white lab coat?     (Answer: Yes)
+Q2. Is the person wearing safety goggles?     (Answer: No)
+Q3. Is the person wearing gloves?     (Answer: Yes)
+Q4. Is the test-tube in the person's hand?     (Answer: Yes)
+Q5. Is the test-tube in the person's hand upside down?     (Answer: Yes)
+Q6. Is the test-tube in the person's hand made of glass?     (Answer: Yes)
+
+Last question: Is the test-tube in the person's hand made of metal?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 10
+===============================
+Instruction: Hold a cup
+Previous questions and answers:
+Q1. Is the cup in the person's hand?     (Answer: Yes)
+
+Last question: Is the cup in the person's right hand?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+

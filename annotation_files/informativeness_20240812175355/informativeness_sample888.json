@@ -1,0 +1,916 @@
+[
+    {
+        "example_id": "dc6c20e4-7376-44d1-91e3-48e83bb0d4a6/131/pos",
+        "procedure": "Pick the inner cover from the tray with your hand",
+        "question": "Is the person's hand on the inner cover of the tray?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person's hand visible in the photo?",
+                "Yes"
+            ],
+            [
+                "Is the person's hand inside the tray?",
+                "Yes"
+            ],
+            [
+                "Is the person's hand touching the inner cover of the tray?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.572266,
+            "informativeness_marginal": 0.041992,
+            "informativeness_marginal_x_relevance_marginal": 0.024033
+        }
+    },
+    {
+        "example_id": "2dbdd409-0be0-447c-8ae8-3f107fe9af80/90/pos",
+        "procedure": "Pick a spray bottle with the left hand",
+        "question": "Is the spray bottle in the person's left hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.957031,
+            "informativeness_marginal": 0.842773,
+            "informativeness_marginal_x_relevance_marginal": 0.806641
+        }
+    },
+    {
+        "example_id": "7e70088e-9874-4116-880e-496c835d71c6/90/easyneg_MisalignSRL_V_ARG1_5b97f47f-f015-46f3-8879-3fcc2a61a728_1270.40744762133",
+        "procedure": "Throw the portion of clay mix on the main portion of clay mix",
+        "question": "Is the portion of clay mix on the main portion of clay mix?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.29834,
+            "informativeness_marginal": 0.048828,
+            "informativeness_marginal_x_relevance_marginal": 0.014565
+        }
+    },
+    {
+        "example_id": "952f40df-b1d7-4562-afe4-2a4ff569e949/119/pos",
+        "procedure": "Take a drill from the stairs",
+        "question": "Is the drill in the person's left hand?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the drill still in the person's hand?",
+                "Yes"
+            ],
+            [
+                "Is the drill in the person's right hand?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.467285,
+            "informativeness_marginal": 0.000977,
+            "informativeness_marginal_x_relevance_marginal": 0.000456
+        }
+    },
+    {
+        "example_id": "28313dbe-ad68-43cb-bb72-602d5600d15a/117/easyneg_MisalignSRL_V_ARG1_d20f6551-0272-4a69-8b02-da7ffcf29e0f_741.9315021677083",
+        "procedure": "Pick the measuring tape from the wood under the miter saw with your hand",
+        "question": "Is the measuring tape in the person's hand?",
+        "answer": "No",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.24707,
+            "informativeness_marginal": 0.9375,
+            "informativeness_marginal_x_relevance_marginal": 0.231689
+        }
+    },
+    {
+        "example_id": "7a43089b-fad6-4ba2-8d3f-ba47c2efc61e/3/easyneg_MisalignSRL_ARG1_3b8a77f0-153c-4e93-82f9-ae2aa84596ed_1005.514197613672",
+        "procedure": "Pick a spoon from the table with your hand",
+        "question": "Is the spoon on the right side of the table?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the spoon in the person's hand?",
+                "No"
+            ],
+            [
+                "Is the spoon on the table in front of the person?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.003418,
+            "informativeness_marginal": 0.700195,
+            "informativeness_marginal_x_relevance_marginal": 0.002394
+        }
+    },
+    {
+        "example_id": "d38f271c-53f3-4771-8c17-a5157e723067/173/pos",
+        "procedure": "Pick leaves",
+        "question": "Is the person wearing gloves while picking the leaves?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.118225,
+            "informativeness_marginal": 0.78125,
+            "informativeness_marginal_x_relevance_marginal": 0.092346
+        }
+    },
+    {
+        "example_id": "c8f8ebf1-5613-4f4a-802c-ada5e4c4b651/103/easyneg_MisalignSRL_V_ARG1_1e5bd816-e1dd-43d3-8709-42c83114dc7c_7110.369361933334",
+        "procedure": "Remove unwanted parts of the piece of meat with the knife in your hand",
+        "question": "Is the person's hand holding the knife steady over the piece of meat?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person holding a knife in their hand?",
+                "Yes"
+            ],
+            [
+                "Is the knife in the person's hand pointing towards the piece of meat?",
+                "Yes"
+            ],
+            [
+                "Is the person's hand holding the knife steady?",
+                "Yes"
+            ],
+            [
+                "Is the person's hand holding the knife steady on the piece of meat?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.653809,
+            "informativeness_marginal": 0.072266,
+            "informativeness_marginal_x_relevance_marginal": 0.047241
+        }
+    },
+    {
+        "example_id": "eafc77b4-8b79-47f6-b3ab-bae2fb7703c3/1/pos",
+        "procedure": "Carry the slab of corn",
+        "question": "Is the person wearing gloves while holding the slab of corn?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the person holding the slab of corn in their hands?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.013062,
+            "informativeness_marginal": 0.558594,
+            "informativeness_marginal_x_relevance_marginal": 0.007298
+        }
+    },
+    {
+        "example_id": "12bf3659-40c4-4094-a4d3-507ec04bc512/20/easyneg_MisalignSRL_V_2fd1837a-613b-48af-9ad2-0222f8fd6b69_1014.3060686",
+        "procedure": "Cut the paper with a scissors",
+        "question": "Is the person's hand holding the scissors above the paper correctly?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person holding a pair of scissors in their hand?",
+                "Yes"
+            ],
+            [
+                "Is the person's hand holding the scissors correctly?",
+                "Yes"
+            ],
+            [
+                "Is the person's hand holding the scissors above the paper?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.881836,
+            "informativeness_marginal": 0.914062,
+            "informativeness_marginal_x_relevance_marginal": 0.806152
+        }
+    },
+    {
+        "example_id": "b4707bc6-3579-4992-93ec-0eff21ba8922/30/pos",
+        "procedure": "Clean the polaroid camera with the wipe",
+        "question": "Is the polaroid camera in the person's hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.008301,
+            "informativeness_marginal": 0.208008,
+            "informativeness_marginal_x_relevance_marginal": 0.001726
+        }
+    },
+    {
+        "example_id": "23910a31-45bb-4c41-9b74-91ba2bb8be60/20/pos",
+        "procedure": "Hold the fourth piece of wood with your hand",
+        "question": "Is the fourth piece of wood being held in the person's hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.86084,
+            "informativeness_marginal": 0.432617,
+            "informativeness_marginal_x_relevance_marginal": 0.372314
+        }
+    },
+    {
+        "example_id": "24898dc1-61bd-4e90-a034-2853b96e4a91/31/easyneg_MisalignSRL_ARG1_79c62f24-488e-4a69-8220-3b20cb4bf72b_1136.7155452666666",
+        "procedure": "Sew the material with the sewing machine on the table",
+        "question": "Is the person using the sewing machine to sew the material on the table?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the sewing machine on the table?",
+                "Yes"
+            ],
+            [
+                "Is the person working on the sewing machine on the table?",
+                "Yes"
+            ],
+            [
+                "Is the person sewing the material with the sewing machine on the table?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.678711,
+            "informativeness_marginal": 0.691895,
+            "informativeness_marginal_x_relevance_marginal": 0.469482
+        }
+    },
+    {
+        "example_id": "2d29b45a-169b-453f-8050-98ec147b0ccf/24/pos",
+        "procedure": "Pick the tape measure on the floor",
+        "question": "Is the tape measure in the person's right hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the tape measure in the person's hand?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.419434,
+            "informativeness_marginal": 0.018555,
+            "informativeness_marginal_x_relevance_marginal": 0.007782
+        }
+    },
+    {
+        "example_id": "6c56ee6e-c196-400c-90dc-31c887648562/56/hardneg",
+        "procedure": "Place a plastic box on the bin",
+        "question": "Is the person wearing gloves while placing the plastic box on the bin?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the plastic box on top of the bin?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.001335,
+            "informativeness_marginal": 0.901855,
+            "informativeness_marginal_x_relevance_marginal": 0.001204
+        }
+    },
+    {
+        "example_id": "6c56ee6e-c196-400c-90dc-31c887648562/18/easyneg_MisalignSRL_V_ARG1_7c8a9c21-ba3c-41b8-a7e0-be7311fde0ee_370.7733785898762",
+        "procedure": "Put sanitizer on the stool",
+        "question": "Is the person wearing any protective gear while sanitizing the stool?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Has the stool been sanitized?",
+                "Yes"
+            ],
+            [
+                "Is the person wearing gloves while sanitizing the stool?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.003893,
+            "informativeness_marginal": 0.994629,
+            "informativeness_marginal_x_relevance_marginal": 0.003872
+        }
+    },
+    {
+        "example_id": "1bfe5ac2-cbf8-4364-8a30-60d97dd395df/113/pos",
+        "procedure": "Unfold the napkin with your hands",
+        "question": "Are the person's hands holding the napkin?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person holding the napkin in their hands?",
+                "Yes"
+            ],
+            [
+                "Are the person's hands visible in the photo?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.737793,
+            "informativeness_marginal": 0.169922,
+            "informativeness_marginal_x_relevance_marginal": 0.125366
+        }
+    },
+    {
+        "example_id": "f93bf4f8-08d1-4f94-8b5f-92fdd6b37e30/106/easyneg_MisalignSRL_V_28313dbe-ad68-43cb-bb72-602d5600d15a_143.58888",
+        "procedure": "Peel the piece of the second adhesive tape with your hands",
+        "question": "Is the piece of the second adhesive tape in the person's right hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the piece of the second adhesive tape in the person's hands?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.365967,
+            "informativeness_marginal": 0.478516,
+            "informativeness_marginal_x_relevance_marginal": 0.175171
+        }
+    },
+    {
+        "example_id": "3b8a77f0-153c-4e93-82f9-ae2aa84596ed/331/easyneg_MisalignSRL_V_ARG1_e406c375-245c-419e-9525-652f61eda7d3_1911.0280709546632",
+        "procedure": "Place the robot in the dish box",
+        "question": "Is the robot still in the process of being placed in the dish box?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Has the robot been placed in the dish box?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.003418,
+            "informativeness_marginal": 0.98877,
+            "informativeness_marginal_x_relevance_marginal": 0.00338
+        }
+    },
+    {
+        "example_id": "90093217-6a61-48ce-b737-e581499cf491/56/easyneg_MisalignSRL_V_ab23f96e-d41f-411f-9923-c6d7ed0c0eb7_415.5340009546634",
+        "procedure": "Close the fridge",
+        "question": "Is the person's hand on the refrigerator door handle?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the refrigerator door open?",
+                "Yes"
+            ],
+            [
+                "Is the person standing in front of the refrigerator?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.121582,
+            "informativeness_marginal": 0.317383,
+            "informativeness_marginal_x_relevance_marginal": 0.038574
+        }
+    },
+    {
+        "example_id": "b4707bc6-3579-4992-93ec-0eff21ba8922/88/easyneg_MisalignSRL_ARG1_e406c375-245c-419e-9525-652f61eda7d3_2124.767270954663",
+        "procedure": "Pick the polaroid camera",
+        "question": "Is the polaroid camera on the table in front of the person's chest?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the polaroid camera in the person's hand?",
+                "No"
+            ],
+            [
+                "Is the polaroid camera on the table in front of the person?",
+                "Yes"
+            ],
+            [
+                "Is the polaroid camera on the table next to the person?",
+                "Yes"
+            ],
+            [
+                "Is the polaroid camera on the table in front of the person's face?",
+                "Yes"
+            ],
+            [
+                "Is the polaroid camera on the table in front of the person's head?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.029297,
+            "informativeness_marginal": 0.794434,
+            "informativeness_marginal_x_relevance_marginal": 0.02327
+        }
+    },
+    {
+        "example_id": "20aef6e8-db69-4b84-910f-e8d90657cc1c/3/hardneg",
+        "procedure": "Wash a sauce pan in the sink",
+        "question": "Is the person wearing an apron while washing the saucepan in the sink?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the person washing the saucepan in the sink?",
+                "Yes"
+            ],
+            [
+                "Is the person wearing gloves while washing the saucepan in the sink?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.047516,
+            "informativeness_marginal": 0.73584,
+            "informativeness_marginal_x_relevance_marginal": 0.034973
+        }
+    },
+    {
+        "example_id": "90093217-6a61-48ce-b737-e581499cf491/57/pos",
+        "procedure": "Put items on the table",
+        "question": "Is the table in the foreground of the image?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the table visible in the image?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.577148,
+            "informativeness_marginal": 0.428223,
+            "informativeness_marginal_x_relevance_marginal": 0.247192
+        }
+    },
+    {
+        "example_id": "c864505c-9d49-4da4-bf7e-254b4c348c03/66/pos",
+        "procedure": "Drop a lid",
+        "question": "Is the person wearing an apron?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person wearing gloves?",
+                "No"
+            ],
+            [
+                "Is the person wearing safety goggles?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.052734,
+            "informativeness_marginal": 0.46875,
+            "informativeness_marginal_x_relevance_marginal": 0.024719
+        }
+    },
+    {
+        "example_id": "8a280483-bbfd-4f24-9654-bf6a008e406d/69/hardneg",
+        "procedure": "Cut a plant with scissor",
+        "question": "Is the person holding a pair of scissors in their hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.513184,
+            "informativeness_marginal": 0.004883,
+            "informativeness_marginal_x_relevance_marginal": 0.002506
+        }
+    },
+    {
+        "example_id": "53da674a-089d-428a-a719-e322b2de002b/44/pos",
+        "procedure": "Pick up the plastic bowls in the cabinet",
+        "question": "Are the plastic bowls still in the cabinet?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.0,
+            "informativeness_marginal": 0.883789,
+            "informativeness_marginal_x_relevance_marginal": 0.0
+        }
+    },
+    {
+        "example_id": "2dbdd409-0be0-447c-8ae8-3f107fe9af80/86/easyneg_MisalignSRL_V_3bbf723b-6893-42fc-bd59-3c59f3eb9745_747.52095",
+        "procedure": "File the nail using a nail file",
+        "question": "Is the nail file being held by the person's right hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the nail file being held in the person's right hand?",
+                "Yes"
+            ],
+            [
+                "Is the nail file being held in the person's left hand?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.022644,
+            "informativeness_marginal": 0.720215,
+            "informativeness_marginal_x_relevance_marginal": 0.016312
+        }
+    },
+    {
+        "example_id": "1e5bd816-e1dd-43d3-8709-42c83114dc7c/526/easyneg_MisalignSRL_V_ARG1_9c59e912-2340-4400-b2df-7db3d4066723_2120.346652947471",
+        "procedure": "Hold a screw",
+        "question": "Is the person wearing any protective gear?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the person wearing gloves?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.285645,
+            "informativeness_marginal": 0.05127,
+            "informativeness_marginal_x_relevance_marginal": 0.014648
+        }
+    },
+    {
+        "example_id": "73005180-4af4-48a3-8c9a-f4afe2b99c58/18/easyneg_MisalignSRL_V_ARG1_8a280483-bbfd-4f24-9654-bf6a008e406d_150.48624859999998",
+        "procedure": "Cut the picture",
+        "question": "Is the black shirt the person is wearing a long sleeve shirt?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person wearing a white shirt?",
+                "No"
+            ],
+            [
+                "Is the person wearing a black shirt?",
+                "Yes"
+            ],
+            [
+                "Is the black shirt the person is wearing a short sleeve shirt?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.270996,
+            "informativeness_marginal": 0.180664,
+            "informativeness_marginal_x_relevance_marginal": 0.04895
+        }
+    },
+    {
+        "example_id": "4c642620-db0e-4096-9ece-2b2c6fdb47b0/218/easyneg_MisalignSRL_ARG1_45199793-36b2-45e0-8649-2515afaffa3a_281.4256686",
+        "procedure": "Drop dough on the clothed tray",
+        "question": "Is the dough on the clothed tray shaped like a ball?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the clothed tray visible in the photo?",
+                "Yes"
+            ],
+            [
+                "Is the dough on the clothed tray visible in the photo?",
+                "Yes"
+            ],
+            [
+                "Is the dough on the clothed tray shaped like a doughnut?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.07605,
+            "informativeness_marginal": 0.119141,
+            "informativeness_marginal_x_relevance_marginal": 0.009064
+        }
+    },
+    {
+        "example_id": "3d3efb83-4b41-41e3-94db-50f0f22e67ef/140/pos",
+        "procedure": "Drop the clay into the brick mold",
+        "question": "Has the clay been removed from the brick mold?",
+        "answer": "No",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.90332,
+            "informativeness_marginal": 0.955566,
+            "informativeness_marginal_x_relevance_marginal": 0.863281
+        }
+    },
+    {
+        "example_id": "b940de2b-5fa2-4f37-badc-a42a39919a65/124/pos",
+        "procedure": "Hold the fence branches with your hand",
+        "question": "Is the person's hand holding onto the fence branches?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person's hand visible in the photo?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.69043,
+            "informativeness_marginal": 0.15625,
+            "informativeness_marginal_x_relevance_marginal": 0.10791
+        }
+    },
+    {
+        "example_id": "1ab9d5f7-0181-458e-a5e7-72ce87501f3e/48/pos",
+        "procedure": "Drop the peeled back of the avocado pear in the sink",
+        "question": "Is the peeled back part of the avocado in the sink by itself?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the peeled back part of the avocado in the sink?",
+                "Yes"
+            ],
+            [
+                "Is the peeled back part of the avocado still attached to the avocado?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.193115,
+            "informativeness_marginal": 0.1875,
+            "informativeness_marginal_x_relevance_marginal": 0.036194
+        }
+    },
+    {
+        "example_id": "e406c375-245c-419e-9525-652f61eda7d3/1/easyneg_MisalignSRL_ARG1_4c642620-db0e-4096-9ece-2b2c6fdb47b0_1029.08775",
+        "procedure": "Drop the napkins on a tray with your hand",
+        "question": "Is the person's hand on the tray?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Are the napkins on the tray?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.84668,
+            "informativeness_marginal": 0.842285,
+            "informativeness_marginal_x_relevance_marginal": 0.713379
+        }
+    },
+    {
+        "example_id": "ce2cf2f6-24aa-4195-93a6-f82b283815e6/101/pos",
+        "procedure": "Put your thumb into the hose",
+        "question": "Is the person's thumb sticking out of the hose?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the person's thumb in the hose?",
+                "Yes"
+            ],
+            [
+                "Is the person's thumb inside the hose?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.78418,
+            "informativeness_marginal": 0.787109,
+            "informativeness_marginal_x_relevance_marginal": 0.617188
+        }
+    },
+    {
+        "example_id": "f89bdeab-5106-4c0c-91b6-ed010120bf18/24/pos",
+        "procedure": "Pick a card from the others",
+        "question": "Is the person wearing a blue shirt?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person wearing a white shirt?",
+                "No"
+            ],
+            [
+                "Is the person wearing a black shirt?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.053711,
+            "informativeness_marginal": 0.003906,
+            "informativeness_marginal_x_relevance_marginal": 0.00021
+        }
+    },
+    {
+        "example_id": "c7d5d40f-840c-4be0-b79d-ab41394479a2/44/pos",
+        "procedure": "Drop the cards on the table",
+        "question": "Is the person holding a deck of cards in their hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.163086,
+            "informativeness_marginal": 0.185547,
+            "informativeness_marginal_x_relevance_marginal": 0.030258
+        }
+    },
+    {
+        "example_id": "7021640c-5533-49e1-b2e1-e638eb6bb2c9/107/pos",
+        "procedure": "Dip painting brush in paint",
+        "question": "Is the brush in the person's hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.399902,
+            "informativeness_marginal": 0.016113,
+            "informativeness_marginal_x_relevance_marginal": 0.006443
+        }
+    },
+    {
+        "example_id": "f8cbac27-db1d-4be2-85d5-5af602246f61/21/easyneg_MisalignSRL_ARG1_45199793-36b2-45e0-8649-2515afaffa3a_2915.256441933333",
+        "procedure": "Remove the paintbrush from the paint container",
+        "question": "Is the paintbrush in the person's hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Has the paintbrush been removed from the paint container?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.000243,
+            "informativeness_marginal": 0.995117,
+            "informativeness_marginal_x_relevance_marginal": 0.000242
+        }
+    },
+    {
+        "example_id": "18a3840b-7463-43c4-9aa9-b1d8e486fa84/224/easyneg_MisalignSRL_ARG1_20aef6e8-db69-4b84-910f-e8d90657cc1c_39.5953396",
+        "procedure": "Put the pencil back into your mouth with your hand",
+        "question": "Is the pencil in the person's mouth?",
+        "answer": "No",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.04541,
+            "informativeness_marginal": 0.575195,
+            "informativeness_marginal_x_relevance_marginal": 0.026123
+        }
+    },
+    {
+        "example_id": "df77aa22-b198-4081-a10b-940bcd3639d5/151/easyneg_MisalignSRL_ARG1_9c59e912-2340-4400-b2df-7db3d4066723_2453.977906158594",
+        "procedure": "Cut clay",
+        "question": "Is the person wearing a black shirt?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the person wearing a blue shirt?",
+                "No"
+            ],
+            [
+                "Is the person wearing a white shirt?",
+                "No"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.095703,
+            "informativeness_marginal": 0.124023,
+            "informativeness_marginal_x_relevance_marginal": 0.011871
+        }
+    },
+    {
+        "example_id": "0e6fb738-05fc-4dd5-9746-a8e10efe8c20/154/pos",
+        "procedure": "Insert your right hand into the mixed vegetable",
+        "question": "Is the person's hand inside a bowl of mixed vegetables?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the person's hand inside the mixed vegetable?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.916504,
+            "informativeness_marginal": 0.59082,
+            "informativeness_marginal_x_relevance_marginal": 0.541504
+        }
+    },
+    {
+        "example_id": "d94854b6-3469-4c9c-8d2b-aa9019010a11/39/easyneg_MisalignSRL_ARG1_d78a57ea-da64-48e2-a406-abc8f84b9f85_2291.836266666667",
+        "procedure": "Pick a spoon on top of the carboard",
+        "question": "Is the spoon on the top of the carboard?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the spoon on top of the carboard?",
+                "Yes"
+            ],
+            [
+                "Is the spoon on the carboard?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.973145,
+            "informativeness_marginal": 0.830078,
+            "informativeness_marginal_x_relevance_marginal": 0.807617
+        }
+    },
+    {
+        "example_id": "0e6fb738-05fc-4dd5-9746-a8e10efe8c20/151/easyneg_MisalignSRL_ARG1_030c7542-09a7-42a1-a406-05ad4f397341_25.3005586",
+        "procedure": "Place the red lid on the red lid container with your hand",
+        "question": "Is the red lid on the red lid container?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.983398,
+            "informativeness_marginal": 0.930664,
+            "informativeness_marginal_x_relevance_marginal": 0.915039
+        }
+    },
+    {
+        "example_id": "3d3efb83-4b41-41e3-94db-50f0f22e67ef/202/pos",
+        "procedure": "Break out a part of the clay hump on the ground",
+        "question": "Is the clay hump on the ground still intact?",
+        "answer": "No",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.369629,
+            "informativeness_marginal": 0.048828,
+            "informativeness_marginal_x_relevance_marginal": 0.018051
+        }
+    },
+    {
+        "example_id": "19085a13-c91f-4a45-91ea-889ed9a2727f/155/hardneg",
+        "procedure": "Pick the paper on the table",
+        "question": "Is the paper on the table in front of the person?",
+        "answer": "Yes",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.866211,
+            "informativeness_marginal": 0.499023,
+            "informativeness_marginal_x_relevance_marginal": 0.432373
+        }
+    },
+    {
+        "example_id": "53da674a-089d-428a-a719-e322b2de002b/218/easyneg_MisalignSRL_V_ARG1_65403036-df60-4ccb-ac72-2808b841665c_459.4153586",
+        "procedure": "Drop the dough on the flour on the table",
+        "question": "Is the dough on top of the flour on the table?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Has the dough been dropped on the flour?",
+                "Yes"
+            ],
+            [
+                "Is the dough on the flour on the table?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.012627,
+            "informativeness_marginal": 0.98584,
+            "informativeness_marginal_x_relevance_marginal": 0.012451
+        }
+    },
+    {
+        "example_id": "28313dbe-ad68-43cb-bb72-602d5600d15a/28/pos",
+        "procedure": "Drop the piece of wood plank onto the shelf",
+        "question": "Is the piece of wood plank on the shelf?",
+        "answer": "No",
+        "previous_questions_answers": [],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.988281,
+            "informativeness_marginal": 0.930664,
+            "informativeness_marginal_x_relevance_marginal": 0.919922
+        }
+    },
+    {
+        "example_id": "6c56ee6e-c196-400c-90dc-31c887648562/72/hardneg",
+        "procedure": "Close the test - tube",
+        "question": "Is the test-tube in the person's hand made of metal?",
+        "answer": "No",
+        "previous_questions_answers": [
+            [
+                "Is the person wearing a white lab coat?",
+                "Yes"
+            ],
+            [
+                "Is the person wearing safety goggles?",
+                "No"
+            ],
+            [
+                "Is the person wearing gloves?",
+                "Yes"
+            ],
+            [
+                "Is the test-tube in the person's hand?",
+                "Yes"
+            ],
+            [
+                "Is the test-tube in the person's hand upside down?",
+                "Yes"
+            ],
+            [
+                "Is the test-tube in the person's hand made of glass?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.416016,
+            "informativeness_marginal": 0.014648,
+            "informativeness_marginal_x_relevance_marginal": 0.006096
+        }
+    },
+    {
+        "example_id": "c864505c-9d49-4da4-bf7e-254b4c348c03/153/easyneg_MisalignSRL_ARG1_2c5d38ed-012f-4732-9eb8-89beddb07641_728.6498666666666",
+        "procedure": "Hold a cup",
+        "question": "Is the cup in the person's right hand?",
+        "answer": "Yes",
+        "previous_questions_answers": [
+            [
+                "Is the cup in the person's hand?",
+                "Yes"
+            ]
+        ],
+        "nli_metric_scores": {
+            "relevance_marginal": 0.773926,
+            "informativeness_marginal": 0.780273,
+            "informativeness_marginal_x_relevance_marginal": 0.604004
+        }
+    }
+]
