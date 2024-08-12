@@ -6,9 +6,9 @@ import pandas as pd
 import streamlit as st
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--data_source_json", type=str, help="Path to .json file with source data for annotation.")
-parser.add_argument("--n_annotators", type=int, help="Number of annotators to split source file across.")
-parser.add_argument("--annotator_idx", type=int, help="Index of annotator this form will be for.")
+parser.add_argument("--data_source_json", default=os.environ['data_source_json'] if 'data_source_json' in os.environ else None, type=str, help="Path to .json file with source data for annotation.")
+parser.add_argument("--n_annotators", default=os.environ['n_annotators'] if 'n_annotators' in os.environ else None, type=int, help="Number of annotators to split source file across.")
+parser.add_argument("--annotator_idx", default=os.environ['annotator_idx'] if 'annotator_idx' in os.environ else None, type=int, help="Index of annotator this form will be for.")
 args = parser.parse_args()
 
 # Get source data
