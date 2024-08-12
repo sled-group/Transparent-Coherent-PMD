@@ -46,7 +46,7 @@ You can also choose to mark "Instructions Unclear", which means that the instruc
 """)
 
 st.write("""
-Some tips:
+*Some tips:*
 - Only judge the relevance of the potential next question, not the previous questions (which may or may not be relevant).
 - A question may seem relevant to the task at hand, but you should consider it irrelevant if it doesn't provide essential information to judge the success of the task.
 - If a seemingly relevant question is redundant with previous questions, you may consider it less relevant.
@@ -59,20 +59,20 @@ Some tips:
 ratings = []
 for sample_idx, sample in enumerate(samples):
     st.write(f"### Annotation {sample_idx + 1}")
-    st.write("===============================")
-    st.write(f"**Instruction:** {sample['procedure']}")
+    st.write("---")
+    st.write(f"**Instruction:** *{sample['procedure']}*")
     
     st.write("**Previous questions and answers:**")
     if len(sample['previous_questions_answers']) == 0:
         st.write("None")
     else:
         for q_idx, (q, a) in enumerate(sample['previous_questions_answers']):
-            st.write(f"Q{q_idx+1}. {q}     (Answer: {a})")
+            st.write(f"{q_idx+1}. *{q}*     (Answer: *{a}*)")
 
-    st.write(f"**Potential next question:** {sample['question']}")
+    st.write(f"**Potential next question:** *{sample['question']}*")
 
     rating = st.radio(
-        "Your rating (select one):",
+        "**Your rating (select one):**",
         options=[
             "1 (very irrelevant)", 
             "2 (slightly irrelevant)", 
@@ -81,11 +81,12 @@ for sample_idx, sample in enumerate(samples):
             "5 (very relevant)", 
             "Instructions Unclear"
         ],
-        index=2
+        index=sample_idx
     )
 
     ratings.append({
-        "annotation_index": sample_idx + 1,
+        "annotator_index": args.annotator_idx,
+        "annotation_index": sample_idx,
         "procedure": sample['procedure'],
         "potential_question": sample['question'],
         "rating": rating

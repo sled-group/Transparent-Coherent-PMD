@@ -46,7 +46,7 @@ You can also choose to mark "Instructions Unclear", which means that the instruc
 """)
 
 st.write("""
-Some tips:
+*Some tips:*
 - Only judge the informativeness of the last question and answer, not the previous questions and answers (which may or may not be informative).
 - A question may seem relevant to the task at hand, but you should consider it uninformative if it doesn't provide essential information to judge the success of the task.
 - If a seemingly informative question is redundant with previous questions, you may consider it less informative.
@@ -58,21 +58,21 @@ Some tips:
 ratings = []
 for sample_idx, sample in enumerate(samples):
     st.write(f"### Annotation {sample_idx + 1}")
-    st.write("===============================")
-    st.write(f"**Instruction:** {sample['procedure']}")
+    st.write("---")
+    st.write(f"**Instruction:** *{sample['procedure']}*")
     
     st.write("**Previous questions and answers:**")
     if len(sample['previous_questions_answers']) == 0:
         st.write("None")
     else:
         for q_idx, (q, a) in enumerate(sample['previous_questions_answers']):
-            st.write(f"Q{q_idx+1}. {q}     (Answer: {a})")
+            st.write(f"{q_idx+1}. *{q}*     (Answer: *{a}*)")
 
-    st.write(f"**Last question:** {sample['question']}")
-    st.write(f"**Last answer:** {sample['answer']}")
+    st.write(f"**Last question:** *{sample['question']}*")
+    st.write(f"**Last answer:** *{sample['answer']}*")
 
     rating = st.radio(
-        "Your rating (select one):",
+        "**Your rating (select one):**",
         options=[
             "1 (very informative)", 
             "2 (slightly informative)", 
@@ -81,11 +81,12 @@ for sample_idx, sample in enumerate(samples):
             "5 (very uninformative)", 
             "Instructions Unclear"
         ],
-        index=2
+        index=sample_idx
     )
 
     ratings.append({
-        "annotation_index": sample_idx + 1,
+        "annotator_index": args.annotator_idx,
+        "annotation_index": sample_idx,
         "procedure": sample['procedure'],
         "last_question": sample['question'],
         "last_answer": sample['answer'],
