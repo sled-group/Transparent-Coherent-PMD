@@ -14,7 +14,7 @@ args = parser.parse_args()
 # Get source data
 source_data = json.load(open(args.data_source_json, "r"))
 samples = source_data[args.n_annotators * args.annotator_idx: args.n_annotators * (args.annotator_idx)]
-data_name = args.data_source_json.split('/')[:-1].replace(".json", "")
+data_name = args.data_source_json.split('/')[-1].replace(".json", "")
 output_dir = f"output_{data_name}_annotator{args.annotator_idx+1}of{args.n_annotators}"
 os.makedirs(output_dir, exist_ok=True)
 
