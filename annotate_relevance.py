@@ -25,16 +25,30 @@ data_name = args.data_source_json.split('/')[-1].replace(".json", "")
 output_dir = f"output_{data_name}"
 os.makedirs(output_dir, exist_ok=True)
 
-# Streamlit app
-st.title("Annotation Task")
+# Initialize session state for navigation
+if "page" not in st.session_state:
+    st.session_state.page = 0
 
-annotator_idx = st.number_input("Enter your annotator ID:", min_value=0, max_value=args.n_annotators - 1, step=1)
+def next_page():
+    st.session_state.page += 1
 
-if annotator_idx is not None:
-    samples = source_data[args.n_annotators * annotator_idx: args.n_annotators * (annotator_idx + 1)]
-    if len(samples) == 0:
-        st.error(f"Did not retrieve any samples for annotator ID {annotator_idx}. Please check your input.")
+# Page 1: Enter Annotator ID
+if st.session_state.page == 0:
+    st.title("Enter Annotator ID")
+    annotator_idx = st.number_input("Enter your annotator ID:", min_value=0, max_value=args.n_annotators - 1, step=1)
+    st.session_state.annotator_idx = annotator_idx
+    if st.button("Next"):
+        samples = source_data[args.n_annotators * annotator_idx: args.n_annotators * (annotator_idx + 1)]
+        if len(samples) == 0:
+            st.error(f"Did not retrieve any samples for annotator ID {annotator_idx}. Please check your input.")
+        else:
+            st.session_state.samples = samples
+            next_page()
 
+# Page 2: Annotation Task
+if st.session_state.page == 1:
+    st.title("Annotation Task")
+    
     st.write("""
     *Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it. You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.*
     """)
@@ -65,7 +79,7 @@ if annotator_idx is not None:
     """)
 
     ratings = []
-    for sample_idx, sample in enumerate(samples):
+    for sample_idx, sample in enumerate(st.session_state.samples):
         st.write("---")
         st.write(f"### Annotation {sample_idx + 1}")
         st.write(f"**Sentence:** *{sample['procedure']}*")
@@ -94,7 +108,7 @@ if annotator_idx is not None:
         )
 
         ratings.append({
-            "annotator_index": annotator_idx,
+            "annotator_index": st.session_state.annotator_idx,
             "annotation_index": sample_idx,
             "procedure": sample['procedure'],
             "potential_question": sample['question'],
@@ -143,7 +157,7 @@ if annotator_idx is not None:
         if send_email_with_attachment(
             to_email=to_email,
             from_email=from_email,
-            subject=f"TRAVEl Annotation Results from Annotator {annotator_idx + 1}",
+            subject=f"TRAVEl Annotation Results from Annotator {st.session_state.annotator_idx + 1}",
             body="Please find the attached annotation results.",
             attachment=csv_data
         ):
