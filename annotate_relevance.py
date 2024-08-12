@@ -38,22 +38,31 @@ def next_page():
 # Page 1: Enter Annotator ID
 if st.session_state.page == 0:
     st.title("Enter Annotator ID")
-    annotator_idx = st.number_input(
-        "Enter your annotator ID:",
-        min_value=0,
-        max_value=args.n_annotators - 1,
-        step=1,
-        disabled=st.session_state.annotator_idx is not None
-    )
-    
-    if st.session_state.annotator_idx is None and st.button("Next"):
-        samples = source_data[args.n_annotators * annotator_idx: args.n_annotators * (annotator_idx + 1)]
-        if len(samples) == 0:
-            st.error(f"Did not retrieve any samples for annotator ID {annotator_idx}. Please check your input.")
-        else:
-            st.session_state.annotator_idx = annotator_idx
-            st.session_state.samples = samples
-            next_page()
+
+    if st.session_state.annotator_idx is None:
+        annotator_idx = st.number_input(
+            "Enter your annotator ID:",
+            min_value=0,
+            max_value=args.n_annotators - 1,
+            step=1
+        )
+        if st.button("Next"):
+            samples = source_data[args.n_annotators * annotator_idx: args.n_annotators * (annotator_idx + 1)]
+            if len(samples) == 0:
+                st.error(f"Did not retrieve any samples for annotator ID {annotator_idx}. Please check your input.")
+            else:
+                st.session_state.annotator_idx = annotator_idx
+                st.session_state.samples = samples
+                next_page()
+    else:
+        st.number_input(
+            "Enter your annotator ID:",
+            min_value=0,
+            max_value=args.n_annotators - 1,
+            step=1,
+            value=st.session_state.annotator_idx,
+            disabled=True
+        )
 
 # Page 2: Annotation Task
 if st.session_state.page == 1:
@@ -84,7 +93,7 @@ if st.session_state.page == 1:
     - A question may seem relevant to the task at hand, but you should consider it irrelevant if it doesn't provide essential information to judge the success of the task.
     - If a seemingly relevant question is redundant with previous questions, you may consider it less relevant.
     - Assume that the answer to the question won't contradict the information you have from previous questions and answers. If previous questions and answers already contradict each other, consider whether this question could sway you one way or another.
-    - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
+    - The instructional text and questions may refer to "someone" or "a person"; always assume this is referring to yourself (the person performing the task).
     - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
     """)
 
