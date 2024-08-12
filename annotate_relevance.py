@@ -18,7 +18,7 @@ pprint(args)
 source_data = json.load(open(args.data_source_json, "r"))
 samples = source_data[args.n_annotators * args.annotator_idx: args.n_annotators * (args.annotator_idx)]
 if len(samples) == 0:
-    raise ValueError("Did not retrieve any samples.")
+    raise ValueError(f"Did not retrieve any samples: {str(samples)} loaded from {args.data_source_json}")
 data_name = args.data_source_json.split('/')[-1].replace(".json", "")
 output_dir = f"output_{data_name}_annotator{args.annotator_idx+1}of{args.n_annotators}"
 os.makedirs(output_dir, exist_ok=True)
