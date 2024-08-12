@@ -29,19 +29,29 @@ os.makedirs(output_dir, exist_ok=True)
 if "page" not in st.session_state:
     st.session_state.page = 0
 
+if "annotator_idx" not in st.session_state:
+    st.session_state.annotator_idx = None
+
 def next_page():
     st.session_state.page += 1
 
 # Page 1: Enter Annotator ID
 if st.session_state.page == 0:
     st.title("Enter Annotator ID")
-    annotator_idx = st.number_input("Enter your annotator ID:", min_value=0, max_value=args.n_annotators - 1, step=1)
-    st.session_state.annotator_idx = annotator_idx
-    if st.button("Next"):
+    annotator_idx = st.number_input(
+        "Enter your annotator ID:",
+        min_value=0,
+        max_value=args.n_annotators - 1,
+        step=1,
+        disabled=st.session_state.annotator_idx is not None
+    )
+    
+    if st.session_state.annotator_idx is None and st.button("Next"):
         samples = source_data[args.n_annotators * annotator_idx: args.n_annotators * (annotator_idx + 1)]
         if len(samples) == 0:
             st.error(f"Did not retrieve any samples for annotator ID {annotator_idx}. Please check your input.")
         else:
+            st.session_state.annotator_idx = annotator_idx
             st.session_state.samples = samples
             next_page()
 
