@@ -16,7 +16,7 @@ pprint(args)
 
 # Get source data
 source_data = json.load(open(args.data_source_json, "r"))
-samples = source_data[args.n_annotators * args.annotator_idx: args.n_annotators * (args.annotator_idx)]
+samples = source_data[args.n_annotators * args.annotator_idx: args.n_annotators * (args.annotator_idx + 1)]
 if len(samples) == 0:
     raise ValueError(f"Did not retrieve any samples: {str(samples)} loaded from {args.data_source_json}")
 data_name = args.data_source_json.split('/')[-1].replace(".json", "")
