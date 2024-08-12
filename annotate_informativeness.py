@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import json
 import os
 import pandas as pd
@@ -13,8 +14,8 @@ args = parser.parse_args()
 # Get source data
 source_data = json.load(open(args.data_source_json, "r"))
 samples = source_data[args.n_annotators * args.annotator_idx: args.n_annotators * (args.annotator_idx)]
-
-output_dir = f"output_{args.data_source_json.split('/')[:-2]}_annotator{args.annotator_idx+1}of{args.n_annotators}"
+data_name = args.data_source_json.split('/')[:-1].replace(".json", "")
+output_dir = f"output_{data_name}_annotator{args.annotator_idx+1}of{args.n_annotators}"
 os.makedirs(output_dir, exist_ok=True)
 
 # Streamlit app
@@ -50,9 +51,6 @@ Some tips:
 - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
 """)
 
-annotator_idx = st.number_input("Select Annotator Index", min_value=0, max_value=N_SAMPLES // SAMPLES_PER_ANNOTATOR - 1)
-
-samples = data_dicts[annotator_idx * SAMPLES_PER_ANNOTATOR:(annotator_idx + 1) * SAMPLES_PER_ANNOTATOR]
 
 ratings = []
 for sample_idx, sample in enumerate(samples):
@@ -92,6 +90,7 @@ for sample_idx, sample in enumerate(samples):
 # Save the results
 if st.button("Submit"):
     results_df = pd.DataFrame(ratings)
-    output_file = os.path.join(output_dir, f"relevance_sample{random_seed}_annotator{annotator_idx+1}.csv")
+    timestamp = datetime.datetime.now()
+    output_file = os.path.join(output_dir, f"response_{timestamp.strftime('%Y%m%d%H%M%S')}.csv")
     results_df.to_csv(output_file, index=False)
     st.success(f"Annotations saved to {output_file}")
