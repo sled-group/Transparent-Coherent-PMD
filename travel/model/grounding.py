@@ -2,19 +2,23 @@ import dataclasses
 from enum import Enum
 import cv2
 import numpy as np
-import os
 from PIL import Image
 import spacy
 from spacy.lang.en import English
+import sys
 import torch
+from torchvision import transforms
 from tqdm import tqdm
 from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesConfig, BatchEncoding
 from typing import Optional, Any, Union
 import yaml
 
+sys.path.append("AGLA")
+from AGLA.lavis.models import load_model_and_preprocess
+from AGLA.eval.augmentation import augmentation
+
 from travel.constants import CONFIG_PATH
 from travel.data.mistake_detection import MistakeDetectionDataset
-from travel.data.utils import time_based_exponential_moving_average
 from travel.data.utils.image import get_preprocessed_image, BoundingBoxCluster, BoundingBox
 from travel.data.utils.text import get_compound_noun
 from travel.data.vqg import VQGOutputs
@@ -44,7 +48,7 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
     if vqg_outputs is None:
         nlp = spacy.load('en_core_web_lg')
 
-    with torch.no_grad():
+    with torch.inference_mode():
         
         all_frames = [frame for example in dataset for frame in example.frames]
         frames_before = len(all_frames)
@@ -116,20 +120,24 @@ def filter_frames_by_target_objects(dataset: MistakeDetectionDataset,
 class AdaptiveVisualFilter:
     """Parent class for adaptive attention filters that use phrase grounding models to mask/crop images based on visual questions."""
 
-    def __init__(self, device: Optional[str]=None):
+    def __init__(self, need_detector: bool=True, device: Optional[str]=None):
         # Load OWL object detector for filtering frames, and filter frames
-        self.detector_processor = Owlv2Processor.from_pretrained(OWLV2_PATH)
-        if device is not None:
-            torch.cuda.set_device(device)
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            llm_int8_threshold=6.0,
-            llm_int8_has_fp16_weight=False,
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-        )
-        self.detector = Owlv2ForObjectDetection.from_pretrained(OWLV2_PATH, quantization_config=bnb_config)
+        if need_detector:
+            self.detector_processor = Owlv2Processor.from_pretrained(OWLV2_PATH)
+            if device is not None:
+                torch.cuda.set_device(device)
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                llm_int8_threshold=6.0,
+                llm_int8_has_fp16_weight=False,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+            )
+            self.detector = Owlv2ForObjectDetection.from_pretrained(OWLV2_PATH, quantization_config=bnb_config)
+        else:
+            self.detector_processor = None
+            self.detector = None
 
     def run_detection(self, objects: list[list[str]], frames: list[Image.Image], batch_size: int=OWL_BATCH_SIZE) -> tuple[Any, Any, Any]:
         """
@@ -155,7 +163,7 @@ class AdaptiveVisualFilter:
 
         padded_images = []
         results = []
-        with torch.no_grad():
+        with torch.inference_mode():
             for i in tqdm(range(0, len(frames), batch_size), desc=f"running detection ({str(self.detector.device)})"):
                 # Prepare the batch
                 batch_prompts = owl_prompts[i:i+batch_size]
@@ -233,6 +241,8 @@ DO_NOT_PARSE_NOUNS = [
     "place",
     "floor", # Floor is often misrecognized as the whole image
     "position",
+    "information",
+    "procedure",
 ]
 
 class TargetObjectCounterFilter(AdaptiveVisualFilter):
@@ -628,6 +638,10 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         else:
             return new_frames, new_questions
 
+    def combine_logits(self, original_frame_logits, new_frame_logits):
+        # Spatial filter doesn't use original frame logits, just use filtered frame logits.
+        return new_frame_logits
+
 class ContrastiveRegionFilter(AdaptiveVisualFilter):
     def __init__(self, mask_strength: float=1.0, mask_type: ImageMaskTypes=ImageMaskTypes.Darkness, **kwargs: dict[str, Any]):
         """
@@ -718,6 +732,12 @@ class ContrastiveRegionFilter(AdaptiveVisualFilter):
 
         return new_frames
 
+    def combine_logits(self, original_frame_logits, new_frame_logits):
+        # CRG subtracts original and filtered frame logits (but if the frames are the same, just return original frame logits)
+        diff_sums = torch.sum(original_frame_logits - new_frame_logits, dim=-1)
+        new_frame_logits = torch.clone(new_frame_logits)
+        new_frame_logits[diff_sums < 1.0] = 0.0
+        return original_frame_logits - new_frame_logits
 
 class VisualContrastiveFilter(AdaptiveVisualFilter):
     def __init__(self, alpha: float=1.0, **kwargs: dict[str, Any]):
@@ -727,7 +747,7 @@ class VisualContrastiveFilter(AdaptiveVisualFilter):
         :param alpha: Alpha hyperparameter of VCD (controls the impact of noise image on logits, defaults to 1.0).
         """        
         self.alpha = alpha
-        super().__init__(**kwargs)
+        super().__init__(need_detector=False, **kwargs)
 
     @staticmethod
     def add_diffusion_noise(image: Image.Image, noise_step: int=500) -> Image.Image:
@@ -781,11 +801,58 @@ class VisualContrastiveFilter(AdaptiveVisualFilter):
 
         return new_frames
 
+    def combine_logits(self, original_frame_logits, new_frame_logits):
+        # VCD combines logits using alpha hyperparameter
+        return (1 + self.alpha) * original_frame_logits - self.alpha * new_frame_logits
+
+class AGLAFilter(AdaptiveVisualFilter):
+    def __init__(self, alpha: float=2.0, beta: float=0.5, **kwargs: dict[str, Any]):
+        """
+        Initializes `AGLAFilter`.
+
+        :param alpha: Alpha hyperparameter of AGLA (determines how much augmented image factors into prediction compared to original image).
+        :param beta: Beta hyperparameter of AGLA (controls adaptive plausibility constraint; higher beta meeans only higher probability tokens will be preserved from the original image output distribution).
+        """        
+        self.alpha = alpha
+        self.beta = beta
+        
+        # Get image-text matcher modules
+        model_itm, vis_processors, text_processors = load_model_and_preprocess("blip_image_text_matching", "large", device="cuda", is_eval=True)
+        self.model_itm = model_itm
+        self.vis_processors = vis_processors
+        self.text_processors = text_processors
+        
+        super().__init__(need_detector=False, **kwargs)
+        
+    def __call__(self, frames: list[Image.Image], questions: list[str]) -> list[Image.Image]:
+        loader = transforms.Compose([transforms.ToTensor()])
+        
+        original_sizes = [frame.size for frame in frames]
+        
+        tensor_images = [loader(frame.resize((384,384))) for frame in frames]
+        images = [self.vis_processors["eval"](frame).unsqueeze(0).to('cuda') for frame in frames]
+        questions = [self.text_processors["eval"](question) for question in questions]
+        tokenized_texts = [self.model_itm.tokenizer(question, padding='longest', truncation=True, return_tensors="pt").to('cuda') for question in questions]
+        augmented_images = [augmentation(image, question, tensor_image, self.model_itm, tokenized_text, raw_image) for raw_image, tensor_image, image, question, tokenized_text in zip(frames, tensor_images, images, questions, tokenized_texts)]
+        augmented_images = [frame.resize(original_size) for frame, original_size in zip(augmented_images, original_sizes)]
+        
+        return augmented_images
+
+    def combine_logits(self, original_frame_logits, new_frame_logits):
+        # NOTE: We disable the step in AGLA to preserve only high probability tokens from original frame, since this may cause NaNs in probability distribution over "yes" and "no" tokens
+        # AGLA combines logits using alpha, preserving highest-probability tokens from original frame using probability cutoff beta
+        # cutoff = torch.log(torch.tensor(self.beta)) + original_frame_logits.max(dim=-1, keepdim=True).values
+        diffs = original_frame_logits + self.alpha * new_frame_logits
+        # cd_logits = diffs.masked_fill(original_frame_logits < cutoff, -float("inf"))
+        # return cd_logits
+        return diffs
+
 class VisualFilterTypes(Enum):
     Spatial = "spatial" # Default spatial filter that crops and masks images in black based on target objects and spatial relations mentioned in questions, then rephrases questions based on the information that has been abstracted away
     Spatial_NoRephrase = "spatial_norephrase" # Same spatial filter but does not rephrase questions
     Spatial_Blur = "spatial_blur" # Spatial filter that blurs rather than blacks out unimportant regions (also doesn't crop images or rephrase questions)
     Contrastive_Region = "contrastive_region" # Contrastive region guidance https://contrastive-region-guidance.github.io/
     Visual_Contrastive = "visual_contrastive" # Visual contrastive decoding https://arxiv.org/pdf/2311.16922
+    AGLA = "agla"
     Target_Object_Counter = "target_object_counter" # Filter that identifies objects mentioned in visual questions and counts their occurrences in frames
     # Don't include target object counter here because it won't be used in the same way as other filters

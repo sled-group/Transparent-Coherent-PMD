@@ -54,7 +54,7 @@ def run_vqa(vlm: PreTrainedModel,
                 os.makedirs("/".join(cache_path.split("/")[:-1]))
 
     last_save = 0
-    with torch.no_grad():
+    with torch.inference_mode():
         # Start at logits.shape[0] so we don't rerun any logits that were already cached (resuming logic)
         for i in tqdm(range(logits.shape[0], len(frames), batch_size), desc=f"running VQA ({str(vlm.device)})"):
             # Prepare the batch
@@ -65,6 +65,66 @@ def run_vqa(vlm: PreTrainedModel,
             inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
             inputs = inputs.to(vlm.device)
             this_logits = vlm(**inputs).logits
+            inputs = inputs.to('cpu')
+            this_logits = this_logits[:, -1].detach().cpu()
+            logits = torch.cat([logits, this_logits], dim=0)
+            del this_logits
+            del inputs
+
+            # Cache logits so far
+            if cache_path is not None and i - last_save >= CACHE_FREQUENCY:
+                torch.save(logits, cache_path)
+                last_save = i
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    # Cache one more time
+    if cache_path is not None:
+        torch.save(logits, cache_path) 
+
+    return logits
+
+def run_qa(lm: PreTrainedModel, 
+            tokenizer,
+            prompts: list[str],
+            batch_size: int=1,
+            cache_path: Optional[str]=None) -> torch.FloatTensor:
+    """
+    Runs VQA for given prompts and frames in batches with a given VLM and its processor.
+
+    :param vlm: VLM for conditional generation from `transformers`.
+    :param tokenizer: VLM processor from `transformers`, including tokenizer and image processor.
+    :param prompts: List of prompts including questions.
+    :param batch_size: Batch size for running inference.
+    :param cache_path: .pt file to cache incomplete logits in.
+    :return: Full tensor of logits output from each question. The process of mapping this into VQAOutputs instances requires task/process-specific information, so it should be done outside of this method.
+    """
+
+    # Run QA in batches
+    logits = torch.zeros((0, lm.vocab_size)).float()
+    if cache_path is not None:
+        assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
+        if os.path.exists(cache_path):
+            try:
+                logits = torch.load(cache_path)
+            except:
+                pass
+        else:
+            if not os.path.exists("/".join(cache_path.split("/")[:-1])):
+                os.makedirs("/".join(cache_path.split("/")[:-1]))
+
+    last_save = 0
+    with torch.inference_mode():
+        # Start at logits.shape[0] so we don't rerun any logits that were already cached (resuming logic)
+        for i in tqdm(range(logits.shape[0], len(prompts), batch_size), desc=f"running QA ({str(lm.device)})"):
+            # Prepare the batch
+            batch_prompts = prompts[i:i+batch_size]
+
+            # Run through VLM to get logits
+            inputs = tokenizer(batch_prompts, padding=True, return_tensors="pt")
+            inputs = inputs.to(lm.device)
+            this_logits = lm(**inputs).logits
             inputs = inputs.to('cpu')
             this_logits = this_logits[:, -1].detach().cpu()
             logits = torch.cat([logits, this_logits], dim=0)
@@ -136,7 +196,7 @@ def run_captioning(vlm: PreTrainedModel,
                     pass
 
     last_save = len(captions)
-    with torch.no_grad():
+    with torch.inference_mode():
         # Start at len(captions) so we don't produce any captions that were already cached (resuming logic)
         for i in tqdm(range(len(captions), len(frames), batch_size), desc=f"running captioning ({str(vlm.device)})"):
             # Prepare the batch
@@ -409,4 +469,57 @@ def _shift_right(input_ids, decoder_start_token_id, pad_token_id):
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
-  
+
+
+def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, question_idx, batch_size, visual_filter=None, nlp=None, visual_filter_mode=None, frame_cache_dir=None):
+    """
+    VQA and visual filter wrapper method for iterative VQA experiments.
+
+    :param vlm_processor: VLM processor.
+    :param vlm: VLM.
+    :param batch_examples: Batch of MistakeDetectionExample.
+    :param batch_frames: Batch of frames (PIL images).
+    :param prompts_a: Full string prompts to get a yes/no answer.
+    :param new_questions: Last generated questions to use with text-conditioned visual filters.
+    :param question_idx: Index or identifier of the current question. This is only used to save modified frames from the visual filter.
+    :param batch_size: Batch size for VQA.
+    :param visual_filter: Optional training free visual filter to modify images and possibly run VQA twice.
+    :param nlp: spaCy NLP pipeline.
+    :param visual_filter_mode: Type of visual filter.
+    :param frame_cache_dir: Directory to cache visual filter modified frames for later inspection. If not passed, will not save any frames.
+    :return: Logits from VQA.
+    """
+    # Apply visual filter to frames for VQA
+    if visual_filter:
+        if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
+            batch_frames_filtered = visual_filter(nlp, batch_frames, new_questions)
+        elif visual_filter_mode == VisualFilterTypes.Visual_Contrastive:
+            batch_frames_filtered = visual_filter(batch_frames)
+        elif visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
+            batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
+        elif visual_filter_mode == VisualFilterTypes.AGLA:
+            batch_frames_filtered = visual_filter(batch_frames, new_questions)
+
+    # Cache paths to frames (if using a visual filter, save filtered frames and cache paths to them)
+    if not(visual_filter is None or frame_cache_dir is None):
+        for batch_sub_idx, (frame, example) in enumerate(zip(batch_frames_filtered, batch_examples)):
+            this_frame_cache_dir = os.path.join(frame_cache_dir, f"vqa_frames/{example.example_id}")
+            if not os.path.exists(this_frame_cache_dir):
+                os.makedirs(this_frame_cache_dir)
+            frame_path = os.path.join(this_frame_cache_dir, f"frame_q{question_idx}.jpg")
+            resized_frame = resize_with_aspect(frame, CACHED_FRAME_DIMENSION)
+            resized_frame.save(frame_path)
+
+    # Run VQA on base image (yes/no)
+    if not (visual_filter and visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]):
+        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=batch_size)
+    else:
+        # Spatial filter doesn't need original image logits, so don't get them for efficiency
+        new_answers_logits = None
+
+    # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
+    if visual_filter:
+        new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=batch_size)
+        new_answers_logits = visual_filter.combine_logits(new_answers_logits, new_answers_logits_filtered)
+
+    return new_answers_logits

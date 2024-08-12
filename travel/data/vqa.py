@@ -3,7 +3,8 @@ from enum import Enum
 import os
 from PIL import Image
 import torch
-from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
+from tqdm import tqdm
+from transformers import Blip2ForConditionalGeneration, InstructBlipForConditionalGeneration, Kosmos2ForConditionalGeneration, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, Phi3ForCausalLM
 from typing import Optional, Union
 import uuid
 
@@ -35,6 +36,35 @@ VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES = {
     LlavaForConditionalGeneration: "USER: <image>\n{question1} ASSISTANT: {answer1} USER: {question2} ASSISTANT: {answer2} USER: " + f"{SUCCESSVQA_QUESTION_TEMPLATE} ASSISTANT: "
 }
 
+# Important prompt components for iterative VQA
+IMAGE_TOKENS = {
+    InstructBlipForConditionalGeneration: "",
+    LlavaForConditionalGeneration: "<image>\n",
+    Phi3ForCausalLM: "<|image_1|>\n",
+}
+USER_START_TOKENS = {
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: "USER: ",
+    Phi3ForCausalLM: "<|user|>\n",
+}
+USER_END_TOKENS = {
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: " ",
+    Phi3ForCausalLM: "<|end|>\n",
+}
+ASSISTANT_START_TOKENS = {
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: "ASSISTANT: ",
+    Phi3ForCausalLM: "<|assistant|>\n",
+}
+ASSISTANT_END_TOKENS = {
+    InstructBlipForConditionalGeneration: " ",
+    LlavaForConditionalGeneration: " ",
+    Phi3ForCausalLM: "<|end|>\n",
+}
+
+IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions about the state of the scene to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
+IVQA_SUCCESS_QUESTION = 'Based on the above information, has the procedure "{procedure}" been successfully executed?'
 
 class VQAResponse(int, Enum):
     No = 0
@@ -107,3 +137,15 @@ class VQAOutputs:
     def uncache_frame(self):
         assert type(self.frame) == str and self.frame.endswith(".jpg"), "Can only uncache string .jpg filenames!"
         self.frame = Image.open(self.frame)
+
+def generate_iterative_vqa_success_prompt(questions, answers, procedure, vlm_type):
+    """Generates all success VQA prompts for iterative VQA setting given the full set of questions and answers. Some of the code here is redundant with code in run_vqa_iterative.py and run_vqa_iterative_noimg.py, so if making changes here, make sure to keep those scripts concurrent with this."""
+    question_success = IVQA_SUCCESS_QUESTION.format(procedure=procedure)
+    success_prompt = f'{ASSISTANT_END_TOKENS[vlm_type]}{USER_START_TOKENS[vlm_type]}Q: {question_success}{USER_END_TOKENS[vlm_type]}{ASSISTANT_START_TOKENS[vlm_type]}A:'
+    for question_idx in range(len(questions)):
+        prompt = f'{USER_START_TOKENS[vlm_type]}{IMAGE_TOKENS[vlm_type]}{IVQA_PREAMBLE.format(procedure=procedure)}'
+        for question, answer in zip(questions[:question_idx + 1], answers[:question_idx + 1]):
+            prompt += f"{ASSISTANT_END_TOKENS[vlm_type] if question_idx != 0 else USER_END_TOKENS[vlm_type]}{USER_START_TOKENS[vlm_type]}Q: "
+            prompt += f'{question}{USER_END_TOKENS[vlm_type]}{ASSISTANT_START_TOKENS[vlm_type]}A: {VQAResponse(answer).name}'
+
+    return prompt + success_prompt

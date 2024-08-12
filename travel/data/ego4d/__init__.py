@@ -28,6 +28,7 @@ from travel.data.ego4d.constants import EGO4D_ANNOTATION_PATH, EGO4D_SPLIT_PATHS
                                         MISALIGNSRL_PATH
 from travel.data.mistake_detection import MistakeDetectionExample, MistakeDetectionDataset
 from travel.data.utils import get_subdirectories, split_list_into_partitions, ResumableParallelSequentialSampler, generate_float_series
+from travel.data.utils.image import variance_of_laplacian
 from travel.data.utils.text import simple_present_to_imperative
 from travel.data.utils.video import get_video, extract_frames
 from travel.model.grounding import TargetObjectCounterFilter
@@ -70,6 +71,7 @@ EGO4D_IGNORE_VERBS = [
     "clap", # Clapping hands
     "move_(transfer,_pass,_exchange)", # Move an object
     "arrange_(straighten,_sort,_distribute,_align)", # Arrange objects (non-specific movement)
+    "shuffle", # Shuffle objects, e.g., cards (non-specific movement)
 ] 
 
 # Similarly, some verb noun pairs don't involve meaningful state changes (e.g., put hand)
@@ -483,7 +485,12 @@ class MisalignSRL:
 
                 # Sample single narration frame or 8 second clip around narration frame
                 if not multi_frame:
-                    sample['effect_frame'] = Image.fromarray(extract_frames(video_cap, [frame_time])[0])
+                    effect_frame = extract_frames(video_cap, [frame_time])[0]
+                    if effect_frame is not None:
+                        sample['effect_frame'] = Image.fromarray(effect_frame)
+                    else:
+                        # If we failed to retrieve the frame, just try the next one
+                        continue
                 else:
                     # This follows SuccessVQA paper's approach for sampling positive example videos
                     post_start_time = max(frame_time - 4.0, 0.0)
@@ -639,8 +646,17 @@ class Ego4dFHOMainDataset:
                     post_time = clip_info['post_frame'] / clip_info['fps'] if clip_info['post_frame'] is not None else None
 
                     if not self.multi_frame:
-                    
-                        pre_frame, pnr_frame, post_frame = extract_frames(video_cap, [pre_time, pnr_time, post_time])
+
+                        # Add extra logic to extract a few extra candidate frames around pre_time, pnr_time, and post_time and pick the least blurry ones
+                        pre_frame0, pre_frame1, pre_frame2, pre_frame3, pre_frame4, pnr_frame, post_frame0, post_frame1, post_frame2, post_frame3, post_frame4 = extract_frames(video_cap, [pre_time-0.05, pre_time-0.025, pre_time, pre_time+0.025, pre_time+0.05, pnr_time, 
+                                                                                                                                                                                            post_time-0.05, post_time-0.025, post_time, post_time+0.025, post_time+0.05])
+                        pre_frame = max([pre_frame0, pre_frame1, pre_frame2, pre_frame3, pre_frame4], key=lambda x: variance_of_laplacian(x))
+                        post_frame = max([post_frame0, post_frame1, post_frame2, post_frame3, post_frame4], key=lambda x: variance_of_laplacian(x))
+
+                        # If video clip is too dark, omit it
+                        average_brightness = np.mean([np.mean(np.asarray(frame)) for frame in [pre_frame, pnr_frame, post_frame]])
+                        if average_brightness < MIN_BRIGHTNESS:
+                            continue
 
                         yield clip_info | {"video_index": video_index,
                                         "video_uid": video_metadata["video_uid"],

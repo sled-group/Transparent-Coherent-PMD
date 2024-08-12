@@ -1,3 +1,4 @@
+from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -10,7 +11,7 @@ from typing import Union, Optional, Any
 
 from travel.data.mistake_detection import MistakeDetectionExample
 from travel.data.utils import time_based_exponential_moving_average
-from travel.data.vqa import VQAResponse, VQAOutputs
+from travel.data.vqa import VQAResponse, VQAOutputs, generate_iterative_vqa_success_prompt
 from travel.data.vqg import VQGOutputs
 from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE
 from travel.model import simple_lm_prompt
@@ -129,7 +130,7 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
         y = false_negative_rates
 
         # Plot DET curve
-        plt.plot(x, y, marker='o', linestyle='-', color=colors(i), label=name)
+        plt.plot(x, y, marker='.', linestyle='-', color=colors(i), label=name)
 
     # Label axes with normal deviate scale
     # plt.xlabel('False Positive Rate (Normal Deviate Scale)')
@@ -229,6 +230,54 @@ def generate_roc_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
         plt.savefig(save_path)
         with open(save_path.replace(".pdf", ".txt"), "w") as f:
             f.write("\n".join([f"{result_name}: {auc_metric}\n" for auc_metric, result_name in zip(aurocs, curve_names)]))
+
+
+def generate_tiered_metric_curves(thresholds: list[float], accuracies: list[float], consistencies: list[float], verifiabilities: list[float], save_paths: list[str]):
+    """
+    Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`.
+     A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point 
+     to set the threshold in the bottom left corner.
+
+    :param metrics: List of `metrics` objects returned by `evaluate_mistake_detection()`.
+    :param curve_names: List of names of the approach associated with each passed entry of `metrics`, e.g., ["Random", "SuccessVQA", "VQG2VQA"].
+    :param save_paths: Paths to save copies of the PDF of the DET curve.
+    """
+    assert len(thresholds) == len(accuracies) == len(consistencies) == len(verifiabilities), "Expected same number of all metrics!"
+
+    colors = plt.get_cmap('tab10', 3)
+    plt.figure(figsize=(8, 6))
+
+    # Plot DET curve
+    plt.plot(thresholds, accuracies, marker='.', linestyle='-', color=colors(0), label="Accuracy")
+    plt.plot(thresholds, consistencies, marker='.', linestyle='-', color=colors(1), label="Consistency")
+    plt.plot(thresholds, verifiabilities, marker='.', linestyle='-', color=colors(2), label="Verifiability")
+
+    plt.xlabel('Confidence Threshold')
+    plt.ylabel('Metric Value')
+
+    # Set grid and title
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    
+    # Customize axes for better readability
+    tick_vals = np.linspace(0.00, 1.0, 11)
+    # ticks = norm.ppf(tick_vals)
+    ticks = tick_vals
+    tick_labels = [f"{round(val, 2)}" for val in tick_vals]
+    plt.xticks(ticks, tick_labels)
+    plt.yticks(ticks, tick_labels)
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
+
+    # Add legend
+    plt.legend()
+
+    # Save to files
+    for save_path in save_paths:
+        if not os.path.exists("/".join(save_path.split("/")[:-1])):
+            os.makedirs("/".join(save_path.split("/")[:-1]))
+        plt.savefig(save_path)
+
 
 def calculate_abstention_metrics(mistake_probs, labels, threshold, error_cost=1):
     """Code adapted from ReCoVERR repo: https://github.com/tejas1995/ReCoVERR/blob/0cbd88de4e5782dc16092ad3dad82a33544ce827/src/VanillaSelectivePrediction.ipynb#L110"""
@@ -356,7 +405,7 @@ def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], t
         "Question: Is there a bowl on the table?\nAnswer: Yes\nStatement: There is a bowl on the table.",
         "Question: Are the eggs cracked?\nAnswer: No\nStatement: The eggs are not cracked.",
         "Question: Does the cardboard box look open?\nAnswer: Yes\nStatement: The cardboard box looks open.",
-        "Question: Are there any leaves that are not in the basket?\nAnswer: No\nStatement: There are not any leaves that are not in the basket.",
+        "Question: Are there any leaves outside of the basket?\nAnswer: No\nStatement: There are not any leaves outside of the basket.",
         "Question: Is the orange peeled?\nAnswer: Yes\nStatement: The orange is peeled.",
         "Question: Is the mug empty?\nAnswer: No\nStatement: The mug is not empty.",
         "Question: Are there hedge trimmers in the image?\nAnswer: Yes\nStatement: There are hedge trimmers in the image.",
@@ -369,7 +418,22 @@ def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], t
     rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
     return rephrased_texts
 
-def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]]=None, previous_answers: Optional[list[list[VQAResponse]]]=None, rephrase_batch_size=20):
+def entropy(binary_prob):
+    if binary_prob == 0.0 or binary_prob == 1.0:
+        return 0.0
+    ent = binary_prob * np.log2(binary_prob)
+    ent += (1.0 - binary_prob) * np.log2(1.0 - binary_prob)
+    return -ent
+
+def entropy_tensor(binary_prob):
+    ent = -binary_prob
+    ent[binary_prob != 0.0] *= torch.log2(binary_prob[binary_prob != 0.0])
+    ent[binary_prob != 1.0] -= (1.0 - binary_prob[binary_prob != 1.0]) * torch.log2(1.0 - binary_prob[binary_prob != 1.0])
+    ent[binary_prob == 0.0] = 0.0
+    ent[binary_prob == 1.0] = 0.0
+    return ent
+
+def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]]=None, previous_answers: Optional[list[list[VQAResponse]]]=None, rephrase_batch_size=20):
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
     """
@@ -391,6 +455,8 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
         lm_model, 
         generation_batch_size=rephrase_batch_size
     )    
+    metrics['rephrased_questions_yes'] = rephrased_yes
+    metrics['rephrased_questions_no'] = rephrased_no
     premise_yes = rephrased_yes
     premise_no = rephrased_no
     probs_yes = run_nli(nli_tokenizer, nli_model, list(zip(premise_yes, hypothesis_procedure)))
@@ -399,21 +465,21 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
         probs_actual = torch.stack([probs_yes[i] if answers[i] == VQAResponse.Yes else probs_no[i] for i in range(len(answers))])
 
     # Individual relevance: how much probability of success changes depending on the answer
-    relevance = torch.abs(probs_yes[:, 0].unsqueeze(1) - probs_no[:, 0].unsqueeze(1))
+    relevance = torch.abs(probs_yes[:, 0] - probs_no[:, 0])
     metrics['relevance'] = relevance.numpy()
 
     # Expected informativeness: on average (or for actual answer), how confident are we that the answer to the question would indicate a success or mistake
     if not answers:
-        informativeness = torch.abs(probs_yes[:, 0].unsqueeze(1) - probs_yes[:, 1].unsqueeze(1))
-        informativeness += torch.abs(probs_no[:, 0].unsqueeze(1) - probs_no[:, 1].unsqueeze(1))
+        informativeness = 1.0 - entropy_tensor(probs_yes[:, 0])
+        informativeness += 1.0 - entropy_tensor(probs_no[:, 0])
         informativeness /= 2.0
         informativeness = informativeness
     else:
-        informativeness = torch.abs(probs_actual[:, 0].unsqueeze(1) - probs_actual[:, 1].unsqueeze(1))
+        informativeness = 1.0 - entropy_tensor(probs_actual[:, 0])
     metrics['informativeness'] = informativeness.numpy()
 
-    if previous_questions and len(previous_questions[0]) > 0:
-        # Rephrase past questions and answers into statements, then un-flatten
+    if previous_questions:
+        # Flatten and rephrase past questions and answers into statements, then un-flatten
         rephrased_past = rephrase_question_answer(
             [question for p_questions in previous_questions for question in p_questions],
             [answer for p_answers in previous_answers for answer in p_answers],
@@ -421,11 +487,20 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
             lm_model,
             generation_batch_size=rephrase_batch_size
         )
-        rephrased_past = [rephrased_past[i * len(previous_questions[0]):(i + 1) * len(previous_questions[0])] for i in range(len(previous_questions))]
+        parallel_idx = 0
+        new_rephrased_past = []
+        for p_questions in previous_questions:
+            this_rephrased_past = []
+            for _ in p_questions:
+                this_rephrased_past.append(rephrased_past[parallel_idx])
+                parallel_idx += 1
+            new_rephrased_past.append(this_rephrased_past)
+        rephrased_past = new_rephrased_past
+
         premise_past = [" ".join(past_qs_rephrased) for past_qs_rephrased in rephrased_past]
         
-        premise_past_yes = [pp + " " + py for pp, py in zip(premise_past, premise_yes)]
-        premise_past_no = [pp + " " + pn for pp, pn in zip(premise_past, premise_no)]
+        premise_past_yes = [(pp + " " + py).strip() for pp, py in zip(premise_past, premise_yes)]
+        premise_past_no = [(pp + " " + pn).strip() for pp, pn in zip(premise_past, premise_no)]
         # probs_past = run_nli(nli_tokenizer, nli_model, list(zip(premise_past, hypothesis_procedure)))
         probs_past_yes = run_nli(nli_tokenizer, nli_model, list(zip(premise_past_yes, hypothesis_procedure)))
         probs_past_no = run_nli(nli_tokenizer, nli_model, list(zip(premise_past_no, hypothesis_procedure)))
@@ -433,28 +508,65 @@ def question_coherence_metrics(nli_tokenizer, nli_model, lm_tokenizer, lm_model,
             probs_past_actual = torch.stack([probs_past_yes[i] if answers[i] == VQAResponse.Yes else probs_past_no[i] for i in range(len(answers))])
         
         # Marginal relevance: how much probability of success changes depending on the answer AND information we already extracted from the image
-        relevance_marginal = torch.abs(probs_past_yes[:, 0].unsqueeze(1) - probs_past_no[:, 0].unsqueeze(1))
+        relevance_marginal = torch.abs(probs_past_yes[:, 0] - probs_past_no[:, 0])
         metrics['relevance_marginal'] = relevance_marginal.numpy()
 
         # Marginal expected informativeness: with past questions and answers, how informative could (or is) the answer to this question be toward the final decision
         if not answers:
-            informativeness_marginal = torch.abs(probs_past_yes[:, 0].unsqueeze(1) - probs_past_yes[:, 1].unsqueeze(1))
-            informativeness_marginal += torch.abs(probs_past_no[:, 0].unsqueeze(1) - probs_past_no[:, 1].unsqueeze(1))
+            informativeness_marginal = 1.0 - entropy_tensor(probs_past_yes[:, 0])
+            informativeness_marginal += 1.0 - entropy_tensor(probs_past_no[:, 0])
             informativeness_marginal /= 2.0
         else:
-            informativeness_marginal = torch.abs(probs_past_actual[:, 0].unsqueeze(1) - probs_past_actual[:, 1].unsqueeze(1))
+            informativeness_marginal = 1.0 - entropy_tensor(probs_past_actual[:, 0])
         metrics['informativeness_marginal'] = informativeness_marginal.numpy()
-
-        # TODO: can consider an "information gain"-like metric which looks at how the probability of success changes from only having previous facts to also having this fact
-        # - this is challenging though because the actual answer we'll get very much dictates this, e.g., if we contradict past information this would make this metric high
-        # TODO: given entailment/contradiction distribution, we can actually calculate entropy in bits - would this make sense?
     else:
         metrics['relevance_marginal'] = metrics['relevance']
         metrics['informativeness_marginal'] = metrics['informativeness']
 
+    # "Verifiability" metric: weight marginal informativeness by marginal relevance
+    metrics['informativeness_marginal_x_relevance_marginal'] = metrics['informativeness_marginal'] * metrics['relevance_marginal']
+
     # Convert to floats to ensure json serializable
     metrics = {
-        k: [round(float(val[0]), 6) for val in v]
+        k: [round(float(val), 6) for val in v] if type(v[0]) != str else v
+        for k, v in metrics.items()
+    }
+    return metrics
+
+def question_coherence_metrics_vlm(success_probs, success_probs_negated):
+    """
+    Calculates coherence metrics for candidate questions about procedures in iterative VQA.
+    """
+    metrics = {}
+    
+    # Generate VLM prompts
+    assert len(success_probs) == len(success_probs_negated), "Expected same number of success probs and negated success probs."
+
+    for example_success_probs, example_success_probs_negated in zip(success_probs, success_probs_negated):
+        assert len(example_success_probs) == len(example_success_probs_negated), "Expected same number of success probs and negated success probs for each example."
+
+        example_success_probs = np.array(example_success_probs)
+        example_success_probs_negated = np.array(example_success_probs_negated)
+    
+        # NOTE: unless we were to run success VQA on each individual question without prior questions/answers, it's impossible to get individual relevance and informativeness (so just use marginal for now)
+
+        # Marginal relevance: how much probability of success changes depending on the answer
+        relevance_marginal = np.abs(example_success_probs - example_success_probs_negated)
+        metrics['relevance_marginal'] = np.concatenate((metrics['relevance_marginal'], relevance_marginal), axis=0) if 'relevance_marginal' in metrics else relevance_marginal
+
+        # Marginal informativeness: with all previous information we have, how much information does the actual answer to the question give us about success?
+        informativeness_marginal = 1.0 - entropy_tensor(torch.tensor(example_success_probs)).numpy()
+        metrics['informativeness_marginal'] = np.concatenate((metrics['informativeness_marginal'], informativeness_marginal), axis=0) if 'informativeness_marginal' in metrics else informativeness_marginal
+
+        # "Verifiability" metric: weight marginal informativeness by marginal relevance
+        metrics['informativeness_marginal_x_relevance_marginal'] = np.concatenate((metrics['informativeness_marginal_x_relevance_marginal'], informativeness_marginal * relevance_marginal), axis=0) if 'informativeness_marginal_x_relevance_marginal' in metrics else informativeness_marginal * relevance_marginal
+
+    for k in metrics:
+        assert metrics[k].shape[0] == len(success_probs) * len(success_probs[0]), "Didn't get correct number of VLM coherence metrics."
+
+    # Convert to floats to ensure json serializable
+    metrics = {
+        k: [round(float(val), 6) for val in v]
         for k, v in metrics.items()
     }
     return metrics
