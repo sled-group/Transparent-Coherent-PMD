@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import pandas as pd
+from pprint import pprint
 import streamlit as st
 
 parser = argparse.ArgumentParser()
@@ -11,9 +12,13 @@ parser.add_argument("--n_annotators", default=os.environ['n_annotators'] if 'n_a
 parser.add_argument("--annotator_idx", default=os.environ['annotator_idx'] if 'annotator_idx' in os.environ else None, type=int, help="Index of annotator this form will be for.")
 args = parser.parse_args()
 
+pprint(args)
+
 # Get source data
 source_data = json.load(open(args.data_source_json, "r"))
 samples = source_data[args.n_annotators * args.annotator_idx: args.n_annotators * (args.annotator_idx)]
+if len(samples) == 0:
+    raise ValueError("Did not retrieve any samples.")
 data_name = args.data_source_json.split('/')[-1].replace(".json", "")
 output_dir = f"output_{data_name}_annotator{args.annotator_idx+1}of{args.n_annotators}"
 os.makedirs(output_dir, exist_ok=True)
@@ -22,34 +27,34 @@ os.makedirs(output_dir, exist_ok=True)
 st.title("Annotation Task")
 
 st.write("""
-Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it.
-You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.
+*Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it. You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.*
 """)
 
 st.write("""
 For each annotation task, you will be given the following information:
 - A sentence describing the procedure you're trying to perform.
 - An optional list of previous questions you already asked, and their answers.
-- The last question you just asked your friend, and its answer.
+- A potential question you could ask your friend next.
 """)
 
 st.write("""
-You must rate how informative the last question and its answer are. By informative, we mean: compared to what you knew from the previous questions and answers, how much more sure would the last question and answer make you about whether you succeeded?
+You must rate how **relevant** the potential next question is. By relevant, we mean: given the previous questions and answers, how helpful could an answer to this question be in determining whether the procedure has been completed?
 """)
 
 st.write("""
-You can also choose to mark 'Instructions Unclear', which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+You can also choose to mark "Instructions Unclear", which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
 """)
 
 st.write("""
 Some tips:
-- Only judge the informativeness of the last question and answer, not the previous questions and answers (which may or may not be informative).
-- A question may seem relevant to the task at hand, but you should consider it uninformative if it doesn't provide essential information to judge the success of the task.
-- If a seemingly informative question is redundant with previous questions, you may consider it less informative.
-- If the last answer contradicts critical information you had from previous questions and answers, you may consider it more informative.
+- Only judge the relevance of the potential next question, not the previous questions (which may or may not be relevant).
+- A question may seem relevant to the task at hand, but you should consider it irrelevant if it doesn't provide essential information to judge the success of the task.
+- If a seemingly relevant question is redundant with previous questions, you may consider it less relevant.
+- Assume that the answer to the question won't contradict the information you have from previous questions and answers. If previous questions and answers already contradict each other, consider whether this question could sway you one way or another.
 - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
 - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
 """)
+
 
 ratings = []
 for sample_idx, sample in enumerate(samples):
@@ -64,17 +69,16 @@ for sample_idx, sample in enumerate(samples):
         for q_idx, (q, a) in enumerate(sample['previous_questions_answers']):
             st.write(f"Q{q_idx+1}. {q}     (Answer: {a})")
 
-    st.write(f"**Last question:** {sample['question']}")
-    st.write(f"**Last answer:** {sample['answer']}")
+    st.write(f"**Potential next question:** {sample['question']}")
 
     rating = st.radio(
         "Your rating (select one):",
         options=[
-            "1 (very informative)", 
-            "2 (slightly informative)", 
+            "1 (very irrelevant)", 
+            "2 (slightly irrelevant)", 
             "3 (neutral)", 
-            "4 (slightly uninformative)", 
-            "5 (very uninformative)", 
+            "4 (slightly relevant)", 
+            "5 (very relevant)", 
             "Instructions Unclear"
         ],
         index=2
@@ -83,8 +87,7 @@ for sample_idx, sample in enumerate(samples):
     ratings.append({
         "annotation_index": sample_idx + 1,
         "procedure": sample['procedure'],
-        "last_question": sample['question'],
-        "last_answer": sample['answer'],
+        "potential_question": sample['question'],
         "rating": rating
     })
 
