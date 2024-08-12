@@ -58,8 +58,8 @@ st.write("""
 
 ratings = []
 for sample_idx, sample in enumerate(samples):
-    st.write(f"### Annotation {sample_idx + 1}")
     st.write("---")
+    st.write(f"### Annotation {sample_idx + 1}")
     st.write(f"**Instruction:** *{sample['procedure']}*")
     
     st.write("**Previous questions and answers:**")
@@ -91,6 +91,8 @@ for sample_idx, sample in enumerate(samples):
         "potential_question": sample['question'],
         "rating": rating
     })
+
+st.write("---")
 
 # Save the results
 if st.button("Submit"):
