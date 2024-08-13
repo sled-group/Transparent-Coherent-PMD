@@ -22,7 +22,7 @@ from travel.model.vqa import run_qa
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--results_dir", type=str, help="Path to results directory for previous completed run of iterative VQA.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
