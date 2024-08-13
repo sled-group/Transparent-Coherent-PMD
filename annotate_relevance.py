@@ -82,7 +82,7 @@ if st.session_state.page == 1:
     """)
 
     st.write("""
-    You must rate how **relevant** the potential next question is. By relevant, we mean: given the previous questions and answers, how helpful could an answer to this question be in determining whether the procedure has been completed?
+    You must rate how **relevant** the potential next question is. By relevant, we mean: **given the previous questions and answers, how helpful could an answer to this question be in determining whether you successfully completed the task?**
     """)
 
     st.write("""

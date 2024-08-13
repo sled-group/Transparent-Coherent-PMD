@@ -75,7 +75,7 @@ if "samples" in st.session_state:
     """)
 
     st.write("""
-    You must rate how **informative** the last question and its answer are. By informative, we mean: compared to what you knew from the previous questions and answers, how much more sure would the last question and answer make you about whether you succeeded?
+    You must rate how **informative** the last question and its answer are. By informative, we mean: **compared to what you knew from the previous questions and answers, how much more sure would the last question and answer make you about whether you succeeded?**
     """)
 
     st.write("""
