@@ -20,11 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Throw the portion of clay mix on the main portion of clay mix
+Instruction: Pick leaves
 Previous questions and answers:
 None
 
-Potential next question: Is the portion of clay mix on the main portion of clay mix?
+Potential next question: Is the person wearing gloves while picking the leaves?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,11 +36,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Place the utility knife on the table
+Instruction: Pick a pack of spinach from the counter
 Previous questions and answers:
-Q1. Is the utility knife on the table?     (Answer: Yes)
+Q1. Is the pack of spinach still on the counter?     (Answer: Yes)
+Q2. Is the pack of spinach still in its original position on the counter?     (Answer: Yes)
 
-Potential next question: Is the person holding the utility knife?
+Potential next question: Is the pack of spinach still in its original location on the counter?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -52,11 +53,12 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Hold the tray in left hand with your right hand
+Instruction: Dip whisk inside soapy water
 Previous questions and answers:
-Q1. Is the tray in the person's left hand?     (Answer: Yes)
+Q1. Is the person wearing gloves?     (Answer: No)
+Q2. Is the person wearing safety goggles?     (Answer: No)
 
-Potential next question: Is the tray in the person's right hand?
+Potential next question: Is the person wearing a lab coat?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -68,13 +70,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Turn off the garden hose
+Instruction: Screw unscrew the motorcycle rim with the t wrench with your hands
 Previous questions and answers:
-Q1. Is the garden hose connected to a water source?     (Answer: No)
-Q2. Is the garden hose disconnected from the water source?     (Answer: Yes)
-Q3. Is the garden hose laying on the ground?     (Answer: No)
+Q1. Is the person holding the t wrench with their hands?     (Answer: Yes)
 
-Potential next question: Is the garden hose standing upright?
+Potential next question: Is the t wrench being used to unscrew the motorcycle rim?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -86,11 +86,12 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Hit the stick with the hammer
+Instruction: Pick a lid
 Previous questions and answers:
-Q1. Is the hammer in the person's hand?     (Answer: Yes)
+Q1. Do you see a lid?     (Answer: Yes)
+Q2. Is the lid open?     (Answer: Yes)
 
-Potential next question: Is the stick in the person's hand?
+Potential next question: Is the lid on the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -102,11 +103,12 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Turn off the garden hose
+Instruction: Open a fridge with your hand
 Previous questions and answers:
-Q1. Is the garden hose connected to a water source?     (Answer: No)
+Q1. Is there a fridge?     (Answer: Yes)
+Q2. Is the person's hand inside the fridge?     (Answer: Yes)
 
-Potential next question: Is the garden hose disconnected from the water source?
+Potential next question: Is the person's hand inside the fridge door?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -118,11 +120,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Smoothen the cloth with your hands
+Instruction: File the nail using a nail file
 Previous questions and answers:
-None
+Q1. Is the nail file in the person's hand?     (Answer: Yes)
+Q2. Is the nail being filed?     (Answer: Yes)
 
-Potential next question: Is the person wearing gloves while smoothing the cloth?
+Potential next question: Is the person's hand holding the nail file?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -134,12 +137,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Pick up a color pencil
+Instruction: Take water from a small pit with the brick molder in your hand
 Previous questions and answers:
-Q1. Is the pencil in the person's hand?     (Answer: Yes)
-Q2. Is the pencil in the person's right hand?     (Answer: Yes)
+Q1. Is the person holding a brick molder in their hand?     (Answer: Yes)
 
-Potential next question: Is the pencil in the person's left hand?
+Potential next question: Is the brick molder in the person's hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -151,12 +153,12 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Pick a rag from the car lift with your hand
+Instruction: Drop the bowls on the table with your hand
 Previous questions and answers:
-Q1. Is the person wearing a glove on their hand?     (Answer: No)
-Q2. Is the person wearing gloves on their hands?     (Answer: No)
+Q1. Are the bowls on the table?     (Answer: Yes)
+Q2. Is the person holding the bowls with their hand?     (Answer: Yes)
 
-Potential next question: Is the person wearing any gloves on their hands?
+Potential next question: Is the person's hand holding the bowls above the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -168,12 +170,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Turn off the garden hose
+Instruction: Paint the watercolor on the stone with a paint brush
 Previous questions and answers:
-Q1. Is the garden hose connected to a water source?     (Answer: No)
-Q2. Is the garden hose disconnected from the water source?     (Answer: Yes)
+Q1. Is the person holding a paintbrush in their hand?     (Answer: Yes)
 
-Potential next question: Is the garden hose laying on the ground?
+Potential next question: Is the paintbrush in the person's hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

@@ -20,13 +20,12 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Paint the wall with the paintbrush
+Instruction: Hold the cobbler needle with the plier
 Previous questions and answers:
-Q1. Is the person holding a paintbrush in their hand?     (Answer: Yes)
-Q2. Is the paintbrush in the person's hand touching the wall?     (Answer: Yes)
-Q3. Is the paintbrush in the person's hand touching the wall with paint on it?     (Answer: Yes)
+Q1. Is the person holding the cobbler needle with the plier?     (Answer: Yes)
+Q2. Is the plier in the person's hand?     (Answer: Yes)
 
-Potential next question: Is the paintbrush in the person's hand making contact with the wall?
+Potential next question: Is the cobbler needle being held with the plier?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -38,11 +37,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Drop the box in the drawer with your hand
+Instruction: Pick the paper on the table
 Previous questions and answers:
-Q1. Is the person's hand inside the drawer?     (Answer: Yes)
+Q1. Is the paper on the table in front of the person?     (Answer: Yes)
 
-Potential next question: Is the person's hand inside the drawer with the box?
+Potential next question: Is the paper on the table in front of the person's face?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -54,11 +53,13 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Clean the table with a towel
+Instruction: Cut the piece of meat with the knife in your hand
 Previous questions and answers:
-None
+Q1. Is the knife in the person's hand?     (Answer: Yes)
+Q2. Is the person's hand holding the knife correctly?     (Answer: Yes)
+Q3. Is the person's hand holding the knife above the piece of meat?     (Answer: Yes)
 
-Potential next question: Has the table been cleaned with a towel?
+Potential next question: Is the person's hand holding the knife above the piece of meat correctly?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -70,13 +71,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Open a tap with your hand
+Instruction: Put sand in the brick mold
 Previous questions and answers:
-Q1. Is the person's hand visible in the photo?     (Answer: Yes)
-Q2. Is the person's hand open in the photo?     (Answer: Yes)
-Q3. Is the person's hand touching the tap in the photo?     (Answer: Yes)
+None
 
-Potential next question: Is the person's hand on top of the tap in the photo?
+Potential next question: Is the sand in the brick mold?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -88,12 +87,12 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Loosen the lid of the scooter 's fuel tank with your hand
+Instruction: Cut a portion of the concrete from a heap of concrete with your hands
 Previous questions and answers:
-Q1. Is the fuel tank on the scooter open?     (Answer: No)
-Q2. Is the fuel tank on the scooter closed?     (Answer: Yes)
+Q1. Is the person's hands visible in the photo?     (Answer: Yes)
+Q2. Are the person's hands visible in the photo?     (Answer: Yes)
 
-Potential next question: Is the fuel tank on the scooter made of metal?
+Potential next question: Are the person's hands visible in the photo?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -105,11 +104,12 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Pack the mixture inside the container with your hand
+Instruction: Put a drink in the glass
 Previous questions and answers:
-Q1. Is the person's hand inside the container?     (Answer: Yes)
+Q1. Has the drink been poured into the glass?     (Answer: Yes)
+Q2. Has the glass been filled with the drink?     (Answer: Yes)
 
-Potential next question: Is the person's hand touching the mixture inside the container?
+Potential next question: Has the drink been placed in the glass?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -121,11 +121,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Screw unscrew the motorcycle rim with the t wrench with your hands
+Instruction: Dip the napkin in the bucket of water
 Previous questions and answers:
-None
+Q1. Is the napkin in the bucket of water?     (Answer: Yes)
+Q2. Is the person holding the napkin?     (Answer: Yes)
 
-Potential next question: Is the person holding the t wrench with their hands?
+Potential next question: Is the bucket filled with water?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -137,12 +138,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Tie the plant with a paper
+Instruction: Close the refrigerator
 Previous questions and answers:
-Q1. Is the person wearing gloves?     (Answer: No)
-Q2. Is the person wearing safety goggles?     (Answer: No)
+Q1. Is the refrigerator door still open?     (Answer: No)
+Q2. Is the refrigerator door closed?     (Answer: Yes)
 
-Potential next question: Is the person wearing a face mask?
+Potential next question: Is the refrigerator door still closed?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -154,12 +155,11 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop the rag on the lawn mower with your hand
+Instruction: Drop the foam on the hanger on the sink
 Previous questions and answers:
-Q1. Is the lawn mower on the ground?     (Answer: Yes)
-Q2. Is the person standing next to the lawn mower?     (Answer: Yes)
+None
 
-Potential next question: Is the person's hand extended towards the lawn mower?
+Potential next question: Is the foam on the hanger?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -171,12 +171,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Mix the ingredients with the vegetables with your hand
+Instruction: Plug the plug on the socket with your hand
 Previous questions and answers:
-Q1. Is the person's hand visible in the image?     (Answer: Yes)
-Q2. Is the person's hand visible in the foreground of the image?     (Answer: Yes)
+Q1. Is the plug in the socket?     (Answer: No)
 
-Potential next question: Is the person's hand visible in the background of the image?
+Potential next question: Is the plug in the person's hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

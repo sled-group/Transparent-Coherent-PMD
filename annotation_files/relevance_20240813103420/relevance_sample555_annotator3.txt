@@ -20,11 +20,12 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Pull the shoe lace
+Instruction: Put the spray bottle on top of the counter top
 Previous questions and answers:
-None
+Q1. Has the spray bottle been placed on the counter top?     (Answer: Yes)
+Q2. Is the spray bottle on top of the counter top?     (Answer: Yes)
 
-Potential next question: Is the shoe on the person's foot?
+Potential next question: Is the spray bottle on the counter top?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,14 +37,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Stir
+Instruction: Place your right hand on the steering wheel of the lawn mower
 Previous questions and answers:
-Q1. Is the person wearing a white lab coat?     (Answer: No)
-Q2. Is the person wearing a black lab coat?     (Answer: Yes)
-Q3. Is the person wearing safety goggles?     (Answer: No)
-Q4. Is the person holding a test tube?     (Answer: Yes)
+Q1. Is the person's right hand on the steering wheel of the lawn mower?     (Answer: Yes)
 
-Potential next question: Is the test tube in the person's hand?
+Potential next question: Is the person's hand on the steering wheel of the lawn mower?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -55,11 +53,12 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Put sanitizer on the stool
+Instruction: Drop the excess concrete on the   heap of concrete on the ground
 Previous questions and answers:
-None
+Q1. Is the person standing on the pile of concrete?     (Answer: Yes)
+Q2. Is the pile of concrete on the ground?     (Answer: Yes)
 
-Potential next question: Has the stool been sanitized?
+Potential next question: Is the person standing on the pile of concrete that is on the ground?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -71,11 +70,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Peel the piece of the second adhesive tape with your hands
+Instruction: Hold flower
 Previous questions and answers:
-Q1. Is the piece of the second adhesive tape in the person's hands?     (Answer: Yes)
+Q1. Is the person holding a flower?     (Answer: Yes)
 
-Potential next question: Is the piece of the second adhesive tape in the person's right hand?
+Potential next question: Is the flower in someone's hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -87,12 +86,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Put wood frame on a combination machine
+Instruction: Unroll the thread on the bed with your hand
 Previous questions and answers:
-Q1. Is the person wearing safety goggles?     (Answer: No)
-Q2. Is the person wearing gloves?     (Answer: No)
+Q1. Is the person's hand on the bed?     (Answer: Yes)
 
-Potential next question: Is the person wearing any protective gear?
+Potential next question: Is the person's hand on the right side of the bed?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -104,12 +102,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Close the lid
+Instruction: Prune the fruit stalk from the lemon with the secateurs
 Previous questions and answers:
-Q1. Is the person wearing a shirt?     (Answer: Yes)
-Q2. Is the shirt the person is wearing white?     (Answer: No)
+None
 
-Potential next question: Is the shirt the person is wearing black?
+Potential next question: Is the fruit stalk still attached to the lemon?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -121,12 +118,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Sew the material with the sewing machine on the table
+Instruction: Turn off the garden hose
 Previous questions and answers:
-Q1. Is the sewing machine on the table?     (Answer: Yes)
-Q2. Is the person working on the sewing machine on the table?     (Answer: Yes)
+Q1. Is the garden hose connected to a water source?     (Answer: No)
+Q2. Is the garden hose disconnected from the water source?     (Answer: Yes)
 
-Potential next question: Is the person using the sewing machine on the table to sew the material?
+Potential next question: Is the garden hose laying on the ground?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -138,11 +135,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Take a drill bit from a compartment in the toolbox
+Instruction: Lift the robot
 Previous questions and answers:
-Q1. Has the drill bit been removed from the compartment?     (Answer: Yes)
+Q1. Is the person wearing a white shirt?     (Answer: No)
 
-Potential next question: Is the drill bit in the person's hand?
+Potential next question: Is the person wearing a black shirt?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -154,13 +151,13 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Remove a tyre with your hands
+Instruction: Drop a lid
 Previous questions and answers:
-Q1. Is the person wearing gloves while working on the tire?     (Answer: Yes)
-Q2. Is the person wearing safety goggles while working on the tire?     (Answer: No)
-Q3. Is the person wearing any protective eyewear while working on the tire?     (Answer: No)
+Q1. Is the lid in the person's hand?     (Answer: Yes)
+Q2. Is the lid dropped?     (Answer: Yes)
+Q3. Is the lid on the floor?     (Answer: No)
 
-Potential next question: Is the person wearing any protective gear while working on the tire?
+Potential next question: Is the lid in someone's hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -172,11 +169,12 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Pick the scrub pad
+Instruction: Drop the tissue on the table with your hand
 Previous questions and answers:
-None
+Q1. Has the tissue been dropped on the table?     (Answer: Yes)
+Q2. Has the tissue been dropped on the table with the person's hand?     (Answer: Yes)
 
-Potential next question: Is the person wearing a scrub suit?
+Potential next question: Has the tissue been successfully dropped on the table with the person's hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

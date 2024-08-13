@@ -20,12 +20,14 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Drop the clay into the brick mold
+Instruction: Cut the wood plank with the miter saw in your hand
 Previous questions and answers:
-None
+Q1. Is the miter saw in the person's hand?     (Answer: Yes)
+Q2. Is the wood plank cut?     (Answer: No)
+Q3. Is the person holding the miter saw correctly?     (Answer: Yes)
 
-Last question: Has the clay been removed from the brick mold?
-Last answer: No
+Last question: Is the miter saw in someone's hand?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -37,11 +39,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Hold the fence branches with your hand
+Instruction: Wash the mug with the sponge
 Previous questions and answers:
-Q1. Is the person's hand visible in the photo?     (Answer: Yes)
+Q1. Has the mug been washed with the sponge?     (Answer: Yes)
 
-Last question: Is the person's hand holding onto the fence branches?
+Last question: Has the sponge been used to wash the mug?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -54,12 +56,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Drop the peeled back of the avocado pear in the sink
+Instruction: Hold flower
 Previous questions and answers:
-Q1. Is the peeled back part of the avocado in the sink?     (Answer: Yes)
-Q2. Is the peeled back part of the avocado still attached to the avocado?     (Answer: No)
+Q1. Is the flower in the person's hand?     (Answer: Yes)
 
-Last question: Is the peeled back part of the avocado in the sink by itself?
+Last question: Is the flower in the person's right hand?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -72,11 +73,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Drop the napkins on a tray with your hand
+Instruction: Pick the torque wrench
 Previous questions and answers:
-Q1. Are the napkins on the tray?     (Answer: Yes)
+None
 
-Last question: Is the person's hand on the tray?
+Last question: Is the torque wrench in the person's hand?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -89,13 +90,12 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Put your thumb into the hose
+Instruction: Place the bucket of water in your hand on the floor
 Previous questions and answers:
-Q1. Is the person's thumb in the hose?     (Answer: Yes)
-Q2. Is the person's thumb inside the hose?     (Answer: Yes)
+None
 
-Last question: Is the person's thumb sticking out of the hose?
-Last answer: No
+Last question: Is the bucket of water in the person's hand?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -107,13 +107,15 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Pick a card from the others
+Instruction: Cut the plant
 Previous questions and answers:
-Q1. Is the person wearing a white shirt?     (Answer: No)
-Q2. Is the person wearing a black shirt?     (Answer: No)
+Q1. Is the person wearing gloves?     (Answer: Yes)
+Q2. Is the person wearing safety goggles?     (Answer: No)
+Q3. Is the person holding a pair of scissors?     (Answer: No)
+Q4. Is the person holding a knife?     (Answer: No)
 
-Last question: Is the person wearing a blue shirt?
-Last answer: Yes
+Last question: Is the person holding a spade?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -125,11 +127,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Drop the cards on the table
+Instruction: Cover the fuel container
 Previous questions and answers:
-None
+Q1. Is the fuel container visible in the photo?     (Answer: Yes)
+Q2. Is the fuel container covered in the photo?     (Answer: Yes)
 
-Last question: Is the person holding a deck of cards in their hand?
+Last question: Is the fuel container on the ground in the photo?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -142,11 +145,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Dip painting brush in paint
+Instruction: Sew the material with the sewing machine on the table
 Previous questions and answers:
-None
+Q1. Is the sewing machine on the table?     (Answer: Yes)
+Q2. Is the person working on the sewing machine on the table?     (Answer: Yes)
 
-Last question: Is the brush in the person's hand?
+Last question: Is the person using the sewing machine on the table to sew the material?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -159,11 +163,11 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Remove the paintbrush from the paint container
+Instruction: Pull the thread on both side of the shoe
 Previous questions and answers:
-Q1. Has the paintbrush been removed from the paint container?     (Answer: Yes)
+Q1. Is the shoe on the person's foot?     (Answer: No)
 
-Last question: Is the paintbrush in the person's hand?
+Last question: Is the shoe off the person's foot?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -176,12 +180,12 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Put the pencil back into your mouth with your hand
+Instruction: Drop the peeled back of the avocado pear in the sink
 Previous questions and answers:
 None
 
-Last question: Is the pencil in the person's mouth?
-Last answer: No
+Last question: Is the avocado pear in the sink?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 

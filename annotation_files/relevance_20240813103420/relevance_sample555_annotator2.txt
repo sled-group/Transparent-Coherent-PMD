@@ -20,12 +20,12 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Spread the socks on the cloth rack
+Instruction: Place a kettle on the countertop
 Previous questions and answers:
-Q1. Are the socks on the cloth rack?     (Answer: Yes)
-Q2. Is the cloth rack full of socks?     (Answer: Yes)
+Q1. Has the kettle been placed on the countertop?     (Answer: Yes)
+Q2. Is the kettle sitting on the countertop?     (Answer: Yes)
 
-Potential next question: Are the socks neatly arranged on the cloth rack?
+Potential next question: Is the kettle on the countertop?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -37,11 +37,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Put sand in the brick mold
+Instruction: Put the motherboard on the counter top
 Previous questions and answers:
-None
+Q1. Is the motherboard on the countertop?     (Answer: No)
 
-Potential next question: Is the person wearing gloves?
+Potential next question: Is the countertop visible in the photo?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -53,11 +53,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Open the bowl with your hands
+Instruction: Spread the dough with your both hands
 Previous questions and answers:
-Q1. Is the person holding the bowl with their hands?     (Answer: Yes)
+None
 
-Potential next question: Are the person's hands visible in the photo?
+Potential next question: Is the dough on the person's hands?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -69,11 +69,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Stir the mixture in the cooking pot
+Instruction: Throw the spoon into the sink
 Previous questions and answers:
-Q1. Is the cooking pot on the stovetop?     (Answer: Yes)
+None
 
-Potential next question: Is the cooking pot on the burner of the stovetop?
+Potential next question: Is the spoon in the sink?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -85,12 +85,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Remove the tyre from a wheel turning stand
+Instruction: Cut the picture
 Previous questions and answers:
-Q1. Is the person wearing gloves?     (Answer: No)
-Q2. Is the person wearing safety goggles?     (Answer: No)
+None
 
-Potential next question: Is the person wearing a mask?
+Potential next question: Is there a picture in the image?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -102,12 +101,12 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Pick brush
+Instruction: Mark the wall with the pencil
 Previous questions and answers:
-Q1. Is the person holding a brush in their hand?     (Answer: Yes)
-Q2. Is the brush in the person's hand facing upwards?     (Answer: No)
+Q1. Is the pencil in the person's hand?     (Answer: No)
+Q2. Is the pencil in the person's mouth?     (Answer: No)
 
-Potential next question: Is the brush in the person's hand facing downwards?
+Potential next question: Is the pencil in the person's pocket?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -119,11 +118,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Dig the grass using a pick axe
+Instruction: Pull the thread on both side of the shoe
 Previous questions and answers:
-None
+Q1. Is the person wearing a shoe?     (Answer: Yes)
 
-Potential next question: Is the person holding a pickaxe?
+Potential next question: Is the shoe on the person's foot?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -135,11 +134,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Dip the nail polish brush in the nail polish bottle
+Instruction: Put the spray bottle on top of the counter top
 Previous questions and answers:
-Q1. Is the nail polish brush in the nail polish bottle?     (Answer: Yes)
+Q1. Has the spray bottle been placed on the counter top?     (Answer: Yes)
 
-Potential next question: Is the nail polish brush submerged in the nail polish bottle?
+Potential next question: Is the spray bottle on top of the counter top?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -151,11 +150,12 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Throw a wood to the ground
+Instruction: Put the tray on top of a bin
 Previous questions and answers:
-Q1. Is the person wearing a shirt?     (Answer: Yes)
+Q1. Has the tray been placed on top of the bin?     (Answer: Yes)
+Q2. Is the tray sitting on top of the bin?     (Answer: Yes)
 
-Potential next question: Is the person's shirt tucked in?
+Potential next question: Is the tray resting on top of the bin?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -167,11 +167,12 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the pick axe
+Instruction: Drop the second piece of wood on a third piece of wood on the stairs
 Previous questions and answers:
-Q1. Is the person holding a pickaxe?     (Answer: Yes)
+Q1. Is the second piece of wood on the third piece of wood?     (Answer: Yes)
+Q2. Is the second piece of wood on top of the third piece of wood?     (Answer: Yes)
 
-Potential next question: Is the pickaxe in the person's hand?
+Potential next question: Is the second piece of wood resting on the third piece of wood?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

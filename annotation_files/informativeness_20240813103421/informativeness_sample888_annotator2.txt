@@ -20,12 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Cut clay
+Instruction: Put the screw down
 Previous questions and answers:
-Q1. Is the person wearing a blue shirt?     (Answer: No)
-Q2. Is the person wearing a white shirt?     (Answer: No)
+Q1. Is the person wearing gloves?     (Answer: Yes)
 
-Last question: Is the person wearing a black shirt?
+Last question: Is the person wearing safety goggles?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -38,12 +37,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Insert your right hand into the mixed vegetable
+Instruction: Throw the brick molder towards your left with your hands
 Previous questions and answers:
-Q1. Is the person's hand inside the mixed vegetable?     (Answer: Yes)
+None
 
-Last question: Is the person's hand inside a bowl of mixed vegetables?
-Last answer: Yes
+Last question: Is the brick molder in the person's hands?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -55,12 +54,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Pick a spoon on top of the carboard
+Instruction: Hold a phone in your hand
 Previous questions and answers:
-Q1. Is the spoon on top of the carboard?     (Answer: Yes)
-Q2. Is the spoon on the carboard?     (Answer: Yes)
+None
 
-Last question: Is the spoon on the top of the carboard?
+Last question: Is the phone in the person's hand?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -73,12 +71,13 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Place the red lid on the red lid container with your hand
+Instruction: Put the weeds in a metal bin
 Previous questions and answers:
-None
+Q1. Is the person wearing gloves?     (Answer: No)
+Q2. Is the person wearing safety goggles?     (Answer: No)
 
-Last question: Is the red lid on the red lid container?
-Last answer: Yes
+Last question: Is the person wearing a face mask?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -90,12 +89,12 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Break out a part of the clay hump on the ground
+Instruction: Spread the socks on the cloth rack
 Previous questions and answers:
-None
+Q1. Are the socks on the rack?     (Answer: Yes)
 
-Last question: Is the clay hump on the ground still intact?
-Last answer: No
+Last question: Are the socks on the cloth rack?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -107,11 +106,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Pick the paper on the table
+Instruction: Throw the spoon into the sink
 Previous questions and answers:
-None
+Q1. Is the spoon in the sink?     (Answer: No)
 
-Last question: Is the paper on the table in front of the person?
+Last question: Is the sink dirty?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -124,12 +123,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Drop the dough on the flour on the table
+Instruction: Fold the paper
 Previous questions and answers:
-Q1. Has the dough been dropped on the flour?     (Answer: Yes)
-Q2. Is the dough on the flour on the table?     (Answer: Yes)
+Q1. Is the person working on a piece of paper?     (Answer: Yes)
+Q2. Is the person holding the paper in their hands?     (Answer: Yes)
 
-Last question: Is the dough on top of the flour on the table?
+Last question: Is the person's hands visible in the image?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -142,12 +141,13 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Drop the piece of wood plank onto the shelf
+Instruction: Remove a tray from the trolley
 Previous questions and answers:
-None
+Q1. Has the tray been removed from the trolley?     (Answer: No)
+Q2. Is the tray still on the trolley?     (Answer: Yes)
 
-Last question: Is the piece of wood plank on the shelf?
-Last answer: No
+Last question: Is someone removing the tray from the trolley?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -159,17 +159,16 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Close the test - tube
+Instruction: Paint the bench with the putty knife scraper
 Previous questions and answers:
-Q1. Is the person wearing a white lab coat?     (Answer: Yes)
-Q2. Is the person wearing safety goggles?     (Answer: No)
-Q3. Is the person wearing gloves?     (Answer: Yes)
-Q4. Is the test-tube in the person's hand?     (Answer: Yes)
-Q5. Is the test-tube in the person's hand upside down?     (Answer: Yes)
-Q6. Is the test-tube in the person's hand made of glass?     (Answer: Yes)
+Q1. Is the bench painted?     (Answer: No)
+Q2. Is the person using a putty knife scraper to paint the bench?     (Answer: Yes)
+Q3. Is the person holding the putty knife scraper correctly?     (Answer: Yes)
+Q4. Is the person using the putty knife scraper to apply paint to the bench?     (Answer: Yes)
+Q5. Is the person applying paint to the bench using the putty knife scraper?     (Answer: Yes)
 
-Last question: Is the test-tube in the person's hand made of metal?
-Last answer: No
+Last question: Is the person applying paint to the bench with the putty knife scraper?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -181,11 +180,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Hold a cup
+Instruction: Put the polaroid camera in an upright position on the table
 Previous questions and answers:
-Q1. Is the cup in the person's hand?     (Answer: Yes)
+Q1. Is the polaroid camera in an upright position on the table?     (Answer: Yes)
 
-Last question: Is the cup in the person's right hand?
+Last question: Is the polaroid camera on the table?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 

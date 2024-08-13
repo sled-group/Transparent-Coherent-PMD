@@ -20,15 +20,12 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Pick the polaroid camera
+Instruction: Hammer the ceiling with the hammer in your hand
 Previous questions and answers:
-Q1. Is the polaroid camera in the person's hand?     (Answer: No)
-Q2. Is the polaroid camera on the table in front of the person?     (Answer: Yes)
-Q3. Is the polaroid camera on the table next to the person?     (Answer: Yes)
-Q4. Is the polaroid camera on the table in front of the person's face?     (Answer: Yes)
-Q5. Is the polaroid camera on the table in front of the person's head?     (Answer: Yes)
+Q1. Is the hammer in the person's hand?     (Answer: Yes)
+Q2. Is the ceiling being hammered?     (Answer: Yes)
 
-Last question: Is the polaroid camera on the table in front of the person's chest?
+Last question: Is the ceiling being hammered with the hammer in the person's hand?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -41,13 +38,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Wash a sauce pan in the sink
+Instruction: Take an onions from the cupboard
 Previous questions and answers:
-Q1. Is the person washing the saucepan in the sink?     (Answer: Yes)
-Q2. Is the person wearing gloves while washing the saucepan in the sink?     (Answer: No)
+Q1. Is the onion in the person's hand?     (Answer: No)
 
-Last question: Is the person wearing an apron while washing the saucepan in the sink?
-Last answer: No
+Last question: Is the onion out of the cupboard?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -59,12 +55,13 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Put items on the table
+Instruction: Remove the paintbrush from the paint container
 Previous questions and answers:
-Q1. Is the table visible in the image?     (Answer: Yes)
+Q1. Has the paintbrush been removed from the paint container?     (Answer: Yes)
+Q2. Is the paintbrush in the person's hand?     (Answer: Yes)
 
-Last question: Is the table in the foreground of the image?
-Last answer: No
+Last question: Is the paintbrush in the person's hand upside down?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -76,12 +73,13 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Drop a lid
+Instruction: Cut the wood with the cutting machine
 Previous questions and answers:
-Q1. Is the person wearing gloves?     (Answer: No)
-Q2. Is the person wearing safety goggles?     (Answer: No)
+Q1. Do you see a cutting machine?     (Answer: Yes)
+Q2. Is the wood cut?     (Answer: No)
+Q3. Is the person holding the wood?     (Answer: Yes)
 
-Last question: Is the person wearing an apron?
+Last question: Is the machine cutting the wood?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -94,11 +92,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Cut a plant with scissor
+Instruction: Hit the brick mold on the ground
 Previous questions and answers:
-None
+Q1. Is the brick mold on the ground?     (Answer: Yes)
 
-Last question: Is the person holding a pair of scissors in their hand?
+Last question: Is someone hitting the brick mold?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -111,11 +109,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Pick up the plastic bowls in the cabinet
+Instruction: Put the watercolor tube on the table
 Previous questions and answers:
 None
 
-Last question: Are the plastic bowls still in the cabinet?
+Last question: Has the watercolor tube been placed on the table?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -128,12 +126,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: File the nail using a nail file
+Instruction: Put your thumb into the hose
 Previous questions and answers:
-Q1. Is the nail file being held in the person's right hand?     (Answer: Yes)
-Q2. Is the nail file being held in the person's left hand?     (Answer: No)
+None
 
-Last question: Is the nail file being held by the person's right hand?
+Last question: Is the person's thumb in the hose?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -146,12 +143,13 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Hold a screw
+Instruction: Hold the   handle on the scooter with your hand
 Previous questions and answers:
-Q1. Is the person wearing gloves?     (Answer: No)
+Q1. Is the handle of the scooter in the person's hand?     (Answer: Yes)
+Q2. Is the person holding the handle of the scooter correctly?     (Answer: Yes)
 
-Last question: Is the person wearing any protective gear?
-Last answer: No
+Last question: Is the person's hand on the handle of the scooter?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -163,13 +161,11 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Cut the picture
+Instruction: Drop the plastic container under the kitchen table
 Previous questions and answers:
-Q1. Is the person wearing a white shirt?     (Answer: No)
-Q2. Is the person wearing a black shirt?     (Answer: Yes)
-Q3. Is the black shirt the person is wearing a short sleeve shirt?     (Answer: No)
+None
 
-Last question: Is the black shirt the person is wearing a long sleeve shirt?
+Last question: Is the plastic container under the kitchen table?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -182,14 +178,12 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop dough on the clothed tray
+Instruction: Drop the third carrot on the plate
 Previous questions and answers:
-Q1. Is the clothed tray visible in the photo?     (Answer: Yes)
-Q2. Is the dough on the clothed tray visible in the photo?     (Answer: Yes)
-Q3. Is the dough on the clothed tray shaped like a doughnut?     (Answer: No)
+Q1. Is the carrot on the plate yet?     (Answer: No)
 
-Last question: Is the dough on the clothed tray shaped like a ball?
-Last answer: Yes
+Last question: Is there a third carrot on the plate?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 

@@ -20,13 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Pick the inner cover from the tray with your hand
+Instruction: Trim the grass
 Previous questions and answers:
-Q1. Is the person's hand visible in the photo?     (Answer: Yes)
-Q2. Is the person's hand inside the tray?     (Answer: Yes)
-Q3. Is the person's hand touching the inner cover of the tray?     (Answer: Yes)
+Q1. Is the grass trimmed?     (Answer: Yes)
 
-Last question: Is the person's hand on the inner cover of the tray?
+Last question: Is someone trimming the grass?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -39,12 +37,13 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Pick a spray bottle with the left hand
+Instruction: Pick a plant vessel
 Previous questions and answers:
-None
+Q1. Is there a plant vessel?     (Answer: Yes)
+Q2. Has the plant vessel been picked?     (Answer: Yes)
 
-Last question: Is the spray bottle in the person's left hand?
-Last answer: Yes
+Last question: Is the plant vessel empty?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -56,11 +55,12 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Throw the portion of clay mix on the main portion of clay mix
+Instruction: Pick up the spoon
 Previous questions and answers:
-None
+Q1. Is the spoon in the person's hand?     (Answer: No)
+Q2. Is the spoon on the table in front of the person?     (Answer: Yes)
 
-Last question: Is the portion of clay mix on the main portion of clay mix?
+Last question: Is the table in front of the person?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -73,12 +73,12 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Take a drill from the stairs
+Instruction: Peel the piece of the second adhesive tape with your hands
 Previous questions and answers:
-Q1. Is the drill still in the person's hand?     (Answer: Yes)
-Q2. Is the drill in the person's right hand?     (Answer: Yes)
+Q1. Is the piece of the second adhesive tape in the person's hands?     (Answer: Yes)
+Q2. Is the piece of the second adhesive tape in the person's right hand?     (Answer: Yes)
 
-Last question: Is the drill in the person's left hand?
+Last question: Is the piece of the second adhesive tape in the person's left hand?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -91,12 +91,13 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Pick the measuring tape from the wood under the miter saw with your hand
+Instruction: Grab the thread
 Previous questions and answers:
-None
+Q1. Has the person grabbed the thread?     (Answer: Yes)
+Q2. Is the thread in the person's hand?     (Answer: Yes)
 
-Last question: Is the measuring tape in the person's hand?
-Last answer: No
+Last question: Is the person holding the thread?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -108,12 +109,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Pick a spoon from the table with your hand
+Instruction: Drag the water hose forward
 Previous questions and answers:
-Q1. Is the spoon in the person's hand?     (Answer: No)
-Q2. Is the spoon on the table in front of the person?     (Answer: Yes)
+Q1. Is the person wearing a wetsuit?     (Answer: No)
 
-Last question: Is the spoon on the right side of the table?
+Last question: Is the person wearing any protective gear?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -126,11 +126,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Pick leaves
+Instruction: Hold the spray nozzle with your two hands
 Previous questions and answers:
-None
+Q1. Is the person holding the spray nozzle with both hands?     (Answer: Yes)
+Q2. Is the spray nozzle being held?     (Answer: Yes)
 
-Last question: Is the person wearing gloves while picking the leaves?
+Last question: Is the spray nozzle being held with both hands?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -143,14 +144,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Remove unwanted parts of the piece of meat with the knife in your hand
+Instruction: Hold the pack of meat with your hand
 Previous questions and answers:
-Q1. Is the person holding a knife in their hand?     (Answer: Yes)
-Q2. Is the knife in the person's hand pointing towards the piece of meat?     (Answer: Yes)
-Q3. Is the person's hand holding the knife steady?     (Answer: Yes)
-Q4. Is the person's hand holding the knife steady on the piece of meat?     (Answer: Yes)
+None
 
-Last question: Is the person's hand holding the knife steady over the piece of meat?
+Last question: Is the person holding the pack of meat in their hand?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -163,12 +161,12 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Carry the slab of corn
+Instruction: Drop the tray on the counter
 Previous questions and answers:
-Q1. Is the person holding the slab of corn in their hands?     (Answer: Yes)
+None
 
-Last question: Is the person wearing gloves while holding the slab of corn?
-Last answer: No
+Last question: Is the tray on the counter?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -180,13 +178,12 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Cut the paper with a scissors
+Instruction: Drop the scissors on the table with your hand
 Previous questions and answers:
-Q1. Is the person holding a pair of scissors in their hand?     (Answer: Yes)
-Q2. Is the person's hand holding the scissors correctly?     (Answer: Yes)
-Q3. Is the person's hand holding the scissors above the paper?     (Answer: Yes)
+Q1. Is the scissors on the table?     (Answer: Yes)
+Q2. Is the scissors on the table with the person's hand?     (Answer: Yes)
 
-Last question: Is the person's hand holding the scissors above the paper correctly?
+Last question: Is the scissors on the table with the person's hand on it?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
