@@ -32,6 +32,7 @@ parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch
 parser.add_argument("--qa_batch_size", type=int, default=20, help="Batch size for QA with VLM.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
+parser.add_argument("--get_negated_success_probs", action="store_true", help="Pass this argument to calculate success probabilities for negated answers to questions.")
 args = parser.parse_args()
 
 assert torch.cuda.device_count() == 1, "Iterative VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
@@ -139,7 +140,7 @@ for question_idx in range(n_questions_per_example):
                                   all_prompts[question_idx], 
                                   batch_size=max(args.qa_batch_size // (2 ** question_idx), 1),
                                   cache_path=os.path.join(cache_dir, f"noimg_qa_logits{worker_index}-{question_idx}.pt"))
-    if args.coherence_evaluation_strategy == "vlm":
+    if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
         logits_negated[question_idx] = run_qa(lm, 
                                               tokenizer, 
                                               all_prompts[question_idx], 
@@ -175,7 +176,7 @@ if worker_index == 0:
                     time.sleep(delay_per_try)
                     delay_so_far += delay_per_try
 
-                if args.coherence_evaluation_strategy == "vlm":
+                if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
                     # Grab negated logits if needed
                     delay_so_far = 0
                     while True:
@@ -257,7 +258,7 @@ if worker_index == 0:
         ] for example_idx in range(len(logits[0]))
     ]
     all_success_probs_negated_noimg = [[] for _ in range(len(all_example_ids))]
-    if args.coherence_evaluation_strategy == "vlm":
+    if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
         all_success_probs_negated_noimg = [
             [
                 # Use code in VQAOutputs class to calculate Yes/No probabilities from logits

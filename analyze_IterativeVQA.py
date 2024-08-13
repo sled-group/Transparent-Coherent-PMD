@@ -17,7 +17,8 @@ from sklearn.metrics import brier_score_loss
 from tqdm import tqdm
 
 from travel.constants import RESULTS_DIR
-from travel.model.metrics import generate_risk_coverage_plot, calculate_abstention_metrics, plot_abstention_metrics, generate_det_curves, entropy
+from travel.model.metrics import generate_risk_coverage_plot, calculate_abstention_metrics, plot_abstention_metrics, generate_det_curves, entropy, mistake_detection_metrics
+from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.utils import expected_calibration_error
 
 # Configure results to graph here
@@ -505,6 +506,7 @@ for results_fnames, results_names, analysis_subdir in [
     generate_risk_coverage_plot(all_coverages, all_risks, results_names, save_paths)
     print("(4) Done!")
 
+
     # Analysis 5: Correlations between tiered metrics
     print("(5) Beginning tiered metrics correlation analysis...")
     lines = []
@@ -526,10 +528,83 @@ for results_fnames, results_names, analysis_subdir in [
                          
             lines.append("")
 
-            output_fname = f"tiered_correlations_{'_'.join(results_names).replace(' ', '-')}.txt"
-            save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
-            for save_path in save_paths:
-                with open(save_path, 'w') as f:
-                    f.write("\n".join(lines))
+    output_fname = f"tiered_correlations_{'_'.join(results_names).replace(' ', '-')}.txt"
+    save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
+    for save_path in save_paths:
+        with open(save_path, 'w') as f:
+            f.write("\n".join(lines))
 
     print("(5) Done!")
+
+
+    # Analysis 6: Re-calibrate model predictions based on relevance and informativeness
+    print("(6) Beginning re-calibration based on coherence metrics...")
+    all_accuracy_metrics = []
+    all_calibrated_mistake_probs = []
+    for i, result_fname in enumerate(results_fnames):
+        coherence_metrics_path = result_fname.replace("outputs_val.json", "metrics_coherence_nli_val.json")
+        coherence_metrics = None
+        if os.path.exists(coherence_metrics_path):
+            coherence_metrics = json.load(open(coherence_metrics_path, "r"))
+
+        if coherence_metrics is not None:
+            calibrated_mistake_probs = []
+            for example_idx in range(len(all_probs[i])):
+                final_turn_probs = np.array([1.0 - all_probs[i][example_idx], all_probs[i][example_idx]])
+                max_informativeness = max(coherence_metrics['metrics_by_turn']["informativeness_marginal_x_relevance_marginal_by_turn"][example_idx])
+                
+                base_prob = np.array([0.5, 0.5])
+                calibrated_probs = max_informativeness * final_turn_probs + (1.0 - max_informativeness) * base_prob
+
+                calibrated_mistake_probs.append(calibrated_probs[1])
+            all_calibrated_mistake_probs.append(calibrated_mistake_probs)
+
+        # Calculate accuracy metrics
+        best_metrics = None
+        best_threshold = None
+        accuracy_metrics_by_threshold = {}
+        for threshold in MISTAKE_DETECTION_THRESHOLDS:
+            preds = [p >= threshold for p in calibrated_mistake_probs]
+            assert len(preds) == len(calibrated_mistake_probs) == len(all_labels[i]), "Expected same number of preds, probs, and labels."
+            this_metrics = mistake_detection_metrics(all_labels[i], preds)
+            accuracy_metrics_by_threshold[threshold] = this_metrics
+
+            if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
+                best_metrics = this_metrics
+                best_threshold = threshold
+
+        all_accuracy_metrics.append(accuracy_metrics_by_threshold)
+
+    output_fname = f"det_comparison_coherence_calibrated_{'_'.join(results_names).replace(' ', '-')}.pdf"
+    save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+    generate_det_curves(all_accuracy_metrics, results_names, save_paths=save_paths)
+
+    # Also get risk-coverage metrics from this
+    penalty = 1
+    thresholds = np.linspace(0.0, 1.0, 101) # [0.0, 0.01, 0.02, 0.03, ..., 0.98, 0.99, 1.0]
+    thresholds = [t for t in thresholds if t >= 0.5] # [0.50, 0.51, ..., 0.98, 0.99, 1.0] (only keep thresholds at least 0.5 because every class is predicted with at least 0.5 likelihood in binary classification)
+
+    all_coverages = []
+    all_risks = []
+    for i in range(len(results_fnames)):
+        coverages, risks, eff_reliabilities, sp_recalls = [], [], [], []
+        for t in tqdm(thresholds, desc="thresholds"):
+            c, r, e, spr, _ = calculate_abstention_metrics(all_calibrated_mistake_probs[i], [1 if l else 0 for l in all_labels[i]], t, penalty)
+            coverages.append(c)
+            risks.append(r)
+            eff_reliabilities.append(e)
+            sp_recalls.append(spr)
+
+        output_fname = f"selective_prediction_coherence_calibrated_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
+        save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
+
+        plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)
+
+        # Save coverage and risk for later risk-coverage curve
+        all_coverages.append(coverages)
+        all_risks.append(risks)
+
+    output_fname = f"risk_coverage_coherence_calibrated_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+    save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
+    generate_risk_coverage_plot(all_coverages, all_risks, results_names, save_paths)
+    print("(4) Done!")

@@ -51,6 +51,7 @@ parser.add_argument("--run_id", type=str, required=False, help="Unique ID for th
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
+parser.add_argument("--get_negated_success_probs", action="store_true", help="Pass this argument to calculate success probabilities for negated answers to questions.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
 parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
 args = parser.parse_args()
@@ -436,7 +437,7 @@ if not is_complete:
                 answers[batch_sub_idx].append(new_answers[batch_sub_idx].predicted_answer)
 
             # Update prompts with answers
-            if args.coherence_evaluation_strategy == "vlm":
+            if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
                 # Save negated version of new prompt if we're using VLM-based coherence evaluation
                 prompts_negated = [prompt + VQAResponse(1 - output.predicted_answer.value).name for prompt, output in zip(prompts_a, new_answers)] 
             prompts = [prompt + " " + output.predicted_answer.name for prompt, output in zip(prompts_a, new_answers)]
@@ -489,7 +490,7 @@ if not is_complete:
             del success_vqa_outputs
 
             # If using VLM-based coherence evaluation, also need to get success probability for negated answers
-            if args.coherence_evaluation_strategy == "vlm":
+            if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
                 prompts_success_negated = [
                     prompt + f'{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:'
                     for prompt, question in zip(prompts_negated, questions_success)
