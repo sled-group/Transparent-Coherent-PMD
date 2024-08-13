@@ -354,12 +354,12 @@ if worker_index == 0:
         raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
 
     # Aggregate coherence metrics by example and by turn
-    parallel_idx = 0
     coherence_metrics_by_example = defaultdict(list)
     coherence_metrics_by_turn = defaultdict(list)
     coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']
     for k in coherence_metric_names:
         if k in all_coherence_metrics:
+            parallel_idx = 0
             for results_dict in all_results_dicts.values():
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
@@ -367,6 +367,7 @@ if worker_index == 0:
                     parallel_idx += 1
                 coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
+
     
     # Calculate accuracy metrics
     best_metrics = None
