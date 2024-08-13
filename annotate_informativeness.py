@@ -42,8 +42,8 @@ if st.session_state.annotator_idx is None:
         step=1
     )
     if st.button("Next"):
-        assert len(source_data) % n_annotators == 0, "Length of annotated examples should be evenly divisible by number of annotators."
-        samples_per_annotator = len(source_data) // n_annotators
+        assert len(source_data) % args.n_annotators == 0, "Length of annotated examples should be evenly divisible by number of annotators."
+        samples_per_annotator = len(source_data) // args.n_annotators
         samples = source_data[samples_per_annotator * annotator_idx: samples_per_annotator * (annotator_idx + 1)]
         if len(samples) == 0:
             st.error(f"Did not retrieve any samples for annotator ID {annotator_idx}. Please check your input.")
