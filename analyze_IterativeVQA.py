@@ -551,10 +551,10 @@ for results_fnames, results_names, analysis_subdir in [
             calibrated_mistake_probs = []
             for example_idx in range(len(all_probs[i])):
                 final_turn_probs = np.array([1.0 - all_probs[i][example_idx], all_probs[i][example_idx]])
-                max_informativeness = max(coherence_metrics['metrics_by_turn']["informativeness_marginal_x_relevance_marginal_by_turn"][example_idx])
+                agg_informativeness = min(coherence_metrics['metrics_by_turn']["informativeness_marginal_x_relevance_marginal_by_turn"][example_idx])
                 
                 base_prob = np.array([0.5, 0.5])
-                calibrated_probs = max_informativeness * final_turn_probs + (1.0 - max_informativeness) * base_prob
+                calibrated_probs = agg_informativeness * final_turn_probs + (1.0 - agg_informativeness) * base_prob
 
                 calibrated_mistake_probs.append(calibrated_probs[1])
             all_calibrated_mistake_probs.append(calibrated_mistake_probs)

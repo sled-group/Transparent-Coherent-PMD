@@ -15,6 +15,7 @@ def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
 
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
+    CaptainCook4D_Single = "captaincook4d_single"
     Ego4D = "ego4d" # Ego4D following SuccessVQA format augmented with additional sampled mismatch examples for more easy negatives
     Ego4D_Single = "ego4d_single" # Ego4D with only annotated effect frames from video clips
     # EpicKitchens = "epickitchens" # Can consider adding EK later if need more training data for VQG

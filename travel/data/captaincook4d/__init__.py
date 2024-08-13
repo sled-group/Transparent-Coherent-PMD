@@ -1,9 +1,13 @@
 from collections import defaultdict
+import math
+import numpy as np
 import os, json
 from PIL import Image
 from pprint import pprint
 import spacy
+import torch
 from tqdm import tqdm
+from transformers import CLIPProcessor, CLIPModel, BitsAndBytesConfig
 from typing import Optional
 import yaml
 
@@ -20,24 +24,33 @@ with open(CONFIG_PATH, 'r') as file:
 FRAME_SAMPLING_FREQUENCY = float(config["data"]["captaincook4d"]["video_frame_sampling_frequency"])
 FRAME_KEEP_FREQUENCY = float(config["data"]["captaincook4d"]["video_frame_keep_frequency"])
 
+# List of step indices in CaptainCook4D that are omitted from single-frame data; these tend to be focused on timing or small measurements that can't be observed through single frames
+IGNORE_STEP_IDS = [
+
+]
+
 class CaptainCook4DDataset(MistakeDetectionDataset):
     def __init__(self, 
                  data_split: str,
+                 multi_frame: bool=True,
                  debug_n_examples_per_class: Optional[int]=None):
         """
         Method to initialize and load CaptainCook4D dataset.
 
         :param kwargs: Task-specific arguments for dataset compilation.
         """
+        self.multi_frame = multi_frame
         super().__init__(data_split,
+                         multi_frame=multi_frame,
                          debug_n_examples_per_class=debug_n_examples_per_class)
 
     def get_cache_dir(self,
                       data_split: str,
+                      multi_frame: bool=True,
                       load_videos: bool=True,
                       debug_n_examples_per_class: Optional[int]=None) -> str:
         # Check if we already loaded data before
-        cache_fname = f"captaincook4d_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}-{FRAME_KEEP_FREQUENCY}" 
+        cache_fname = f"{'captaincook4d_multiframe' if multi_frame else 'captaincook4d'}_{data_split}_freq{FRAME_SAMPLING_FREQUENCY}-{FRAME_KEEP_FREQUENCY}" 
         if debug_n_examples_per_class is not None:
             cache_fname += f"_debug{debug_n_examples_per_class}"
         if not load_videos:
@@ -47,10 +60,12 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
 
     def generate_examples(self,
                           data_split: str,
+                          multi_frame: bool=True,
                           load_videos: bool=True,
                           debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
 
         # TODO: When loading CaptainCook4D at least a few videos cannot be successfully loaded. Need to look into this at some point
+        # NOTE: it seems like these are gopro videos that we didn't originanlly download (we only have HL2 videos)
 
         already_processed_videos = get_subdirectories(self.cache_dir)
         print("Already processed videos:")
@@ -65,10 +80,20 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
             video_id = error_annotation['recording_id']
             STEP_ANNOTATIONS[video_id]["steps_errors"] = error_annotation["step_annotations"]
 
-        # Load OWLv2 to check for target objects in recipe steps
-        print("Setting up target object counter...")
+        # Load CLIP to check for match between recipe step and frames
+        print("Setting up CLIP...")
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            llm_int8_threshold=6.0,
+            llm_int8_has_fp16_weight=False,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )        
+        model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", quantization_config=bnb_config)
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", quantization_config=bnb_config)
+        target_object_counter = TargetObjectCounterFilter()
         nlp = spacy.load('en_core_web_lg')
-        object_counter = TargetObjectCounterFilter()
 
         for sample_video_id, sample_video_path in tqdm(zip(all_video_ids, all_video_paths), desc="loading captaincook4d videos", total=len(all_video_ids)):            
             try:
@@ -103,29 +128,69 @@ class CaptainCook4DDataset(MistakeDetectionDataset):
                         frames = extract_frames(sample_video, times)
                         frames = [Image.fromarray(frame) for frame in frames] # TODO: this sometimes crashes if a frame is None due to error retrieving frame from video; Fengyuan is working on fixing bugs here so will leave it for now
 
-                        # While we initially sampled FRAME_SAMPLING_FREQUENCY frames / second, we'll only keep FRAME_KEEP_FREQUENCY frames per second - for each interval, pick a frame that is not blurry and has the maximum number of target objects
-                        counts = object_counter(nlp, frames, [procedure_description] * len(frames))
+                        # Only look at last chunk of frames is single-frame setting (don't need to bother with earlier ones)
+                        if not multi_frame:
+                            cutoff_start = math.floor(len(frames) * 0.8)
+                            cutoff_end = math.ceil(len(frames) * 0.9)
+                        else:
+                            cutoff_start = 0
+                            cutoff_end = len(frames)
+
+                        # While we initially sampled FRAME_SAMPLING_FREQUENCY frames / second, we'll only keep FRAME_KEEP_FREQUENCY frames per second - for each interval, pick a frame that is not blurry and has the maximum similarity with recipe text
+                        frames = frames[cutoff_start:cutoff_end]
+                        times = times[cutoff_start:cutoff_end]
+                        inputs = processor(text=procedure_description, images=frames, return_tensors="pt", padding=True)
+
+                        with torch.inference_mode():
+                            outputs = model(**inputs)
+                        logits_per_text = outputs.logits_per_text # this is the image-text similarity score
+                        scores = np.array(target_object_counter(nlp, frames, [procedure_description] * len(frames)))
+                        counts = logits_per_text.softmax(dim=1).squeeze(0).cpu().numpy() # we can take the softmax to get the label probabilities
+                        assert len(scores) == len(counts)
+                        counts = scores * counts
+
                         frame_info_by_interval = defaultdict(list)
-                        assert len(times) == len(frames) == len(counts), "Frames, times, and object counts must be the same."
+                        assert len(times) == len(frames) == len(counts), "Frames, times, and object counts must be the same length."
                         for frame, time, count in zip(frames, times, counts):
                             frame_info_by_interval[int(time // (1 / FRAME_KEEP_FREQUENCY))].append((frame, time, count))
                         
-                        new_frames = []
-                        new_times = []
-                        for interval in frame_info_by_interval:
-                            max_count = max([count for _, _, count in frame_info_by_interval[interval]])
-                            if max_count == 0:
-                                # Skip this second of the video if there are no target objects in view
-                                continue
-                            frame_info_with_max_count = [info for info in frame_info_by_interval[interval] if info[2] == max_count]
-                            if len(frame_info_with_max_count) > 1:
-                                # If multiple frames have maximum number of target objects, take the least blurry one (max variance of laplacian)
-                                frame_info_with_max_count = max(frame_info_with_max_count, key = lambda x: variance_of_laplacian(x[0]))
-                            else:
-                                frame_info_with_max_count = frame_info_with_max_count[0]
+
+                        if multi_frame:
+                            new_frames = []
+                            new_times = []
+                            interval_max_counts = []
+
+                            for interval in frame_info_by_interval:
+                                max_count = max([count for _, _, count in frame_info_by_interval[interval]])
+                                if max_count == 0 and multi_frame:
+                                    # Skip this interval of the video if there are no target objects in view
+                                    continue
+                                frame_info_with_max_count = [info for info in frame_info_by_interval[interval] if info[2] == max_count]
+                                if len(frame_info_with_max_count) > 1:
+                                    # If multiple frames have maximum number of target objects, take the least blurry one (max variance of laplacian)
+                                    frame_info_with_max_count = max(frame_info_with_max_count, key = lambda x: variance_of_laplacian(x[0]))
+                                else:
+                                    frame_info_with_max_count = frame_info_with_max_count[0]
+                                
+                                new_frames.append(frame_info_with_max_count[0])
+                                new_times.append(frame_info_with_max_count[1])
+                                interval_max_counts.append(max_count)
+
+                        else:
+                            # Pick just one frame
+
+                            # First make sure we narrowed down to the least blurry frame per interval
+                            least_blurry_frame_by_interval = [
+                                max(frame_info_by_interval[interval], key=lambda x: variance_of_laplacian(x[0])) for interval in frame_info_by_interval
+                            ]
+
+                            # Then pick the interval with a frame that has the most visible target objects
+                            max_count = max([fi[2] for fi in least_blurry_frame_by_interval])
+                            most_objects_frame = max(list(range(len(least_blurry_frame_by_interval))), key=lambda x: x if least_blurry_frame_by_interval[x][2] == max_count else 0)
+                            most_objects_frame = least_blurry_frame_by_interval[most_objects_frame]
                             
-                            new_frames.append(frame_info_with_max_count[0])
-                            new_times.append(frame_info_with_max_count[1])
+                            new_frames = [most_objects_frame[0]]                        
+                            new_times = [most_objects_frame[1]]
 
                         frames = new_frames
                         times = new_times
