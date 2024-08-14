@@ -399,8 +399,9 @@ def generate_risk_coverage_plot(coverages, risks, result_names, save_paths):
 #     return negation_based_relevance, informativeness
 
 
-def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], tokenizer, lm, generation_batch_size: int=20):
+def rephrase_question_answer(questions: list[str], answers: list[str], tokenizer, lm, generation_batch_size: int=20):
     # return f"{question} {answer.name}."
+    assert all(a == "Yes" or a == "No" for a in answers), "Expected all answers to be 'Yes' or 'No', but got " + str(answers)
     examples = [
         "Question: Is there a bowl on the table?\nAnswer: Yes\nStatement: There is a bowl on the table.",
         "Question: Are the eggs cracked?\nAnswer: No\nStatement: The eggs are not cracked.",
@@ -413,7 +414,7 @@ def rephrase_question_answer(questions: list[str], answers: list[VQAResponse], t
         "Question: Does the table have any cups on it?\nAnswer: Yes\nStatement: The table has cups on it.",
         "Question: Is the cabinet closed?\nAnswer: No\nStatement: The cabinet is not closed.",
     ]
-    prompts = ["\n\n".join(examples) + f"\n\nQuestion: {question}\nAnswer: {answer.name}\nStatement: " for question, answer in zip(questions, answers)]
+    prompts = ["\n\n".join(examples) + f"\n\nQuestion: {question}\nAnswer: {answer}\nStatement: " for question, answer in zip(questions, answers)]
     rephrased_texts = simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=generation_batch_size, generation_kwargs={"pad_token_id": tokenizer.eos_token_id})
     rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
     return rephrased_texts
@@ -433,7 +434,12 @@ def entropy_tensor(binary_prob):
     ent[binary_prob == 1.0] = 0.0
     return ent
 
-def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], answers: Optional[list[VQAResponse]]=None, previous_questions: Optional[list[list[str]]]=None, previous_answers: Optional[list[list[VQAResponse]]]=None, rephrase_batch_size=20):
+def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_model, procedures: list[str], questions: list[str], 
+                                   answers: Optional[list[str]]=None, 
+                                   previous_questions: Optional[list[list[str]]]=None, 
+                                   previous_answers: Optional[list[list[str]]]=None, 
+                                   mistake_labels: Optional[list[bool]]=None, 
+                                   rephrase_batch_size=20):
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
     """
@@ -443,14 +449,14 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     # Rephrase question with a yes and no answer as statements to compare their entailment probability of success
     rephrased_yes = rephrase_question_answer(
         questions, 
-        [VQAResponse.Yes] * len(questions),
+        ["Yes"] * len(questions),
         lm_tokenizer, 
         lm_model, 
         generation_batch_size=rephrase_batch_size
     )
     rephrased_no = rephrase_question_answer(
         questions, 
-        [VQAResponse.No] * len(questions),
+        ["No"] * len(questions),
         lm_tokenizer, 
         lm_model, 
         generation_batch_size=rephrase_batch_size
@@ -462,7 +468,7 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     probs_yes = run_nli(nli_tokenizer, nli_model, list(zip(premise_yes, hypothesis_procedure)))
     probs_no = run_nli(nli_tokenizer, nli_model, list(zip(premise_no, hypothesis_procedure)))
     if answers:
-        probs_actual = torch.stack([probs_yes[i] if answers[i] == VQAResponse.Yes else probs_no[i] for i in range(len(answers))])
+        probs_actual = torch.stack([probs_yes[i] if answers[i] == "Yes" else probs_no[i] for i in range(len(answers))])
 
     # Individual relevance: how much probability of success changes depending on the answer
     relevance = torch.abs(probs_yes[:, 0] - probs_no[:, 0])
@@ -479,6 +485,8 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     metrics['informativeness'] = informativeness.numpy()
 
     if previous_questions:
+        assert len(previous_questions) == len(previous_answers), "Expected same number of questions and answers!"
+
         # Flatten and rephrase past questions and answers into statements, then un-flatten
         rephrased_past = rephrase_question_answer(
             [question for p_questions in previous_questions for question in p_questions],
@@ -526,6 +534,19 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     # "Verifiability" metric: weight marginal informativeness by marginal relevance
     metrics['informativeness_marginal_x_relevance_marginal'] = metrics['informativeness_marginal'] * metrics['relevance_marginal']
 
+    if answers is not None and mistake_labels is not None:
+        # Calculate an alternative (not reference free) form of informativeness that is negative if leaning toward the incorrect final answer (for mistake or success)
+        # (this can only be done when answers is provided, which is during final coherence evaluation rather than coherence-based reranking)
+        leaning_toward_mistake = torch.tensor([1 if p < 0.5 else 0 for p in probs_past_actual[:, 0]])
+        actually_is_mistake = torch.tensor([1 if l else 0 for l in mistake_labels])
+        multipliers = leaning_toward_mistake * actually_is_mistake # This will be 1 if leaning the correct way, otherwise 0
+        assert sum(multipliers.shape) == len(mistake_labels)
+        multipliers[multipliers == 0] = -1
+        multipliers = multipliers.numpy()
+
+        for k in ['informativeness', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']:
+            metrics[k + "_ref"] = metrics[k] * multipliers
+
     # Convert to floats to ensure json serializable
     metrics = {
         k: [round(float(val), 6) for val in v] if type(v[0]) != str else v
@@ -570,6 +591,96 @@ def question_coherence_metrics_vlm(success_probs, success_probs_negated):
         for k, v in metrics.items()
     }
     return metrics
+
+def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, thresholds):
+    # Aggregate coherence metrics by example and by turn
+    coherence_metrics_by_example = defaultdict(list)
+    coherence_metrics_by_turn = defaultdict(list)
+    coherence_metric_names = ['relevance', 
+                              'informativeness', 
+                              'relevance_marginal', 
+                              'informativeness_marginal', 
+                              'informativeness_marginal_x_relevance_marginal',
+                              'informativeness_ref',
+                              'informativeness_marginal_ref',
+                              'informativeness_marginal_x_relevance_marginal_ref']
+    for k in coherence_metric_names:
+        if k in all_coherence_metrics:
+            parallel_idx = 0
+            for results_dict in all_results_dicts.values():
+                this_metrics = []
+                for question_idx in range(results_dict['final_turn'] + 1):
+                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx]), 6))
+                    parallel_idx += 1
+                coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
+                coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
+
+    # Reweight all informativeness metrics by entropy of VLM's answer to questions
+    for k in ['informativeness', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']:
+        if k in all_coherence_metrics:
+            parallel_idx = 0
+            for results_dict in all_results_dicts.values():
+                this_metrics = []
+                for question_idx in range(results_dict['final_turn'] + 1):
+                    question_info = 1.0 - entropy(results_dict['answer_probs'][question_idx][0])
+                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx] * question_info), 6))
+                    parallel_idx += 1
+                coherence_metrics_by_example[k + "_vlm_reweight_by_example"].append(round(float(np.mean(this_metrics)), 6))
+                coherence_metrics_by_turn[k + "_vlm_reweight_by_turn"].append(this_metrics)
+            
+    # Add an alternative "information gain" version of informativeness (weighted by relevance);
+    # this metric looks at how much (relevance-weighted) information our answers accrued across the dialog
+    parallel_idx = 0
+    for results_dict in all_results_dicts.values():
+        this_metrics = []
+        max_so_far = 0.0
+        total_info_gain = 0.0
+        for question_idx in range(results_dict['final_turn'] + 1):
+            info = all_coherence_metrics['informativeness_marginal_x_relevance_marginal'][parallel_idx]
+            info_gain = max(info - max_so_far, 0.0)
+            if info > max_so_far:
+                max_so_far = info
+            this_metrics.append(round(float(info_gain), 6))            
+            parallel_idx += 1
+        coherence_metrics_by_example[k + "_by_example"].append(round(float(np.sum(this_metrics)), 6))
+        coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
+
+    # Calculate accuracy metrics
+    best_metrics = None
+    best_threshold = None
+    accuracy_metrics_by_threshold = {}
+    coherence_metrics_by_threshold = {}
+    all_labels_binary = [True if l is not None else False for l in all_labels]
+    for threshold in thresholds:
+        preds = [1.0 - p >= threshold for p in all_probs] # Have to do 1.0 - probability since we got "success" probability from VLM
+        assert len(preds) == len(all_probs) == len(all_labels), "Expected same number of preds, probs, and labels."
+        this_metrics = mistake_detection_metrics(all_labels_binary, preds)
+        accuracy_metrics_by_threshold[threshold] = this_metrics
+
+        # Calculate consistency and verifiability for this example, which are conditional on correctness
+        # TODO: also consider using "ref" form of informativeness for verifiability, and "information gain" version of informativeness
+        verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
+        consistency = np.mean([coherence_metrics_by_example['relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
+        coherence_metrics_by_threshold[threshold] = {"verifiability": verifiability, "consistency": consistency,}
+
+        if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
+            best_metrics = this_metrics
+            best_threshold = threshold
+
+    accuracy_metrics_by_threshold['best_metrics'] = best_metrics
+    accuracy_metrics_by_threshold['best_threshold'] = best_threshold
+
+    coherence_metric_names += [k + "_vlm_reweight" for k in ['informativeness', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']]
+    coherence_metrics = {
+        k: round(float(np.mean(coherence_metrics_by_example[k + "_by_example"])), 6) for k in coherence_metric_names if k + "_by_example" in coherence_metrics_by_example
+    } | {
+        "metrics_by_threshold": coherence_metrics_by_threshold,
+        "metrics_by_example": coherence_metrics_by_example,
+        "metrics_by_turn": coherence_metrics_by_turn,
+    }
+
+    return accuracy_metrics_by_threshold, coherence_metrics
+
 
 # NOTE: below consistency and verifiability metrics are from legacy results and not in use/maintained
 def effectiveness(is_mistake: bool, mistake_probs: Union[list[float], list[list[float]]]):
