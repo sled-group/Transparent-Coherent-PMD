@@ -34,6 +34,9 @@ ANNOTATION_PATHS = {
 }
 
 # TODO: some verbs need to be ignored in epic kitchens
+IGNORE_VERBS = [
+    
+]
 
 class EpicKitchensMistakeDetectionDataset(MistakeDetectionDataset):
     def __init__(self, 
