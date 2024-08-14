@@ -35,7 +35,7 @@ ANNOTATION_PATHS = {
 
 # TODO: some verbs need to be ignored in epic kitchens
 IGNORE_VERBS = [
-    
+
 ]
 
 class EpicKitchensMistakeDetectionDataset(MistakeDetectionDataset):
@@ -63,6 +63,9 @@ class EpicKitchensMistakeDetectionDataset(MistakeDetectionDataset):
     def generate_examples(self,
                           data_split: str,
                           debug_n_examples_per_class: Optional[int]=None) -> list[MistakeDetectionExample]:
+
+        # Resume from partial generation (Ego4D is very large so we need this to avoid wasting time in generating the mistake detection data)
+        already_processed_videos = get_subdirectories(self.cache_dir) # Each subdirectory of Ego4D's cache dir should be a video ID
 
         # If we're only loading a small amount of data for debugging purpose but we've loaded the full data before, just borrow the data from the full dataset
         if debug_n_examples_per_class is not None:
@@ -130,6 +133,10 @@ class EpicKitchensMistakeDetectionDataset(MistakeDetectionDataset):
             video_paths[video_index] = video_path
 
         for video_id in all_data.keys():
+            if video_id in already_processed_videos:
+                # Skip if we already generated examples from this video
+                continue
+
             try:
                 video = get_video(video_paths[video_id])
             except:
