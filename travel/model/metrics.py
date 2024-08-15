@@ -642,8 +642,8 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
                 max_so_far = info
             this_metrics.append(round(float(info_gain), 6))            
             parallel_idx += 1
-        coherence_metrics_by_example[k + "_by_example"].append(round(float(np.sum(this_metrics)), 6))
-        coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
+        coherence_metrics_by_example["informativeness_marginal_x_relevance_marginal_gain_by_example"].append(round(float(np.sum(this_metrics)), 6))
+        coherence_metrics_by_turn["informativeness_marginal_x_relevance_marginal_gain_by_turn"].append(this_metrics)
 
     # Calculate accuracy metrics
     best_metrics = None
