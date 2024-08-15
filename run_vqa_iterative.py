@@ -745,7 +745,7 @@ if worker_index == 0:
                                                 answers=all_predicted_answers,
                                                 previous_questions=all_previous_questions,
                                                 previous_answers=all_previous_answers,
-                                                mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)],
+                                                mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)],
                                                 rephrase_batch_size=args.generation_batch_size)
     elif args.coherence_evaluation_strategy == "vlm":
         all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs, all_success_probs_negated)

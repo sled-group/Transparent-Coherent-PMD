@@ -19,7 +19,7 @@ from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
+from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE_TOPDOWN, IVQA_SUCCESS_QUESTION_TOPDOWN
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_vlm
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
@@ -244,7 +244,7 @@ if not is_complete:
         this_batch_size = len(batch_examples)
 
         prompts = [
-            f'{USER_START_TOKENS[type(vlm)]}{IMAGE_TOKENS[type(vlm)]}{IVQA_PREAMBLE.format(procedure=procedure)}' 
+            f'{USER_START_TOKENS[type(vlm)]}{IMAGE_TOKENS[type(vlm)]}{IVQA_PREAMBLE_TOPDOWN.format(procedure=procedure)}' 
             for procedure in batch_procedures
         ]
         if args.print_prompts:
@@ -263,7 +263,7 @@ if not is_complete:
 
         # Ask VLM probability of success
         questions_success = [
-            IVQA_SUCCESS_QUESTION.format(procedure=procedure)
+            IVQA_SUCCESS_QUESTION_TOPDOWN.format(procedure=procedure)
             for procedure in batch_procedures
         ]
         prompts_success = [
@@ -690,7 +690,7 @@ if worker_index == 0:
                                             answers=all_predicted_answers,
                                             previous_questions=all_previous_questions,
                                             previous_answers=all_previous_answers,
-                                            mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)],
+                                            mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)],
                                             rephrase_batch_size=args.generation_batch_size)
 
     # Get accuracy and coherence metrics
