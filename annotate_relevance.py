@@ -92,7 +92,7 @@ if st.session_state.page == 1:
     st.write("""
     *Some tips:*
     - Only judge the relevance of the potential next question, not the previous questions (which may or may not be relevant).
-    - A question may seem relevant to the task at hand, but you should consider it irrelevant if it doesn't provide essential information to judge whether the task was completed successfully..
+    - A question may seem relevant to the task at hand, but you should consider it irrelevant if it can't provide essential information to judge whether the task was completed successfully.
     - If a seemingly relevant question is redundant with previous questions, you may consider it less relevant.
     - Assume that the answer to the question won't contradict the information you have from previous questions and answers. If previous questions and answers already contradict each other, consider whether this question could sway you one way or another.
     - The instructional text and questions may refer to "someone" or "a person"; always assume this is referring to yourself (the person performing the task).

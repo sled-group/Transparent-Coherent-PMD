@@ -607,15 +607,13 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
             for results_dict in all_results_dicts.values():
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
-                    if np.abs(results_dict['answer_probs'][question_idx][0] - 0.5) >= unsure_range:
-                        this_metrics.append(max(round(float(all_coherence_metrics[k][parallel_idx]), 6), 0.0)) # If negative, just round up to 0.0 for aggregated metrics
-                    else:
-                        # Don't count informativeness for "unsure" answers - model failed to get new information
-                        this_metrics.append(0.0)
+                    this_metrics.append(max(round(float(all_coherence_metrics[k][parallel_idx]), 6), 0.0)) # If negative, just round up to 0.0 for aggregated metrics
                     parallel_idx += 1
-                coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
-
+                # In metric for full example, don't count informativeness for "unsure" answers - model failed to get new information
+                this_metrics = [this_metrics[question_idx] if np.abs(results_dict['answer_probs'][question_idx][0] - 0.5) >= unsure_range or "informativeness" not in k else 0.0 for question_idx in range(len(this_metrics))]
+                coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
+                
     # Reweight all informativeness metrics by entropy of VLM's answer to questions
     for k in ['informativeness', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']:
         if k in all_coherence_metrics:
@@ -661,7 +659,6 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
         accuracy_metrics_by_threshold[threshold] = this_metrics
 
         # Calculate consistency and verifiability for this example, which are conditional on correctness
-        # TODO: also consider using "ref" form of informativeness for verifiability, and "information gain" version of informativeness
         verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_marginal_ref_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
         consistency = np.mean([coherence_metrics_by_example['relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
         coherence_metrics_by_threshold[threshold] = {"verifiability": verifiability, "consistency": consistency,}

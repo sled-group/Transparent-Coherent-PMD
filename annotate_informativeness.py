@@ -70,12 +70,11 @@ if "samples" in st.session_state:
     st.write("""
     For each annotation task, you will be given the following information:
     - A **sentence** describing the procedure you're trying to perform.
-    - An optional list of **previous questions** you already asked, and **their answers**.
-    - The **last question** you just asked your friend, and **its answer**.
+    - An list of **questions** you already asked, and **their answers**.
     """)
 
     st.write("""
-    You must rate how **informative** the last question and its answer are. By informative, we mean: **compared to what you knew from the previous questions and answers, how much more sure would the last question and answer make you about whether you succeeded?**
+    You must rate how **informative** the questions and answers are. By informative, we mean: **based on all the information you have, how sure are you about whether you succeeded?**
     """)
 
     st.write("""
@@ -84,10 +83,7 @@ if "samples" in st.session_state:
 
     st.write("""
     *Some tips:*
-    - Only judge the informativeness of the last question and answer, not the previous questions and answers (which may or may not be informative).
-    - A question may seem relevant to the task at hand, but you should consider it uninformative if it doesn't provide essential information to judge whether the task was completed successfully.
-    - If a seemingly informative question is redundant with previous questions, you may consider it less informative.
-    - If the last answer contradicts critical information you had from previous questions and answers, you may consider it more informative.
+    - If some questions or answers are not informative or even contradict each other, that's okay; consider all questions and answers as a whole.
     - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
     - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
     """)
