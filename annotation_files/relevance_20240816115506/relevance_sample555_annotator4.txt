@@ -20,11 +20,12 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Pick leaves
+Instruction: Hold circuit board
 Previous questions and answers:
-None
+Q1. Is the person wearing safety goggles?     (Answer: No)
+Q2. Is the person wearing gloves?     (Answer: No)
 
-Potential next question: Is the person wearing gloves while picking the leaves?
+Potential next question: Is the person wearing any protective gear?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,12 +37,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Pick a pack of spinach from the counter
+Instruction: Smolder the motherboard
 Previous questions and answers:
-Q1. Is the person wearing a white shirt?     (Answer: No)
-Q2. Is the person wearing a black shirt?     (Answer: No)
+Q1. Is the person wearing any protective gear?     (Answer: No)
+Q2. Is the person wearing any gloves?     (Answer: No)
 
-Potential next question: Is the person wearing a blue shirt?
+Potential next question: Is the person wearing any goggles?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -53,12 +54,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Dip whisk inside soapy water
+Instruction: Place the carton box on the table
 Previous questions and answers:
-Q1. Is the person wearing any protective gear?     (Answer: No)
-Q2. Is the person wearing any gloves?     (Answer: No)
+None
 
-Potential next question: Is the person wearing any safety goggles?
+Potential next question: Is the carton box on the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -70,11 +70,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Screw unscrew the motorcycle rim with the t wrench with your hands
+Instruction: Remove the flower from the vase
 Previous questions and answers:
-None
+Q1. Is the vase empty now?     (Answer: Yes)
 
-Potential next question: Is the person wearing gloves while working on the motorcycle rim?
+Potential next question: Is the flower still in the vase?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -86,12 +86,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Pick a lid
+Instruction: Measure the room with the tape measure
 Previous questions and answers:
-Q1. Do you see a lid?     (Answer: Yes)
-Q2. Is the lid open?     (Answer: Yes)
+None
 
-Potential next question: Is the lid on the table?
+Potential next question: Is the tape measure in the person's hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -103,11 +102,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Open a fridge with your hand
+Instruction: Pick a spanners on the ground
 Previous questions and answers:
-Q1. Is the fridge open?     (Answer: Yes)
+None
 
-Potential next question: Is someone opening the fridge?
+Potential next question: Do you see a spanners on the ground?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -119,11 +118,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: File the nail using a nail file
+Instruction: Smoothen the stair railing with the angle grinder in your hand
 Previous questions and answers:
-Q1. Is the nail file being used?     (Answer: Yes)
+None
 
-Potential next question: Is the nail being filed?
+Potential next question: Is the person holding the angle grinder in their hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -135,11 +134,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Take water from a small pit with the brick molder in your hand
+Instruction: Pick spoon from counter
 Previous questions and answers:
-Q1. Is the person holding a brick molder in their hand?     (Answer: Yes)
+Q1. Do you see a spoon?     (Answer: Yes)
+Q2. Is the spoon on the counter?     (Answer: Yes)
 
-Potential next question: Is the person using the brick molder to take water from a small pit?
+Potential next question: Is the spoon picked up by someone?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -151,12 +151,11 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop the bowls on the table with your hand
+Instruction: Drop the mallet and the chisel in the cabinet drawer with your hand
 Previous questions and answers:
-Q1. Are the bowls on the table?     (Answer: Yes)
-Q2. Is the person holding the bowls in their hand?     (Answer: No)
+Q1. Is the person's hand visible in the photo?     (Answer: Yes)
 
-Potential next question: Is the person about to drop the bowls on the table?
+Potential next question: Is the person's hand holding the mallet and the chisel?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -168,11 +167,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Paint the watercolor on the stone with a paint brush
+Instruction: Tie the plant with a paper
 Previous questions and answers:
-None
+Q1. Do you see a plant?     (Answer: Yes)
 
-Potential next question: Is the person using a paint brush to paint the watercolor on the stone?
+Potential next question: Is the paper holding the plant together?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

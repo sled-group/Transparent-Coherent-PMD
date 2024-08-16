@@ -20,11 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Put the spray bottle on top of the counter top
+Instruction: Pick leaves
 Previous questions and answers:
-None
+Q1. Is the person wearing gloves while picking the leaves?     (Answer: Yes)
 
-Potential next question: Is the spray bottle on top of the counter top?
+Potential next question: Is the person wearing any protective gear while picking the leaves?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,11 +36,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Place your right hand on the steering wheel of the lawn mower
+Instruction: Pick a pack of spinach from the counter
 Previous questions and answers:
-None
+Q1. Is the person wearing a white shirt?     (Answer: No)
 
-Potential next question: Is the person's right hand on the steering wheel of the lawn mower?
+Potential next question: Is the person wearing a black shirt?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -52,11 +52,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Drop the excess concrete on the   heap of concrete on the ground
+Instruction: Dip whisk inside soapy water
 Previous questions and answers:
-Q1. Is the person wearing safety goggles?     (Answer: No)
+Q1. Is the person wearing any protective gear?     (Answer: No)
 
-Potential next question: Is the person wearing a hard hat?
+Potential next question: Is the person wearing any gloves?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -68,11 +68,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Hold flower
+Instruction: Screw unscrew the motorcycle rim with the t wrench with your hands
 Previous questions and answers:
 None
 
-Potential next question: Is the person holding a flower?
+Potential next question: Is the person wearing gloves while working on the motorcycle rim?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -84,11 +84,13 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Unroll the thread on the bed with your hand
+Instruction: Pick a lid
 Previous questions and answers:
-Q1. Is the person's hand visible in the photo?     (Answer: Yes)
+Q1. Do you see a lid?     (Answer: Yes)
+Q2. Is the lid open?     (Answer: Yes)
+Q3. Is the lid on the table?     (Answer: Yes)
 
-Potential next question: Is the person's hand on the bed?
+Potential next question: Is the lid on the table open?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -100,11 +102,12 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Prune the fruit stalk from the lemon with the secateurs
+Instruction: Open a fridge with your hand
 Previous questions and answers:
-Q1. Is the person holding the secateurs in their right hand?     (Answer: Yes)
+Q1. Is the fridge open?     (Answer: Yes)
+Q2. Is someone opening the fridge?     (Answer: Yes)
 
-Potential next question: Is the person's right hand visible in the photo?
+Potential next question: Is the person opening the fridge with their hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -116,11 +119,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Turn off the garden hose
+Instruction: File the nail using a nail file
 Previous questions and answers:
-None
+Q1. Is the nail file being used?     (Answer: Yes)
+Q2. Is the nail being filed?     (Answer: Yes)
 
-Potential next question: Is the hose connected to a source of water?
+Potential next question: Is the nail being filed with a nail file?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -132,12 +136,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Lift the robot
+Instruction: Take water from a small pit with the brick molder in your hand
 Previous questions and answers:
-Q1. Is the person wearing a white shirt?     (Answer: No)
-Q2. Is the person wearing a black shirt?     (Answer: No)
+None
 
-Potential next question: Is the person wearing a blue shirt?
+Potential next question: Is the person holding a brick molder in their hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -149,12 +152,12 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop a lid
+Instruction: Drop the bowls on the table with your hand
 Previous questions and answers:
-Q1. Do you see a lid?     (Answer: Yes)
-Q2. Is the lid dropped?     (Answer: Yes)
+Q1. Are the bowls on the table?     (Answer: Yes)
+Q2. Is the person holding the bowls in their hand?     (Answer: No)
 
-Potential next question: Is the lid on the ground?
+Potential next question: Is the person about to drop the bowls on the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -166,11 +169,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the tissue on the table with your hand
+Instruction: Paint the watercolor on the stone with a paint brush
 Previous questions and answers:
-Q1. Is the tissue on the table?     (Answer: Yes)
+None
 
-Potential next question: Is the tissue dropped on the table?
+Potential next question: Is the person using a paint brush to paint the watercolor on the stone?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

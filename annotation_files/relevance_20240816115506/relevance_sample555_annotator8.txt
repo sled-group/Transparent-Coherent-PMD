@@ -20,11 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Hold the cobbler needle with the plier
+Instruction: Pick an impact wrench on the tool box with your hand
 Previous questions and answers:
-None
+Q1. Is the person holding the impact wrench in their hand?     (Answer: Yes)
 
-Potential next question: Is the person holding the cobbler needle with the plier?
+Potential next question: Is the impact wrench in the person's hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,12 +36,14 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Pick the paper on the table
+Instruction: Pick a spoon from the table with your hand
 Previous questions and answers:
-Q1. Is the paper on the table in front of the person?     (Answer: Yes)
-Q2. Is the person seated at the table while working on the procedure?     (Answer: Yes)
+Q1. Is the spoon on the table in front of the person?     (Answer: Yes)
+Q2. Is the person's hand extended towards the spoon on the table?     (Answer: Yes)
+Q3. Is the person's hand touching the spoon on the table?     (Answer: No)
+Q4. Is the person's hand close to the spoon on the table?     (Answer: Yes)
 
-Potential next question: Is the person wearing a tie while working on the procedure?
+Potential next question: Is the person's hand near the spoon on the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -53,12 +55,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Cut the piece of meat with the knife in your hand
+Instruction: Pack the chopped spinach from the chopping board with your hand
 Previous questions and answers:
-Q1. Is the person holding a knife in their hand?     (Answer: Yes)
-Q2. Is the knife in the person's hand pointing upwards?     (Answer: Yes)
+Q1. Is the person's hand on the chopped spinach?     (Answer: Yes)
 
-Potential next question: Is the person's hand holding the knife correctly?
+Potential next question: Is the person's hand on top of the chopped spinach?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -70,11 +71,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Put sand in the brick mold
+Instruction: Cut the wood plank with the miter saw in your hand
 Previous questions and answers:
 None
 
-Potential next question: Is there a brick mold?
+Potential next question: Is the person holding the miter saw in their hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -86,11 +87,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Cut a portion of the concrete from a heap of concrete with your hands
+Instruction: Turn a bowl
 Previous questions and answers:
-None
+Q1. Do you see a bowl?     (Answer: Yes)
 
-Potential next question: Is the person's hands visible in the photo?
+Potential next question: Is the bowl on the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -102,11 +103,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Put a drink in the glass
+Instruction: Pick radio screws
 Previous questions and answers:
-Q1. Is the person wearing a white shirt?     (Answer: No)
+None
 
-Potential next question: Is the person wearing a black shirt?
+Potential next question: Is the person wearing a white shirt?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -118,11 +119,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Dip the napkin in the bucket of water
+Instruction: Throw the portion of clay mix on the main portion of clay mix
 Previous questions and answers:
 None
 
-Potential next question: Is there a bucket of water?
+Potential next question: Is the person wearing a blue shirt?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -134,11 +135,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Close the refrigerator
+Instruction: Pick the tape measure on the floor
 Previous questions and answers:
-None
+Q1. Is the tape measure on the floor?     (Answer: Yes)
+Q2. Is the tape measure in the person's hand?     (Answer: Yes)
 
-Potential next question: Is the refrigerator open?
+Potential next question: Is the person holding the tape measure correctly?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -150,12 +152,11 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop the foam on the hanger on the sink
+Instruction: Drop dough on the clothed tray
 Previous questions and answers:
-Q1. Is the hanger on the sink?     (Answer: Yes)
-Q2. Is the foam on the hanger on the sink?     (Answer: Yes)
+Q1. Is the dough on the clothed tray?     (Answer: Yes)
 
-Potential next question: Is the foam dropped on the hanger on the sink?
+Potential next question: Is the dough on the tray?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -167,11 +168,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Plug the plug on the socket with your hand
+Instruction: Place the bucket of water in your hand on the floor
 Previous questions and answers:
 None
 
-Potential next question: Is there a plug in the image?
+Potential next question: Is the bucket of water in the person's hand on the floor?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

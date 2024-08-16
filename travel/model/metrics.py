@@ -539,7 +539,8 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
         metrics['relevance_marginal'] = metrics['relevance']
         metrics['informativeness_marginal'] = metrics['informativeness']
 
-    # "Verifiability" metric: weight marginal informativeness by marginal relevance
+    # "Verifiability" metrics weight marginal informativeness by marginal relevance
+    metrics['informativeness_x_relevance_marginal'] = metrics['informativeness'] * metrics['relevance_marginal']
     metrics['informativeness_marginal_x_relevance_marginal'] = metrics['informativeness_marginal'] * metrics['relevance_marginal']
 
     if answers is not None and mistake_labels is not None:
@@ -551,7 +552,7 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
         assert sum(multipliers.shape) == len(mistake_labels)
         multipliers = multipliers.numpy()
 
-        for k in ['informativeness', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']:
+        for k in ['informativeness', 'informativeness_x_relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']:
             metrics[k + "_ref"] = metrics[k] * multipliers
 
     # Convert to floats to ensure json serializable
@@ -604,8 +605,9 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
     coherence_metrics_by_example = defaultdict(list)
     coherence_metrics_by_turn = defaultdict(list)
     coherence_metric_names = ['relevance', 
-                              'informativeness', 
                               'relevance_marginal', 
+                              'informativeness', 
+                              'informativeness_x_relevance_marginal',
                               'informativeness_marginal', 
                               'informativeness_marginal_x_relevance_marginal',
                               'informativeness_ref',
@@ -625,7 +627,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
                 coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
                 
     # Reweight all informativeness metrics by entropy of VLM's answer to questions
-    for k in ['informativeness', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']:
+    for k in ['informativeness', 'informativeness_marginal', 'informativeness_x_relevance_marginal', 'informativeness_marginal_x_relevance_marginal']:
         if k in all_coherence_metrics:
             parallel_idx = 0
             for results_dict in all_results_dicts.values():
@@ -669,6 +671,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
         accuracy_metrics_by_threshold[threshold] = this_metrics
 
         # Calculate consistency and verifiability for this example, which are conditional on correctness
+        # TODO: consider using non-marginal informativeness for final evaluation?
         verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_marginal_ref_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
         consistency = np.mean([coherence_metrics_by_example['relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
         coherence_metrics_by_threshold[threshold] = {"verifiability": verifiability, "consistency": consistency,}
@@ -680,7 +683,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
     accuracy_metrics_by_threshold['best_metrics'] = best_metrics
     accuracy_metrics_by_threshold['best_threshold'] = best_threshold
 
-    coherence_metric_names += [k + "_vlm_reweight" for k in ['informativeness', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']]
+    coherence_metric_names += [k + "_vlm_reweight" for k in ['informativeness', 'informativeness_x_relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']]
     coherence_metrics = {
         k: round(float(np.mean(coherence_metrics_by_example[k + "_by_example"])), 6) for k in coherence_metric_names if k + "_by_example" in coherence_metrics_by_example
     } | {

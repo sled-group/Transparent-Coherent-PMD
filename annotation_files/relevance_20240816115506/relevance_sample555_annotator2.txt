@@ -1,0 +1,179 @@
+Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it.
+You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.
+
+For each annotation task, you will be given the following information:
+ - A sentence describing the procedure you're trying to perform.
+ - An optional list of previous questions you already asked, and their answers.
+ - A potential question you could ask your friend next.
+
+You must rate how relevant the potential next question is. By relevant, we mean: given the previous questions and answers, how helpful could an answer to this question be in determining whether the procedure has been completed?
+You can also choose to mark 'Instructions Unclear', which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+
+Some tips:
+ - Only judge the relevance of the potential next question, not the previous questions (which may or may not be relevant).
+ - A question may seem relevant to the task at hand, but you should consider it irrelevant if it doesn't provide essential information to judge the success of the task.
+ - If a seemingly relevant question is redundant with previous questions, you may consider it less relevant.
+ - Assume that the answer to the question won't contradict the information you have from previous questions and answers. If previous questions and answers already contradict each other, consider whether this question could sway you one way or another.
+ - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
+ - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
+
+
+Annotation 1
+===============================
+Instruction: Place a kettle on the countertop
+Previous questions and answers:
+None
+
+Potential next question: Is the kettle on the countertop?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 2
+===============================
+Instruction: Put the motherboard on the counter top
+Previous questions and answers:
+Q1. Is the person wearing a white shirt?     (Answer: No)
+
+Potential next question: Is the person wearing a black shirt?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 3
+===============================
+Instruction: Spread the dough with your both hands
+Previous questions and answers:
+Q1. Is the person's hands on the dough?     (Answer: Yes)
+
+Potential next question: Is the dough spread out?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 4
+===============================
+Instruction: Throw the spoon into the sink
+Previous questions and answers:
+None
+
+Potential next question: Is the sink visible in the photo?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 5
+===============================
+Instruction: Cut the picture
+Previous questions and answers:
+None
+
+Potential next question: Is there a picture in the image?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 6
+===============================
+Instruction: Mark the wall with the pencil
+Previous questions and answers:
+None
+
+Potential next question: Is the person holding the pencil in their hand?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 7
+===============================
+Instruction: Pull the thread on both side of the shoe
+Previous questions and answers:
+Q1. Do you see a shoe?     (Answer: Yes)
+
+Potential next question: Is the shoe untied?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 8
+===============================
+Instruction: Put the spray bottle on top of the counter top
+Previous questions and answers:
+None
+
+Potential next question: Is the spray bottle on top of the counter top?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 9
+===============================
+Instruction: Put the tray on top of a bin
+Previous questions and answers:
+None
+
+Potential next question: Is the tray on top of the bin?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 10
+===============================
+Instruction: Drop the second piece of wood on a third piece of wood on the stairs
+Previous questions and answers:
+Q1. Is the person working on the stairs?     (Answer: No)
+
+Potential next question: Is the person standing on the stairs?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+

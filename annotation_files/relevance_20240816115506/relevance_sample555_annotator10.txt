@@ -20,11 +20,13 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Place a kettle on the countertop
+Instruction: Lift the polaroid camera from the table
 Previous questions and answers:
-None
+Q1. Is there a polaroid camera?     (Answer: Yes)
+Q2. Is the polaroid camera on the table?     (Answer: Yes)
+Q3. Is the person holding the polaroid camera in their hand?     (Answer: Yes)
 
-Potential next question: Is the kettle on the countertop?
+Potential next question: Is the person in the process of lifting the polaroid camera from the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,11 +38,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Put the motherboard on the counter top
+Instruction: Pack the mixture inside the container with your hand
 Previous questions and answers:
-None
+Q1. Is the person's hand inside the container?     (Answer: Yes)
 
-Potential next question: Is the person wearing a white shirt?
+Potential next question: Is the person's hand touching the mixture inside the container?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -52,11 +54,14 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Spread the dough with your both hands
+Instruction: Hold radio
 Previous questions and answers:
-None
+Q1. Is the person wearing gloves?     (Answer: No)
+Q2. Is the person wearing a face mask?     (Answer: No)
+Q3. Is the person wearing any protective gear?     (Answer: No)
+Q4. Is the person wearing a shirt?     (Answer: Yes)
 
-Potential next question: Is the person's hands on the dough?
+Potential next question: Is the person's shirt tucked into their pants?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -68,11 +73,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Throw the spoon into the sink
+Instruction: Hold the tube with your hands
 Previous questions and answers:
 None
 
-Potential next question: Is the sink visible in the photo?
+Potential next question: Is the tube in the person's hands?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -84,11 +89,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Cut the picture
+Instruction: Smoothen a wooden stand with a sand paper in the room
 Previous questions and answers:
-None
+Q1. Is there a wooden stand?     (Answer: Yes)
 
-Potential next question: Is there a picture in the image?
+Potential next question: Is the wooden stand in the room?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -100,11 +105,13 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Mark the wall with the pencil
+Instruction: Pick up a pieces of cloth
 Previous questions and answers:
-None
+Q1. Is the person wearing a white shirt?     (Answer: Yes)
+Q2. Is the person wearing black pants?     (Answer: No)
+Q3. Is the person's shirt untucked from their pants?     (Answer: Yes)
 
-Potential next question: Is the person holding the pencil in their hand?
+Potential next question: Is the person holding a pair of scissors?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -116,12 +123,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Pull the thread on both side of the shoe
+Instruction: Pick leaves
 Previous questions and answers:
-Q1. Do you see a shoe?     (Answer: Yes)
-Q2. Is the shoe untied?     (Answer: Yes)
+None
 
-Potential next question: Is the thread pulled on both sides of the shoe?
+Potential next question: Do you see any leaves?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -133,11 +139,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Put the spray bottle on top of the counter top
+Instruction: Drop the scraper on the table
 Previous questions and answers:
-None
+Q1. Do you see a scraper?     (Answer: Yes)
+Q2. Is the scraper on the table?     (Answer: Yes)
 
-Potential next question: Is the spray bottle on top of the counter top?
+Potential next question: Is the scraper dropped on the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -149,11 +156,11 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Put the tray on top of a bin
+Instruction: Remove a piece of paper from a drawer
 Previous questions and answers:
-None
+Q1. Is the drawer open?     (Answer: Yes)
 
-Potential next question: Is the tray on top of the bin?
+Potential next question: Is the paper inside the drawer?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -165,11 +172,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the second piece of wood on a third piece of wood on the stairs
+Instruction: Pour oil from the bottle to the dough in the tray
 Previous questions and answers:
-Q1. Is the person working on the stairs?     (Answer: No)
+None
 
-Potential next question: Is the person standing on the stairs?
+Potential next question: Is there a bottle of oil?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
