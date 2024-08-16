@@ -781,16 +781,14 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     def ego4d_narration_to_instruction(self, narration_text: str, nlp: English) -> str:
         instruction_text = clean_narration_text(narration_text) # Replace symbols in narration text with words
         instruction_text = simple_present_to_imperative(nlp, instruction_text)
+        # TODO: consider removing "another" and "more" here in a later iteration
         for original_text, replaced_text in [("in your left hand", "in your hand"),
                                                 ("in your right hand", "in your hand"),
                                                 ("with your left hand", "with your hand"),
                                                 ("with your right hand", "with your hand"),
                                                 ("with both hands", "with your hands"),
                                                 ("with left hand", "with your hand"),
-                                                ("with right hand", "with your hand"),
-                                                (" another ", " the "),
-                                                (" more ", " "),
-                                                (" additional ", " ")]:
+                                                ("with right hand", "with your hand"),]:
             if not("left hand" in instruction_text and "right hand" in instruction_text):
                 # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove unneeded mentions of this
                 instruction_text = instruction_text.replace(original_text, replaced_text)
