@@ -1,0 +1,182 @@
+Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it.
+You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.
+
+For each annotation task, you will be given the following information:
+ - A sentence describing the procedure you're trying to perform.
+ - An optional list of previous questions you already asked, and their answers.
+ - A potential question you could ask your friend next.
+
+You must rate how relevant the potential next question is. By relevant, we mean: given the previous questions and answers, how helpful could an answer to this question be in determining whether the procedure has been completed?
+You can also choose to mark 'Instructions Unclear', which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+
+Some tips:
+ - Only judge the relevance of the potential next question, not the previous questions (which may or may not be relevant).
+ - A question may seem relevant to the task at hand, but you should consider it irrelevant if it doesn't provide essential information to judge the success of the task.
+ - If a seemingly relevant question is redundant with previous questions, you may consider it less relevant.
+ - Assume that the answer to the question won't contradict the information you have from previous questions and answers. If previous questions and answers already contradict each other, consider whether this question could sway you one way or another.
+ - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
+ - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
+
+
+Annotation 1
+===============================
+Instruction: Hold the cobbler needle with the plier
+Previous questions and answers:
+None
+
+Potential next question: Is the person holding the cobbler needle with the plier?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 2
+===============================
+Instruction: Pick the paper on the table
+Previous questions and answers:
+Q1. Is the paper on the table in front of the person?     (Answer: No)
+Q2. Is the person seated at the table while working on the procedure?     (Answer: No)
+
+Potential next question: Is the person wearing a tie while working on the procedure?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 3
+===============================
+Instruction: Cut the piece of meat with the knife in your hand
+Previous questions and answers:
+Q1. Is the person holding a knife in their hand?     (Answer: No)
+Q2. Is the knife in the person's hand pointing upwards?     (Answer: No)
+
+Potential next question: Is the person's hand holding the knife correctly?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 4
+===============================
+Instruction: Put sand in the brick mold
+Previous questions and answers:
+None
+
+Potential next question: Is there a brick mold?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 5
+===============================
+Instruction: Cut a portion of the concrete from a heap of concrete with your hands
+Previous questions and answers:
+None
+
+Potential next question: Is the person's hands visible in the photo?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 6
+===============================
+Instruction: Put a drink in the glass
+Previous questions and answers:
+Q1. Is the person wearing a white shirt?     (Answer: No)
+
+Potential next question: Is the person wearing a black shirt?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 7
+===============================
+Instruction: Dip the napkin in the bucket of water
+Previous questions and answers:
+None
+
+Potential next question: Is there a bucket of water?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 8
+===============================
+Instruction: Close the refrigerator
+Previous questions and answers:
+None
+
+Potential next question: Is the refrigerator open?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 9
+===============================
+Instruction: Drop the foam on the hanger on the sink
+Previous questions and answers:
+Q1. Is the hanger on the sink?     (Answer: No)
+Q2. Is the foam on the hanger on the sink?     (Answer: No)
+
+Potential next question: Is the foam dropped on the hanger on the sink?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 10
+===============================
+Instruction: Plug the plug on the socket with your hand
+Previous questions and answers:
+None
+
+Potential next question: Is there a plug in the image?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+

@@ -1,0 +1,193 @@
+Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it.
+You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.
+
+For each annotation task, you will be given the following information:
+ - A sentence describing the procedure you're trying to perform.
+ - An optional list of previous questions you already asked, and their answers.
+ - A potential question you could ask your friend next.
+
+You must rate how relevant the potential next question is. By relevant, we mean: given the previous questions and answers, how helpful could an answer to this question be in determining whether the procedure has been completed?
+You can also choose to mark 'Instructions Unclear', which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+
+Some tips:
+ - Only judge the relevance of the potential next question, not the previous questions (which may or may not be relevant).
+ - A question may seem relevant to the task at hand, but you should consider it irrelevant if it doesn't provide essential information to judge the success of the task.
+ - If a seemingly relevant question is redundant with previous questions, you may consider it less relevant.
+ - Assume that the answer to the question won't contradict the information you have from previous questions and answers. If previous questions and answers already contradict each other, consider whether this question could sway you one way or another.
+ - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
+ - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
+
+
+Annotation 1
+===============================
+Instruction: Hold circuit board
+Previous questions and answers:
+Q1. Is the person wearing safety goggles?     (Answer: No)
+Q2. Is the person wearing gloves?     (Answer: No)
+Q3. Is the person wearing any protective gear?     (Answer: No)
+
+Potential next question: Is the person wearing a shirt?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 2
+===============================
+Instruction: Smolder the motherboard
+Previous questions and answers:
+Q1. Is the person wearing any protective gear?     (Answer: No)
+
+Potential next question: Is the person wearing any gloves?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 3
+===============================
+Instruction: Place the carton box on the table
+Previous questions and answers:
+None
+
+Potential next question: Is the carton box on the table?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 4
+===============================
+Instruction: Remove the flower from the vase
+Previous questions and answers:
+Q1. Is the flower in the vase?     (Answer: No)
+Q2. Is the flower removed from the vase?     (Answer: No)
+Q3. Is the vase empty now?     (Answer: No)
+Q4. Is the flower still in the vase?     (Answer: No)
+
+Potential next question: Has the flower been removed from the vase?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 5
+===============================
+Instruction: Measure the room with the tape measure
+Previous questions and answers:
+Q1. Is the tape measure in the person's hand?     (Answer: No)
+Q2. Is the tape measure measuring the room?     (Answer: No)
+Q3. Is the person holding the tape measure correctly?     (Answer: No)
+
+Potential next question: Is the person using the tape measure to measure the room?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 6
+===============================
+Instruction: Pick a spanners on the ground
+Previous questions and answers:
+Q1. Do you see a spanners on the ground?     (Answer: No)
+Q2. Is the spanners on the ground?     (Answer: No)
+Q3. Are the spanners on the ground?     (Answer: No)
+
+Potential next question: Are there any spanners on the ground?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 7
+===============================
+Instruction: Smoothen the stair railing with the angle grinder in your hand
+Previous questions and answers:
+None
+
+Potential next question: Is the person holding the angle grinder in their hand?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 8
+===============================
+Instruction: Pick spoon from counter
+Previous questions and answers:
+Q1. Do you see a spoon?     (Answer: No)
+Q2. Is the spoon on the counter?     (Answer: No)
+
+Potential next question: Is the spoon picked up by someone?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 9
+===============================
+Instruction: Drop the mallet and the chisel in the cabinet drawer with your hand
+Previous questions and answers:
+Q1. Is the person's hand visible in the photo?     (Answer: No)
+Q2. Is the person's hand holding the mallet and the chisel?     (Answer: No)
+Q3. Is the person's hand holding the mallet and the chisel inside the cabinet drawer?     (Answer: No)
+Q4. Is the person's hand inside the cabinet drawer with the mallet and the chisel?     (Answer: No)
+
+Potential next question: Is the person's hand holding the mallet and the chisel outside the cabinet drawer?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
+
+Annotation 10
+===============================
+Instruction: Drop the twigs in the dustbin
+Previous questions and answers:
+Q1. Is the person wearing any protective gear?     (Answer: No)
+Q2. Is the person wearing gloves?     (Answer: No)
+
+Potential next question: Is the person wearing safety goggles?
+Your rating (place an 'x' next to your choice):
+1 (very irrelevant): 
+2 (slightly irrelevant): 
+3 (neutral): 
+4 (slightly relevant): 
+5 (very relevant): 
+Instructions Unclear: 
+
