@@ -487,10 +487,6 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     else:
         informativeness = 1.0 - entropy_tensor(probs_actual[:, 0])
     metrics['informativeness'] = informativeness.numpy()
-    pprint(metrics['informativeness'])
-    pprint(probs_actual)
-    pprint(premise_yes)
-    pprint(premise_no)
 
     if previous_questions:
         assert len(previous_questions) == len(previous_answers), "Expected same number of questions and answers!"
@@ -546,7 +542,7 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     if answers is not None and mistake_labels is not None:
         # Calculate an alternative (not reference free) form of informativeness that is negative if leaning toward the incorrect final answer (for mistake or success)
         # (this can only be done when answers is provided, which is during final coherence evaluation rather than coherence-based reranking)
-        leaning_toward_mistake = torch.tensor([1 if p < 0.5 else -1 for p in probs_past_actual[:, 0]])
+        leaning_toward_mistake = torch.tensor([1 if p < 0.5 else -1 for p in probs_past_actual[:, 1]])
         actually_is_mistake = torch.tensor([1 if l else -1 for l in mistake_labels])
         multipliers = leaning_toward_mistake * actually_is_mistake # This will be 1 if leaning the correct way, otherwise -1
         assert sum(multipliers.shape) == len(mistake_labels)
