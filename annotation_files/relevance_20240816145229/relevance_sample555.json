@@ -18,7 +18,7 @@
             "max_informativeness_marginal_so_far": 0.785156,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.384767,
             "informativeness_marginal_x_relevance_marginal": 0.668457,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.668457
         }
     },
     {
@@ -40,7 +40,7 @@
             "max_informativeness_marginal_so_far": 0.858398,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.023891,
             "informativeness_marginal_x_relevance_marginal": 0.01886,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.01886
         }
     },
     {
@@ -62,7 +62,7 @@
             "max_informativeness_marginal_so_far": 0.34668,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.040796,
             "informativeness_marginal_x_relevance_marginal": 0.051971,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.051971
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -79,7 +79,7 @@
             "max_informativeness_marginal_so_far": 0.000977,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 4.7e-05,
             "informativeness_marginal_x_relevance_marginal": 4.7e-05,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 4.7e-05
         }
     },
     {
@@ -109,7 +109,7 @@
             "max_informativeness_marginal_so_far": 0.801758,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.615363,
             "informativeness_marginal_x_relevance_marginal": 0.640625,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.640625
         }
     },
     {
@@ -135,7 +135,7 @@
             "max_informativeness_marginal_so_far": 0.967285,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.822287,
             "informativeness_marginal_x_relevance_marginal": 0.663574,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.663574
         }
     },
     {
@@ -161,7 +161,7 @@
             "max_informativeness_marginal_so_far": 0.88916,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.743933,
             "informativeness_marginal_x_relevance_marginal": 0.519043,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.519043
         }
     },
     {
@@ -178,7 +178,7 @@
             "max_informativeness_marginal_so_far": 0.049805,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.030982,
             "informativeness_marginal_x_relevance_marginal": 0.030975,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.030975
         }
     },
     {
@@ -204,7 +204,7 @@
             "max_informativeness_marginal_so_far": 0.914062,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.368808,
             "informativeness_marginal_x_relevance_marginal": 0.110718,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.110718
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -221,7 +221,7 @@
             "max_informativeness_marginal_so_far": 0.864258,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.841892,
             "informativeness_marginal_x_relevance_marginal": 0.841797,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.841797
         }
     },
     {
@@ -238,7 +238,7 @@
             "max_informativeness_marginal_so_far": 0.976074,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.956533,
             "informativeness_marginal_x_relevance_marginal": 0.956543,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.956543
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -260,7 +260,7 @@
             "max_informativeness_marginal_so_far": 0.547852,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.037719,
             "informativeness_marginal_x_relevance_marginal": 0.048035,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.048035
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -282,7 +282,7 @@
             "max_informativeness_marginal_so_far": 0.836914,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.751915,
             "informativeness_marginal_x_relevance_marginal": 0.729004,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.729004
         }
     },
     {
@@ -299,7 +299,7 @@
             "max_informativeness_marginal_so_far": 0.31543,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.046205,
             "informativeness_marginal_x_relevance_marginal": 0.046204,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.046204
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -316,7 +316,7 @@
             "max_informativeness_marginal_so_far": 0.012695,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.004147,
             "informativeness_marginal_x_relevance_marginal": 0.004147,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.004147
         }
     },
     {
@@ -333,7 +333,7 @@
             "max_informativeness_marginal_so_far": 0.0,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.0,
             "informativeness_marginal_x_relevance_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": -0.0
         }
     },
     {
@@ -355,7 +355,7 @@
             "max_informativeness_marginal_so_far": 0.672363,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.219552,
             "informativeness_marginal_x_relevance_marginal": 0.175781,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.175781
         }
     },
     {
@@ -372,7 +372,7 @@
             "max_informativeness_marginal_so_far": 0.975586,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.95272,
             "informativeness_marginal_x_relevance_marginal": 0.952637,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.952637
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -389,7 +389,7 @@
             "max_informativeness_marginal_so_far": 0.986816,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.923213,
             "informativeness_marginal_x_relevance_marginal": 0.92334,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.92334
         }
     },
     {
@@ -411,7 +411,7 @@
             "max_informativeness_marginal_so_far": 0.847656,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.342291,
             "informativeness_marginal_x_relevance_marginal": 0.040375,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.040375
         }
     },
     {
@@ -428,7 +428,7 @@
             "max_informativeness_marginal_so_far": 0.975586,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.95272,
             "informativeness_marginal_x_relevance_marginal": 0.952637,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.952637
         }
     },
     {
@@ -445,7 +445,7 @@
             "max_informativeness_marginal_so_far": 0.914551,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.854266,
             "informativeness_marginal_x_relevance_marginal": 0.854492,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.854492
         }
     },
     {
@@ -471,7 +471,7 @@
             "max_informativeness_marginal_so_far": 0.580566,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.025608,
             "informativeness_marginal_x_relevance_marginal": 0.036835,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.036835
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -488,7 +488,7 @@
             "max_informativeness_marginal_so_far": 0.848633,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.539926,
             "informativeness_marginal_x_relevance_marginal": 0.540039,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.540039
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -514,7 +514,7 @@
             "max_informativeness_marginal_so_far": 0.217773,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.046716,
             "informativeness_marginal_x_relevance_marginal": 0.046753,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.046753
         }
     },
     {
@@ -531,7 +531,7 @@
             "max_informativeness_marginal_so_far": 0.038574,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.011141,
             "informativeness_marginal_x_relevance_marginal": 0.011139,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.011139
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -553,7 +553,7 @@
             "max_informativeness_marginal_so_far": 0.048828,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.014742,
             "informativeness_marginal_x_relevance_marginal": 0.007526,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.007526
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -579,7 +579,7 @@
             "max_informativeness_marginal_so_far": 0.500977,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.018509,
             "informativeness_marginal_x_relevance_marginal": 0.000999,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.000999
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -605,7 +605,7 @@
             "max_informativeness_marginal_so_far": 0.984375,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.421438,
             "informativeness_marginal_x_relevance_marginal": 0.007698,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.007698
         }
     },
     {
@@ -622,7 +622,7 @@
             "max_informativeness_marginal_so_far": 0.793945,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.762544,
             "informativeness_marginal_x_relevance_marginal": 0.762695,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.762695
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -648,7 +648,7 @@
             "max_informativeness_marginal_so_far": 0.282227,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.033028,
             "informativeness_marginal_x_relevance_marginal": 0.046631,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.046631
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -674,7 +674,7 @@
             "max_informativeness_marginal_so_far": 0.506348,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.039806,
             "informativeness_marginal_x_relevance_marginal": 0.039551,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.039551
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -691,7 +691,7 @@
             "max_informativeness_marginal_so_far": 0.920898,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.910106,
             "informativeness_marginal_x_relevance_marginal": 0.910156,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.910156
         }
     },
     {
@@ -713,7 +713,7 @@
             "max_informativeness_marginal_so_far": 0.920898,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.676847,
             "informativeness_marginal_x_relevance_marginal": 0.904297,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.904297
         }
     },
     {
@@ -730,7 +730,7 @@
             "max_informativeness_marginal_so_far": 0.000977,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.000482,
             "informativeness_marginal_x_relevance_marginal": 0.000482,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.000482
         }
     },
     {
@@ -747,7 +747,7 @@
             "max_informativeness_marginal_so_far": 0.026367,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.015166,
             "informativeness_marginal_x_relevance_marginal": 0.015167,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.015167
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -764,7 +764,7 @@
             "max_informativeness_marginal_so_far": 0.19043,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.139475,
             "informativeness_marginal_x_relevance_marginal": 0.139526,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.139526
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -790,7 +790,7 @@
             "max_informativeness_marginal_so_far": 0.875,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.589742,
             "informativeness_marginal_x_relevance_marginal": 0.84082,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.84082
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -812,7 +812,7 @@
             "max_informativeness_marginal_so_far": 0.761719,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.148773,
             "informativeness_marginal_x_relevance_marginal": 0.075867,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.075867
         }
     },
     {
@@ -834,7 +834,7 @@
             "max_informativeness_marginal_so_far": 0.666504,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.463754,
             "informativeness_marginal_x_relevance_marginal": 0.619141,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.619141
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -851,7 +851,7 @@
             "max_informativeness_marginal_so_far": 0.309082,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.047087,
             "informativeness_marginal_x_relevance_marginal": 0.047089,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.047089
         }
     },
     {
@@ -868,7 +868,7 @@
             "max_informativeness_marginal_so_far": 0.892578,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.865557,
             "informativeness_marginal_x_relevance_marginal": 0.865723,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.865723
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -898,7 +898,7 @@
             "max_informativeness_marginal_so_far": 0.393555,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.120175,
             "informativeness_marginal_x_relevance_marginal": 0.00032,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.00032
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -915,7 +915,7 @@
             "max_informativeness_marginal_so_far": 0.03418,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.013168,
             "informativeness_marginal_x_relevance_marginal": 0.013168,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.013168
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -932,7 +932,7 @@
             "max_informativeness_marginal_so_far": 0.940918,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.128641,
             "informativeness_marginal_x_relevance_marginal": 0.128662,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.128662
         }
     },
     {
@@ -949,7 +949,7 @@
             "max_informativeness_marginal_so_far": 0.975098,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.349473,
             "informativeness_marginal_x_relevance_marginal": 0.349365,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.349365
         }
     },
     {
@@ -971,7 +971,7 @@
             "max_informativeness_marginal_so_far": 0.931641,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.464456,
             "informativeness_marginal_x_relevance_marginal": 0.922852,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.922852
         }
     },
     {
@@ -997,7 +997,7 @@
             "max_informativeness_marginal_so_far": 0.116211,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.007471,
             "informativeness_marginal_x_relevance_marginal": 0.001021,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.001021
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1014,7 +1014,7 @@
             "max_informativeness_marginal_so_far": 0.962891,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.325352,
             "informativeness_marginal_x_relevance_marginal": 0.325439,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.325439
         }
     },
     {
@@ -1036,7 +1036,7 @@
             "max_informativeness_marginal_so_far": 0.370117,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.197619,
             "informativeness_marginal_x_relevance_marginal": 0.01548,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.01548
         }
     },
     {
@@ -1053,7 +1053,7 @@
             "max_informativeness_marginal_so_far": 0.003906,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.001991,
             "informativeness_marginal_x_relevance_marginal": 0.001991,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.001991
         }
     },
     {
@@ -1075,7 +1075,7 @@
             "max_informativeness_marginal_so_far": 0.959473,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.458186,
             "informativeness_marginal_x_relevance_marginal": 0.595215,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.595215
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1092,7 +1092,7 @@
             "max_informativeness_marginal_so_far": 0.405273,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.079748,
             "informativeness_marginal_x_relevance_marginal": 0.079773,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.079773
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1114,7 +1114,7 @@
             "max_informativeness_marginal_so_far": 0.568359,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.431681,
             "informativeness_marginal_x_relevance_marginal": 0.515137,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.515137
         }
     },
     {
@@ -1136,7 +1136,7 @@
             "max_informativeness_marginal_so_far": 0.363281,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.056319,
             "informativeness_marginal_x_relevance_marginal": 0.053284,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.053284
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1158,7 +1158,7 @@
             "max_informativeness_marginal_so_far": 0.45752,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.190447,
             "informativeness_marginal_x_relevance_marginal": 0.37793,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.37793
         }
     },
     {
@@ -1175,7 +1175,7 @@
             "max_informativeness_marginal_so_far": 0.67627,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.618153,
             "informativeness_marginal_x_relevance_marginal": 0.618164,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.618164
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1197,7 +1197,7 @@
             "max_informativeness_marginal_so_far": 0.686035,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.031823,
             "informativeness_marginal_x_relevance_marginal": 0.034851,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.034851
         }
     },
     {
@@ -1214,7 +1214,7 @@
             "max_informativeness_marginal_so_far": 0.944336,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.937881,
             "informativeness_marginal_x_relevance_marginal": 0.937988,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.937988
         }
     },
     {
@@ -1236,7 +1236,7 @@
             "max_informativeness_marginal_so_far": 0.288574,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.151003,
             "informativeness_marginal_x_relevance_marginal": 0.005024,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.005024
         }
     },
     {
@@ -1253,7 +1253,7 @@
             "max_informativeness_marginal_so_far": 0.972168,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.951756,
             "informativeness_marginal_x_relevance_marginal": 0.95166,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.95166
         }
     },
     {
@@ -1270,7 +1270,7 @@
             "max_informativeness_marginal_so_far": 0.956055,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.946252,
             "informativeness_marginal_x_relevance_marginal": 0.946289,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.946289
         }
     },
     {
@@ -1296,7 +1296,7 @@
             "max_informativeness_marginal_so_far": 0.892578,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.560367,
             "informativeness_marginal_x_relevance_marginal": 0.325195,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.325195
         }
     },
     {
@@ -1322,7 +1322,7 @@
             "max_informativeness_marginal_so_far": 0.744141,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.008599,
             "informativeness_marginal_x_relevance_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": -0.0
         }
     },
     {
@@ -1344,7 +1344,7 @@
             "max_informativeness_marginal_so_far": 0.829102,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.381355,
             "informativeness_marginal_x_relevance_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal_ref": -0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1361,7 +1361,7 @@
             "max_informativeness_marginal_so_far": 0.901855,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.449606,
             "informativeness_marginal_x_relevance_marginal": 0.449707,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.449707
         }
     },
     {
@@ -1378,7 +1378,7 @@
             "max_informativeness_marginal_so_far": 0.967285,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.609276,
             "informativeness_marginal_x_relevance_marginal": 0.609375,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.609375
         }
     },
     {
@@ -1400,7 +1400,7 @@
             "max_informativeness_marginal_so_far": 0.684082,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.163338,
             "informativeness_marginal_x_relevance_marginal": 0.074097,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.074097
         }
     },
     {
@@ -1417,7 +1417,7 @@
             "max_informativeness_marginal_so_far": 0.914062,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.68644,
             "informativeness_marginal_x_relevance_marginal": 0.686523,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.686523
         }
     },
     {
@@ -1443,7 +1443,7 @@
             "max_informativeness_marginal_so_far": 0.90918,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.733085,
             "informativeness_marginal_x_relevance_marginal": 0.860352,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.860352
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1465,7 +1465,7 @@
             "max_informativeness_marginal_so_far": 0.632812,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.562208,
             "informativeness_marginal_x_relevance_marginal": 0.587891,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.587891
         }
     },
     {
@@ -1499,7 +1499,7 @@
             "max_informativeness_marginal_so_far": 0.421875,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.211061,
             "informativeness_marginal_x_relevance_marginal": 0.000343,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.000343
         }
     },
     {
@@ -1521,7 +1521,7 @@
             "max_informativeness_marginal_so_far": 0.518555,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.439936,
             "informativeness_marginal_x_relevance_marginal": 0.271484,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.271484
         }
     },
     {
@@ -1538,7 +1538,7 @@
             "max_informativeness_marginal_so_far": 0.023926,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.013902,
             "informativeness_marginal_x_relevance_marginal": 0.013901,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.013901
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1560,7 +1560,7 @@
             "max_informativeness_marginal_so_far": 0.025391,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.013991,
             "informativeness_marginal_x_relevance_marginal": 0.013641,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.013641
         }
     },
     {
@@ -1577,7 +1577,7 @@
             "max_informativeness_marginal_so_far": 0.398926,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.010908,
             "informativeness_marginal_x_relevance_marginal": 0.01091,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.01091
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1594,7 +1594,7 @@
             "max_informativeness_marginal_so_far": 0.010742,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.001513,
             "informativeness_marginal_x_relevance_marginal": 0.001497,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.001497
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1620,7 +1620,7 @@
             "max_informativeness_marginal_so_far": 0.709961,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.486885,
             "informativeness_marginal_x_relevance_marginal": 0.2229,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.2229
         }
     },
     {
@@ -1642,7 +1642,7 @@
             "max_informativeness_marginal_so_far": 0.944824,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.899382,
             "informativeness_marginal_x_relevance_marginal": 0.916016,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.916016
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1659,7 +1659,7 @@
             "max_informativeness_marginal_so_far": 0.952637,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.767738,
             "informativeness_marginal_x_relevance_marginal": 0.911133,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.911133
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1676,7 +1676,7 @@
             "max_informativeness_marginal_so_far": 0.984375,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.974281,
             "informativeness_marginal_x_relevance_marginal": 0.974121,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.974121
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1698,7 +1698,7 @@
             "max_informativeness_marginal_so_far": 0.177246,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.092056,
             "informativeness_marginal_x_relevance_marginal": 0.044128,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.044128
         }
     },
     {
@@ -1728,7 +1728,7 @@
             "max_informativeness_marginal_so_far": 0.849609,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.551209,
             "informativeness_marginal_x_relevance_marginal": 0.181274,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.181274
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1745,7 +1745,7 @@
             "max_informativeness_marginal_so_far": 0.000977,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 5.1e-05,
             "informativeness_marginal_x_relevance_marginal": 5.1e-05,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 5.1e-05
         }
     },
     {
@@ -1771,7 +1771,7 @@
             "max_informativeness_marginal_so_far": 0.530762,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.297031,
             "informativeness_marginal_x_relevance_marginal": 0.204956,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.204956
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1788,7 +1788,7 @@
             "max_informativeness_marginal_so_far": 0.044434,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.026036,
             "informativeness_marginal_x_relevance_marginal": 0.026031,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.026031
         }
     },
     {
@@ -1810,7 +1810,7 @@
             "max_informativeness_marginal_so_far": 0.407715,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.032583,
             "informativeness_marginal_x_relevance_marginal": 0.057922,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.057922
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1836,7 +1836,7 @@
             "max_informativeness_marginal_so_far": 0.045898,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.026344,
             "informativeness_marginal_x_relevance_marginal": 0.014519,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.014519
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1858,7 +1858,7 @@
             "max_informativeness_marginal_so_far": 0.071289,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.011644,
             "informativeness_marginal_x_relevance_marginal": 0.021957,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.021957
         }
     },
     {
@@ -1880,7 +1880,7 @@
             "max_informativeness_marginal_so_far": 0.327148,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.009664,
             "informativeness_marginal_x_relevance_marginal": 0.011818,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.011818
         }
     },
     {
@@ -1910,7 +1910,7 @@
             "max_informativeness_marginal_so_far": 0.604492,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.253966,
             "informativeness_marginal_x_relevance_marginal": 0.00359,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.00359
         }
     },
     {
@@ -1932,7 +1932,7 @@
             "max_informativeness_marginal_so_far": 0.565918,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.450828,
             "informativeness_marginal_x_relevance_marginal": 0.298828,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.298828
         }
     },
     {
@@ -1966,7 +1966,7 @@
             "max_informativeness_marginal_so_far": 0.131836,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.013325,
             "informativeness_marginal_x_relevance_marginal": 0.001931,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.001931
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -1983,7 +1983,7 @@
             "max_informativeness_marginal_so_far": 0.958496,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.947732,
             "informativeness_marginal_x_relevance_marginal": 0.947754,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.947754
         }
     },
     {
@@ -2005,7 +2005,7 @@
             "max_informativeness_marginal_so_far": 0.066406,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.037856,
             "informativeness_marginal_x_relevance_marginal": 0.04303,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.04303
         }
     },
     {
@@ -2035,7 +2035,7 @@
             "max_informativeness_marginal_so_far": 0.26709,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.058999,
             "informativeness_marginal_x_relevance_marginal": 0.060852,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.060852
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -2052,7 +2052,7 @@
             "max_informativeness_marginal_so_far": 0.000977,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.000417,
             "informativeness_marginal_x_relevance_marginal": 0.000417,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.000417
         }
     },
     {
@@ -2078,7 +2078,7 @@
             "max_informativeness_marginal_so_far": 0.94043,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.6268,
             "informativeness_marginal_x_relevance_marginal": 0.905762,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.905762
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -2100,7 +2100,7 @@
             "max_informativeness_marginal_so_far": 0.522461,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.263367,
             "informativeness_marginal_x_relevance_marginal": 0.038116,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.038116
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -2117,7 +2117,7 @@
             "max_informativeness_marginal_so_far": 0.071777,
             "max_informativeness_marginal_so_far_x_mean_relevance_marginal": 0.046613,
             "informativeness_marginal_x_relevance_marginal": 0.0466,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0466
         }
     }
 ]
