@@ -86,7 +86,7 @@ if st.session_state.page == 1:
     """)
 
     st.write("""
-    You can also choose to mark "Instructions Unclear", which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+    You can also choose to mark "Instructions Unclear", which means that the sentence itself is not clear, so you're not sure how to determine whether the procedure is successful. This should only be used in rare cases.
     """)
 
     st.write("""
