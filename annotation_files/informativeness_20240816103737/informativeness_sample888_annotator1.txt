@@ -26,7 +26,7 @@ Q1. Is the person wearing safety goggles?     (Answer: No)
 Q2. Is the person wearing gloves?     (Answer: No)
 
 Last question: Is the person wearing a shirt?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -40,12 +40,12 @@ Annotation 2
 ===============================
 Instruction: Open a tap with your hand
 Previous questions and answers:
-Q1. Is the person's hand visible in the photo?     (Answer: No)
+Q1. Is the person's hand visible in the photo?     (Answer: Yes)
 Q2. Is the person's hand touching the tap?     (Answer: No)
-Q3. Is the person's hand close to the tap?     (Answer: No)
+Q3. Is the person's hand close to the tap?     (Answer: Yes)
 
 Last question: Is the person's hand in front of the tap?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -62,7 +62,7 @@ Previous questions and answers:
 None
 
 Last question: Is there a bowl in the image?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -79,7 +79,7 @@ Previous questions and answers:
 None
 
 Last question: Is the driller wearing a hard hat?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -93,11 +93,10 @@ Annotation 5
 ===============================
 Instruction: Drop sandpaper
 Previous questions and answers:
-Q1. Is there sandpaper in the photo?     (Answer: No)
-Q2. Is the sandpaper falling?     (Answer: No)
+Q1. Is the sandpaper falling?     (Answer: No)
 
 Last question: Is the sandpaper on the floor?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -114,7 +113,7 @@ Previous questions and answers:
 None
 
 Last question: Is the bicycle tube connected to the wood?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -131,7 +130,7 @@ Previous questions and answers:
 None
 
 Last question: Is the tray on the tray rack?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -145,10 +144,10 @@ Annotation 8
 ===============================
 Instruction: Put wood frame on a combination machine
 Previous questions and answers:
-Q1. Do you see a combination machine?     (Answer: No)
+Q1. Do you see a combination machine?     (Answer: Yes)
 
 Last question: Is the wood frame on the combination machine?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -162,10 +161,9 @@ Annotation 9
 ===============================
 Instruction: Spray water on the rear end of the car with the spray nozzle in your two hands
 Previous questions and answers:
-Q1. Is the person holding the spray nozzle in their two hands?     (Answer: No)
-Q2. Is the spray nozzle being used to spray water on the rear end of the car?     (Answer: No)
-Q3. Is the person wearing gloves while spraying water on the rear end of the car?     (Answer: No)
-Q4. Is the person wearing a shirt while spraying water on the rear end of the car?     (Answer: No)
+Q1. Is the person holding the spray nozzle in their two hands?     (Answer: Yes)
+Q2. Is the spray nozzle being used to spray water on the rear end of the car?     (Answer: Yes)
+Q3. Is the person wearing a shirt while spraying water on the rear end of the car?     (Answer: Yes)
 
 Last question: Is the person wearing pants while spraying water on the rear end of the car?
 Last answer: No
@@ -182,12 +180,11 @@ Annotation 10
 ===============================
 Instruction: Open a bottle of
 Previous questions and answers:
-Q1. Is there a bottle in the image?     (Answer: No)
-Q2. Is the bottle open?     (Answer: No)
-Q3. Is there a person in the image?     (Answer: No)
+Q1. Is there a bottle in the image?     (Answer: Yes)
+Q2. Is there a person in the image?     (Answer: Yes)
 
 Last question: Is the person holding the bottle?
-Last answer: No
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 

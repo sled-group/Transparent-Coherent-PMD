@@ -20,11 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Pick leaves
+Instruction: Place a kettle on the countertop
 Previous questions and answers:
 None
 
-Potential next question: Is the person wearing gloves while picking the leaves?
+Potential next question: Is the kettle on the countertop?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,12 +36,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Pick a pack of spinach from the counter
+Instruction: Put the motherboard on the counter top
 Previous questions and answers:
-Q1. Is the person wearing a white shirt?     (Answer: No)
-Q2. Is the person wearing a black shirt?     (Answer: No)
+None
 
-Potential next question: Is the person wearing a blue shirt?
+Potential next question: Is the person wearing a white shirt?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -53,12 +52,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Dip whisk inside soapy water
+Instruction: Spread the dough with your both hands
 Previous questions and answers:
-Q1. Is the person wearing any protective gear?     (Answer: No)
-Q2. Is the person wearing any gloves?     (Answer: No)
+None
 
-Potential next question: Is the person wearing any safety goggles?
+Potential next question: Is the person's hands on the dough?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -70,11 +68,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Screw unscrew the motorcycle rim with the t wrench with your hands
+Instruction: Throw the spoon into the sink
 Previous questions and answers:
 None
 
-Potential next question: Is the person wearing gloves while working on the motorcycle rim?
+Potential next question: Is the sink visible in the photo?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -86,12 +84,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Pick a lid
+Instruction: Cut the picture
 Previous questions and answers:
-Q1. Do you see a lid?     (Answer: No)
-Q2. Is the lid open?     (Answer: No)
+None
 
-Potential next question: Is the lid on the table?
+Potential next question: Is there a picture in the image?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -103,11 +100,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Open a fridge with your hand
+Instruction: Mark the wall with the pencil
 Previous questions and answers:
-Q1. Is the fridge open?     (Answer: No)
+None
 
-Potential next question: Is someone opening the fridge?
+Potential next question: Is the person holding the pencil in their hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -119,12 +116,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: File the nail using a nail file
+Instruction: Pull the thread on both side of the shoe
 Previous questions and answers:
-Q1. Do you see a nail file?     (Answer: No)
-Q2. Is the nail file being used?     (Answer: No)
+Q1. Do you see a shoe?     (Answer: Yes)
+Q2. Is the shoe untied?     (Answer: Yes)
 
-Potential next question: Is the nail being filed?
+Potential next question: Is the thread pulled on both sides of the shoe?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -136,11 +133,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Take water from a small pit with the brick molder in your hand
+Instruction: Put the spray bottle on top of the counter top
 Previous questions and answers:
-Q1. Is the person holding a brick molder in their hand?     (Answer: No)
+None
 
-Potential next question: Is the person using the brick molder to take water from a small pit?
+Potential next question: Is the spray bottle on top of the counter top?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -152,12 +149,11 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop the bowls on the table with your hand
+Instruction: Put the tray on top of a bin
 Previous questions and answers:
-Q1. Are the bowls on the table?     (Answer: No)
-Q2. Is the person holding the bowls in their hand?     (Answer: No)
+None
 
-Potential next question: Is the person about to drop the bowls on the table?
+Potential next question: Is the tray on top of the bin?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -169,11 +165,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Paint the watercolor on the stone with a paint brush
+Instruction: Drop the second piece of wood on a third piece of wood on the stairs
 Previous questions and answers:
-None
+Q1. Is the person working on the stairs?     (Answer: No)
 
-Potential next question: Is the person using a paint brush to paint the watercolor on the stone?
+Potential next question: Is the person standing on the stairs?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

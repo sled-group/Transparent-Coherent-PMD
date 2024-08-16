@@ -20,12 +20,12 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Cut the wood plank with the miter saw in your hand
+Instruction: Hammer the ceiling with the hammer in your hand
 Previous questions and answers:
-Q1. Is the person holding the miter saw in their hand?     (Answer: No)
+None
 
-Last question: Is the wood plank cut?
-Last answer: No
+Last question: Is the hammer in the person's hand?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -37,13 +37,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Wash the mug with the sponge
+Instruction: Take an onions from the cupboard
 Previous questions and answers:
-Q1. Is the person holding a sponge in their hand?     (Answer: No)
-Q2. Is the person using the sponge to wash the mug?     (Answer: No)
+None
 
-Last question: Is the person washing the mug with a sponge?
-Last answer: No
+Last question: Is the onion in the cupboard?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -55,12 +54,12 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Hold flower
+Instruction: Remove the paintbrush from the paint container
 Previous questions and answers:
-Q1. Is the person wearing gloves?     (Answer: No)
+Q1. Is the paintbrush in the person's hand?     (Answer: Yes)
 
-Last question: Is the person wearing a mask?
-Last answer: No
+Last question: Is the paintbrush in the person's hand upside down?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -72,12 +71,12 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Pick the torque wrench
+Instruction: Cut the wood with the cutting machine
 Previous questions and answers:
 None
 
-Last question: Is the person wearing gloves while working on the torque wrench?
-Last answer: No
+Last question: Do you see a cutting machine?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -89,12 +88,12 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Place the bucket of water in your hand on the floor
+Instruction: Hit the brick mold on the ground
 Previous questions and answers:
 None
 
-Last question: Is the person holding the bucket of water in their hand?
-Last answer: No
+Last question: Is the brick mold on the ground?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -106,13 +105,12 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Cut the plant
+Instruction: Put the watercolor tube on the table
 Previous questions and answers:
-Q1. Is the person wearing gloves?     (Answer: No)
-Q2. Is the person wearing safety goggles?     (Answer: No)
+None
 
-Last question: Is the person holding a pair of scissors?
-Last answer: No
+Last question: Is the watercolor tube on the table?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -124,12 +122,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Cover the fuel container
+Instruction: Put your thumb into the hose
 Previous questions and answers:
 None
 
-Last question: Is the person wearing gloves?
-Last answer: No
+Last question: Is the person's thumb in the hose?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -141,13 +139,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Sew the material with the sewing machine on the table
+Instruction: Hold the   handle on the scooter with your hand
 Previous questions and answers:
-Q1. Is the sewing machine on the table?     (Answer: No)
-Q2. Is the person working on the sewing machine on the table?     (Answer: No)
-Q3. Is the person sewing the material with the sewing machine on the table?     (Answer: No)
+None
 
-Last question: Is the person using the sewing machine to sew the material on the table?
+Last question: Is the person holding the handle of the scooter?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -160,12 +156,12 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Pull the thread on both side of the shoe
+Instruction: Drop the plastic container under the kitchen table
 Previous questions and answers:
-Q1. Is the person wearing a shoe?     (Answer: No)
+Q1. Is the plastic container on the kitchen table?     (Answer: Yes)
 
-Last question: Is the shoe on the person's right foot?
-Last answer: No
+Last question: Is the plastic container sitting on the kitchen table?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -177,11 +173,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the peeled back of the avocado pear in the sink
+Instruction: Drop the third carrot on the plate
 Previous questions and answers:
 None
 
-Last question: Do you see an avocado pear?
+Last question: Is the carrot on the plate?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 

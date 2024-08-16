@@ -3,7 +3,7 @@
         "example_id": "9a63a726-df18-4114-9113-86e04fba8eff/213/pos",
         "procedure": "Smoothen a wooden stand with a sand paper",
         "question": "Is the person wearing a shirt?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the person wearing safety goggles?",
@@ -17,20 +17,20 @@
         "nli_metric_scores": {
             "relevance_marginal": 0.01416,
             "informativeness": 0.425781,
-            "informativeness_marginal": 0.21875,
-            "informativeness_marginal_x_relevance_marginal": 0.003098,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.003098
+            "informativeness_marginal": 0.194824,
+            "informativeness_marginal_x_relevance_marginal": 0.002758,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.002758
         }
     },
     {
         "example_id": "dc6c20e4-7376-44d1-91e3-48e83bb0d4a6/142/easyneg_MisalignSRL_V_54843f87-c3c1-40a3-910e-5e72540995d5_1041.836118261654",
         "procedure": "Open a tap with your hand",
         "question": "Is the person's hand in front of the tap?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the person's hand visible in the photo?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the person's hand touching the tap?",
@@ -38,14 +38,14 @@
             ],
             [
                 "Is the person's hand close to the tap?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.046875,
             "informativeness": 0.609863,
-            "informativeness_marginal": 0.528809,
-            "informativeness_marginal_x_relevance_marginal": 0.02478,
+            "informativeness_marginal": 0.698242,
+            "informativeness_marginal_x_relevance_marginal": 0.032715,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -53,27 +53,27 @@
         "example_id": "c2e6d807-d903-4b64-98e1-2c07ca700c78/30/pos",
         "procedure": "Clean the bowl",
         "question": "Is there a bowl in the image?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.291016,
             "informativeness": 0.073242,
-            "informativeness_marginal": 0.796875,
-            "informativeness_marginal_x_relevance_marginal": 0.231934,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.231934
+            "informativeness_marginal": 0.092773,
+            "informativeness_marginal_x_relevance_marginal": 0.026993,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.026993
         }
     },
     {
         "example_id": "1bc1f5e9-9d74-4a07-9d1b-39e5410436b6/32/hardneg",
         "procedure": "Remove the driller from the wall",
         "question": "Is the driller wearing a hard hat?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
-            "relevance_marginal": 0.0,
-            "informativeness": 0.0,
-            "informativeness_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal": 0.0,
+            "relevance_marginal": 0.035156,
+            "informativeness": 0.789551,
+            "informativeness_marginal": 0.889648,
+            "informativeness_marginal_x_relevance_marginal": 0.031281,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -81,70 +81,66 @@
         "example_id": "6442d14c-c02a-4b90-bd52-8b3c187b851b/16/easyneg_MisalignSRL_ARG1_18a3840b-7463-43c4-9aa9-b1d8e486fa84_3550.99032",
         "procedure": "Drop sandpaper",
         "question": "Is the sandpaper on the floor?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
-            [
-                "Is there sandpaper in the photo?",
-                "No"
-            ],
             [
                 "Is the sandpaper falling?",
                 "No"
             ]
         ],
         "nli_metric_scores": {
-            "relevance_marginal": 0.0,
-            "informativeness": 0.0,
-            "informativeness_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "relevance_marginal": 0.30835,
+            "informativeness": 0.799805,
+            "informativeness_marginal": 0.023926,
+            "informativeness_marginal_x_relevance_marginal": 0.007378,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.007378
         }
     },
     {
         "example_id": "c9b40d8d-7cb5-4ce7-9e30-8d36adb94a4f/8/pos",
         "procedure": "Join the wood with the bicycle tube again",
         "question": "Is the bicycle tube connected to the wood?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.986816,
             "informativeness": 0.966309,
-            "informativeness_marginal": 0.934082,
-            "informativeness_marginal_x_relevance_marginal": 0.921875,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.921875
+            "informativeness_marginal": 0.952148,
+            "informativeness_marginal_x_relevance_marginal": 0.939453,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
         "example_id": "e406c375-245c-419e-9525-652f61eda7d3/134/easyneg_MisalignSRL_V_ARG1_952f40df-b1d7-4562-afe4-2a4ff569e949_2369.640843333333",
         "procedure": "Pick the tray from a tray rack with your hands",
         "question": "Is the tray on the tray rack?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.788574,
             "informativeness": 0.31543,
-            "informativeness_marginal": 0.813965,
-            "informativeness_marginal_x_relevance_marginal": 0.64209,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.312988,
+            "informativeness_marginal_x_relevance_marginal": 0.246826,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.246826
         }
     },
     {
         "example_id": "79016c36-16cd-421e-a63a-c80a95b345b0/40/pos",
         "procedure": "Put wood frame on a combination machine",
         "question": "Is the wood frame on the combination machine?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Do you see a combination machine?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.977051,
             "informativeness": 0.98877,
-            "informativeness_marginal": 0.87793,
-            "informativeness_marginal_x_relevance_marginal": 0.85791,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.85791
+            "informativeness_marginal": 0.945312,
+            "informativeness_marginal_x_relevance_marginal": 0.923828,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -155,19 +151,15 @@
         "previous_questions_answers": [
             [
                 "Is the person holding the spray nozzle in their two hands?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the spray nozzle being used to spray water on the rear end of the car?",
-                "No"
-            ],
-            [
-                "Is the person wearing gloves while spraying water on the rear end of the car?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the person wearing a shirt while spraying water on the rear end of the car?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
@@ -182,27 +174,23 @@
         "example_id": "6c56ee6e-c196-400c-90dc-31c887648562/35/pos",
         "procedure": "Open a bottle of",
         "question": "Is the person holding the bottle?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is there a bottle in the image?",
-                "No"
-            ],
-            [
-                "Is the bottle open?",
-                "No"
+                "Yes"
             ],
             [
                 "Is there a person in the image?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.153809,
             "informativeness": 0.293457,
-            "informativeness_marginal": 0.724609,
-            "informativeness_marginal_x_relevance_marginal": 0.11145,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.11145
+            "informativeness_marginal": 0.275391,
+            "informativeness_marginal_x_relevance_marginal": 0.042358,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.042358
         }
     },
     {
@@ -223,13 +211,13 @@
         "example_id": "3d3efb83-4b41-41e3-94db-50f0f22e67ef/43/pos",
         "procedure": "Throw the brick molder towards your left with your hands",
         "question": "Is the brick molder in the person's hands?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
-            "relevance_marginal": 0.0,
-            "informativeness": 0.0,
-            "informativeness_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal": 0.0,
+            "relevance_marginal": 0.679199,
+            "informativeness": 0.228027,
+            "informativeness_marginal": 0.105469,
+            "informativeness_marginal_x_relevance_marginal": 0.071655,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -237,27 +225,23 @@
         "example_id": "1b782473-f0cd-4717-b127-b1b0995cd51b/1/pos",
         "procedure": "Hold a phone in your hand",
         "question": "Is the phone in the person's left hand?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the phone in the person's hand?",
-                "No"
-            ],
-            [
-                "Is the person holding the phone correctly?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the phone in the person's right hand?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.557617,
             "informativeness": 0.59082,
-            "informativeness_marginal": 0.643066,
-            "informativeness_marginal_x_relevance_marginal": 0.358643,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.04541,
+            "informativeness_marginal_x_relevance_marginal": 0.025314,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.025314
         }
     },
     {
@@ -265,12 +249,7 @@
         "procedure": "Put the weeds in a metal bin",
         "question": "Is the person wearing a tie?",
         "answer": "No",
-        "previous_questions_answers": [
-            [
-                "Is the person wearing a shirt?",
-                "No"
-            ]
-        ],
+        "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.012695,
             "informativeness": 0.65332,
@@ -283,19 +262,14 @@
         "example_id": "4453ce6d-e2f9-45eb-8694-daf9057daacf/70/easyneg_MisalignSRL_ARG1_4c642620-db0e-4096-9ece-2b2c6fdb47b0_1192.0669566666666",
         "procedure": "Spread the socks on the cloth rack",
         "question": "Are the socks on the cloth rack?",
-        "answer": "No",
-        "previous_questions_answers": [
-            [
-                "Is there a cloth rack?",
-                "No"
-            ]
-        ],
+        "answer": "Yes",
+        "previous_questions_answers": [],
         "nli_metric_scores": {
-            "relevance_marginal": 0.0,
-            "informativeness": 0.0,
-            "informativeness_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "relevance_marginal": 0.960938,
+            "informativeness": 0.974609,
+            "informativeness_marginal": 0.969727,
+            "informativeness_marginal_x_relevance_marginal": 0.931641,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.931641
         }
     },
     {
@@ -303,12 +277,7 @@
         "procedure": "Throw the spoon into the sink",
         "question": "Is the spoon in the sink?",
         "answer": "No",
-        "previous_questions_answers": [
-            [
-                "Is the sink visible in the photo?",
-                "No"
-            ]
-        ],
+        "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.963379,
             "informativeness": 0.895508,
@@ -321,7 +290,7 @@
         "example_id": "19085a13-c91f-4a45-91ea-889ed9a2727f/69/easyneg_MisalignSRL_V_597b1ca1-e2ea-4a0e-8be0-31b713151ba2_1688.1548951722657",
         "procedure": "Fold the paper",
         "question": "Is the person wearing a black shirt?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the person wearing a white shirt?",
@@ -331,8 +300,8 @@
         "nli_metric_scores": {
             "relevance_marginal": 0.087891,
             "informativeness": 0.244629,
-            "informativeness_marginal": 0.421875,
-            "informativeness_marginal_x_relevance_marginal": 0.037079,
+            "informativeness_marginal": 0.229492,
+            "informativeness_marginal_x_relevance_marginal": 0.020172,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -354,34 +323,34 @@
         "example_id": "0831d387-a359-427c-832d-b306f4720f45/2/pos",
         "procedure": "Paint the bench with the putty knife scraper",
         "question": "Is the putty knife scraper in someone's hand?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the person working on a bench?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the bench painted?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the person using a putty knife scraper?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the putty knife scraper being used to scrape paint off the bench?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the bench painted with the putty knife scraper?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.429443,
             "informativeness": 0.288574,
-            "informativeness_marginal": 0.012695,
-            "informativeness_marginal_x_relevance_marginal": 0.005451,
+            "informativeness_marginal": 0.961914,
+            "informativeness_marginal_x_relevance_marginal": 0.413086,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -389,30 +358,21 @@
         "example_id": "b4707bc6-3579-4992-93ec-0eff21ba8922/53/easyneg_MisalignSRL_ARG1_d38dad44-e3ef-43f0-8613-832757458348_551.48322",
         "procedure": "Put the polaroid camera in an upright position on the table",
         "question": "Has the polaroid camera been put in an upright position on the table?",
-        "answer": "No",
-        "previous_questions_answers": [
-            [
-                "Is the polaroid camera in an upright position on the table?",
-                "No"
-            ],
-            [
-                "Is the polaroid camera in the upright position on the table?",
-                "No"
-            ]
-        ],
+        "answer": "Yes",
+        "previous_questions_answers": [],
         "nli_metric_scores": {
-            "relevance_marginal": 0.0,
-            "informativeness": 0.0,
-            "informativeness_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "relevance_marginal": 0.996094,
+            "informativeness": 0.996094,
+            "informativeness_marginal": 0.99707,
+            "informativeness_marginal_x_relevance_marginal": 0.993164,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.993164
         }
     },
     {
         "example_id": "d38f271c-53f3-4771-8c17-a5157e723067/244/easyneg_MisalignSRL_V_ARG1_952f40df-b1d7-4562-afe4-2a4ff569e949_2821.92545",
         "procedure": "Trim the grass",
         "question": "Is the grass trimmed evenly?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the person holding a pair of scissors?",
@@ -420,48 +380,48 @@
             ],
             [
                 "Is the grass trimmed?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.150024,
             "informativeness": 0.985352,
-            "informativeness_marginal": 0.364258,
-            "informativeness_marginal_x_relevance_marginal": 0.054657,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.054657
+            "informativeness_marginal": 0.916504,
+            "informativeness_marginal_x_relevance_marginal": 0.137451,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.137451
         }
     },
     {
         "example_id": "8a280483-bbfd-4f24-9654-bf6a008e406d/75/easyneg_MisalignSRL_ARG1_6c56ee6e-c196-400c-90dc-31c887648562_356.453",
         "procedure": "Pick a plant vessel",
         "question": "Is the plant vessel in the person's hand?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Do you see a plant vessel?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.611816,
             "informativeness": 0.899414,
-            "informativeness_marginal": 0.098145,
-            "informativeness_marginal_x_relevance_marginal": 0.060059,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.632812,
+            "informativeness_marginal_x_relevance_marginal": 0.387207,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.387207
         }
     },
     {
         "example_id": "d36bb05b-2b9a-468c-93c1-7469aa559baf/56/easyneg_MisalignSRL_ARG1_1e2bab69-06bd-41e1-a718-8befd673718d_449.78817",
         "procedure": "Pick up the spoon",
         "question": "Is the spoon in the person's hand?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.851562,
             "informativeness": 0.958496,
-            "informativeness_marginal": 0.40625,
-            "informativeness_marginal_x_relevance_marginal": 0.345947,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.954102,
+            "informativeness_marginal_x_relevance_marginal": 0.8125,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.8125
         }
     },
     {
@@ -482,23 +442,23 @@
         "example_id": "79c62f24-488e-4a69-8220-3b20cb4bf72b/376/pos",
         "procedure": "Grab the thread",
         "question": "Is the person holding the thread?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Do you see a thread?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the thread being held?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.778809,
             "informativeness": 0.386719,
-            "informativeness_marginal": 0.967285,
-            "informativeness_marginal_x_relevance_marginal": 0.753418,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.753418
+            "informativeness_marginal": 0.243652,
+            "informativeness_marginal_x_relevance_marginal": 0.189819,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -524,111 +484,107 @@
         "example_id": "f6277269-1c87-439c-b5be-d4a02343018a/19/easyneg_MisalignSRL_ARG1_5b97f47f-f015-46f3-8879-3fcc2a61a728_3113.00938762133",
         "procedure": "Hold the spray nozzle with your two hands",
         "question": "Is the spray nozzle being held with one hand?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
-                "Is the person holding the spray nozzle with two hands?",
-                "No"
-            ],
-            [
                 "Is the spray nozzle being held?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the spray nozzle being held with two hands?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.598633,
             "informativeness": 0.496094,
-            "informativeness_marginal": 0.804688,
-            "informativeness_marginal_x_relevance_marginal": 0.481689,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.481689
+            "informativeness_marginal": 0.048828,
+            "informativeness_marginal_x_relevance_marginal": 0.029236,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
         "example_id": "c8f8ebf1-5613-4f4a-802c-ada5e4c4b651/20/pos",
         "procedure": "Hold the pack of meat with your hand",
         "question": "Is the person holding the pack of meat with their hand?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.962402,
             "informativeness": 0.940918,
-            "informativeness_marginal": 0.82666,
-            "informativeness_marginal_x_relevance_marginal": 0.79541,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.79541
+            "informativeness_marginal": 0.907715,
+            "informativeness_marginal_x_relevance_marginal": 0.873535,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
         "example_id": "dc6c20e4-7376-44d1-91e3-48e83bb0d4a6/73/pos",
         "procedure": "Drop the tray on the counter",
         "question": "Is the tray on the counter?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.967285,
             "informativeness": 0.958496,
-            "informativeness_marginal": 0.819336,
-            "informativeness_marginal_x_relevance_marginal": 0.79248,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.79248
+            "informativeness_marginal": 0.952148,
+            "informativeness_marginal_x_relevance_marginal": 0.920898,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
         "example_id": "f93bf4f8-08d1-4f94-8b5f-92fdd6b37e30/93/pos",
         "procedure": "Drop the scissors on the table with your hand",
         "question": "Is the person's hand holding the scissors?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.539062,
             "informativeness": 0.106445,
-            "informativeness_marginal": 0.731445,
-            "informativeness_marginal_x_relevance_marginal": 0.394287,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.394287
+            "informativeness_marginal": 0.021484,
+            "informativeness_marginal_x_relevance_marginal": 0.011581,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
         "example_id": "28313dbe-ad68-43cb-bb72-602d5600d15a/113/easyneg_MisalignSRL_V_4d89d233-dbcf-4ea2-a90f-9a2c3b42d1d5_1216.1330633333332",
         "procedure": "Cut the wood plank with the miter saw in your hand",
         "question": "Is the wood plank cut?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the person holding the miter saw in their hand?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.978516,
             "informativeness": 0.953125,
-            "informativeness_marginal": 0.853027,
-            "informativeness_marginal_x_relevance_marginal": 0.834473,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.992188,
+            "informativeness_marginal_x_relevance_marginal": 0.970703,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.970703
         }
     },
     {
         "example_id": "c6c0171a-50b6-4541-b7d8-daee89bef013/56/hardneg",
         "procedure": "Wash the mug with the sponge",
         "question": "Is the person washing the mug with a sponge?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the person holding a sponge in their hand?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the person using the sponge to wash the mug?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.470947,
             "informativeness": 0.887207,
-            "informativeness_marginal": 0.001465,
-            "informativeness_marginal_x_relevance_marginal": 0.00069,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.00069
+            "informativeness_marginal": 0.914062,
+            "informativeness_marginal_x_relevance_marginal": 0.43042,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.43042
         }
     },
     {
@@ -657,10 +613,10 @@
         "answer": "No",
         "previous_questions_answers": [],
         "nli_metric_scores": {
-            "relevance_marginal": 0.0,
-            "informativeness": 0.0,
-            "informativeness_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal": 0.0,
+            "relevance_marginal": 0.058044,
+            "informativeness": 0.496094,
+            "informativeness_marginal": 0.341309,
+            "informativeness_marginal_x_relevance_marginal": 0.019806,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -671,10 +627,10 @@
         "answer": "No",
         "previous_questions_answers": [],
         "nli_metric_scores": {
-            "relevance_marginal": 0.0,
-            "informativeness": 0.0,
-            "informativeness_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal": 0.0,
+            "relevance_marginal": 0.655273,
+            "informativeness": 0.806641,
+            "informativeness_marginal": 0.821777,
+            "informativeness_marginal_x_relevance_marginal": 0.538574,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -686,11 +642,7 @@
         "previous_questions_answers": [
             [
                 "Is the person wearing gloves?",
-                "No"
-            ],
-            [
-                "Is the person wearing safety goggles?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
@@ -705,40 +657,40 @@
         "example_id": "281a7f2e-74e0-45b8-b0ca-6f03b58ac6d9/12/easyneg_MisalignSRL_V_90093217-6a61-48ce-b737-e581499cf491_513.4475199999999",
         "procedure": "Cover the fuel container",
         "question": "Is the person wearing gloves?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.14917,
             "informativeness": 0.07959,
-            "informativeness_marginal": 0.003906,
-            "informativeness_marginal_x_relevance_marginal": 0.000583,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.037598,
+            "informativeness_marginal_x_relevance_marginal": 0.005608,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.005608
         }
     },
     {
         "example_id": "24898dc1-61bd-4e90-a034-2853b96e4a91/34/pos",
         "procedure": "Sew the material with the sewing machine on the table",
         "question": "Is the person using the sewing machine to sew the material on the table?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the sewing machine on the table?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the person working on the sewing machine on the table?",
-                "No"
+                "Yes"
             ],
             [
                 "Is the person sewing the material with the sewing machine on the table?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.407227,
             "informativeness": 0.92334,
-            "informativeness_marginal": 0.014648,
-            "informativeness_marginal_x_relevance_marginal": 0.005966,
+            "informativeness_marginal": 0.850586,
+            "informativeness_marginal_x_relevance_marginal": 0.346436,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -746,93 +698,93 @@
         "example_id": "79c62f24-488e-4a69-8220-3b20cb4bf72b/173/pos",
         "procedure": "Pull the thread on both side of the shoe",
         "question": "Is the shoe on the person's right foot?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the person wearing a shoe?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.14502,
             "informativeness": 0.0,
-            "informativeness_marginal": 0.13623,
-            "informativeness_marginal_x_relevance_marginal": 0.01976,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.01976
+            "informativeness_marginal": 0.013672,
+            "informativeness_marginal_x_relevance_marginal": 0.001984,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.001984
         }
     },
     {
         "example_id": "1ab9d5f7-0181-458e-a5e7-72ce87501f3e/48/pos",
         "procedure": "Drop the peeled back of the avocado pear in the sink",
         "question": "Do you see an avocado pear?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.155762,
             "informativeness": 0.401367,
-            "informativeness_marginal": 0.914062,
-            "informativeness_marginal_x_relevance_marginal": 0.142334,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.142334
+            "informativeness_marginal": 0.350586,
+            "informativeness_marginal_x_relevance_marginal": 0.054596,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.054596
         }
     },
     {
         "example_id": "4d89d233-dbcf-4ea2-a90f-9a2c3b42d1d5/16/easyneg_MisalignSRL_V_c7d31de3-e2fc-4542-a318-7719a6922bb4_1385.0797733333334",
         "procedure": "Hammer the ceiling with the hammer in your hand",
         "question": "Is the hammer in the person's hand?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.560059,
             "informativeness": 0.024414,
-            "informativeness_marginal": 0.971191,
-            "informativeness_marginal_x_relevance_marginal": 0.543945,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.011719,
+            "informativeness_marginal_x_relevance_marginal": 0.006561,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.006561
         }
     },
     {
         "example_id": "64b355f3-ef49-4990-8622-9e9eef68b495/139/hardneg",
         "procedure": "Take an onions from the cupboard",
         "question": "Is the onion in the cupboard?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.456543,
             "informativeness": 0.004883,
-            "informativeness_marginal": 0.649414,
-            "informativeness_marginal_x_relevance_marginal": 0.296387,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.001465,
+            "informativeness_marginal_x_relevance_marginal": 0.000669,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.000669
         }
     },
     {
         "example_id": "f8cbac27-db1d-4be2-85d5-5af602246f61/21/easyneg_MisalignSRL_ARG1_45199793-36b2-45e0-8649-2515afaffa3a_2915.256441933333",
         "procedure": "Remove the paintbrush from the paint container",
         "question": "Is the paintbrush in the person's hand upside down?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the paintbrush in the person's hand?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.313721,
             "informativeness": 0.072266,
-            "informativeness_marginal": 0.000977,
-            "informativeness_marginal_x_relevance_marginal": 0.000306,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.000306
+            "informativeness_marginal": 0.270508,
+            "informativeness_marginal_x_relevance_marginal": 0.084839,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
         "example_id": "130e4f24-c55c-4d09-a1fc-7d9198ae1030/82/hardneg",
         "procedure": "Cut the wood with the cutting machine",
         "question": "Do you see a cutting machine?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.432129,
             "informativeness": 0.025391,
-            "informativeness_marginal": 0.98877,
-            "informativeness_marginal_x_relevance_marginal": 0.427246,
+            "informativeness_marginal": 0.012695,
+            "informativeness_marginal_x_relevance_marginal": 0.005486,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
@@ -840,42 +792,42 @@
         "example_id": "91c006d8-b55c-4426-a7b6-dd527a8ec27d/272/easyneg_MisalignSRL_ARG1_45199793-36b2-45e0-8649-2515afaffa3a_96.9335786",
         "procedure": "Hit the brick mold on the ground",
         "question": "Is the brick mold on the ground?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.79834,
             "informativeness": 0.59375,
-            "informativeness_marginal": 0.746094,
-            "informativeness_marginal_x_relevance_marginal": 0.595703,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.367676,
+            "informativeness_marginal_x_relevance_marginal": 0.293457,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.293457
         }
     },
     {
         "example_id": "8da5f5a1-ae5f-45e8-a7f7-3226547c3c4d/88/easyneg_MisalignSRL_V_ARG1_dc6c20e4-7376-44d1-91e3-48e83bb0d4a6_522.5837486",
         "procedure": "Put the watercolor tube on the table",
         "question": "Is the watercolor tube on the table?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.989746,
             "informativeness": 0.989258,
-            "informativeness_marginal": 0.927246,
-            "informativeness_marginal_x_relevance_marginal": 0.917969,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.0
+            "informativeness_marginal": 0.984375,
+            "informativeness_marginal_x_relevance_marginal": 0.974121,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.974121
         }
     },
     {
         "example_id": "ce2cf2f6-24aa-4195-93a6-f82b283815e6/101/pos",
         "procedure": "Put your thumb into the hose",
         "question": "Is the person's thumb in the hose?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [],
         "nli_metric_scores": {
             "relevance_marginal": 0.979004,
             "informativeness": 0.974609,
-            "informativeness_marginal": 0.869629,
-            "informativeness_marginal_x_relevance_marginal": 0.851562,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.851562
+            "informativeness_marginal": 0.972168,
+            "informativeness_marginal_x_relevance_marginal": 0.95166,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     },
     {
@@ -896,19 +848,19 @@
         "example_id": "0e6fb738-05fc-4dd5-9746-a8e10efe8c20/68/pos",
         "procedure": "Drop the plastic container under the kitchen table",
         "question": "Is the plastic container sitting on the kitchen table?",
-        "answer": "No",
+        "answer": "Yes",
         "previous_questions_answers": [
             [
                 "Is the plastic container on the kitchen table?",
-                "No"
+                "Yes"
             ]
         ],
         "nli_metric_scores": {
             "relevance_marginal": 0.44873,
             "informativeness": 0.834473,
-            "informativeness_marginal": 0.994141,
-            "informativeness_marginal_x_relevance_marginal": 0.446045,
-            "informativeness_marginal_x_relevance_marginal_ref": 0.446045
+            "informativeness_marginal": 0.007812,
+            "informativeness_marginal_x_relevance_marginal": 0.003506,
+            "informativeness_marginal_x_relevance_marginal_ref": 0.003506
         }
     },
     {
@@ -918,10 +870,10 @@
         "answer": "No",
         "previous_questions_answers": [],
         "nli_metric_scores": {
-            "relevance_marginal": 0.0,
-            "informativeness": 0.0,
-            "informativeness_marginal": 0.0,
-            "informativeness_marginal_x_relevance_marginal": 0.0,
+            "relevance_marginal": 0.973633,
+            "informativeness": 0.920898,
+            "informativeness_marginal": 0.9375,
+            "informativeness_marginal_x_relevance_marginal": 0.912598,
             "informativeness_marginal_x_relevance_marginal_ref": 0.0
         }
     }

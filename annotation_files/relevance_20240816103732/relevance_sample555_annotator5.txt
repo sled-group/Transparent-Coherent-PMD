@@ -20,11 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Put the spray bottle on top of the counter top
+Instruction: Hold the cobbler needle with the plier
 Previous questions and answers:
 None
 
-Potential next question: Is the spray bottle on top of the counter top?
+Potential next question: Is the person holding the cobbler needle with the plier?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,11 +36,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Place your right hand on the steering wheel of the lawn mower
+Instruction: Pick the paper on the table
 Previous questions and answers:
-None
+Q1. Is the paper on the table in front of the person?     (Answer: Yes)
+Q2. Is the person seated at the table while working on the procedure?     (Answer: Yes)
 
-Potential next question: Is the person's right hand on the steering wheel of the lawn mower?
+Potential next question: Is the person wearing a tie while working on the procedure?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -52,11 +53,12 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Drop the excess concrete on the   heap of concrete on the ground
+Instruction: Cut the piece of meat with the knife in your hand
 Previous questions and answers:
-Q1. Is the person wearing safety goggles?     (Answer: No)
+Q1. Is the person holding a knife in their hand?     (Answer: Yes)
+Q2. Is the knife in the person's hand pointing upwards?     (Answer: Yes)
 
-Potential next question: Is the person wearing a hard hat?
+Potential next question: Is the person's hand holding the knife correctly?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -68,11 +70,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Hold flower
+Instruction: Put sand in the brick mold
 Previous questions and answers:
-Q1. Is the flower in the person's hand?     (Answer: No)
+None
 
-Potential next question: Is the person holding a flower?
+Potential next question: Is there a brick mold?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -84,11 +86,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Unroll the thread on the bed with your hand
+Instruction: Cut a portion of the concrete from a heap of concrete with your hands
 Previous questions and answers:
-Q1. Is the person's hand visible in the photo?     (Answer: No)
+None
 
-Potential next question: Is the person's hand on the bed?
+Potential next question: Is the person's hands visible in the photo?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -100,11 +102,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Prune the fruit stalk from the lemon with the secateurs
+Instruction: Put a drink in the glass
 Previous questions and answers:
-Q1. Is the person holding the secateurs in their right hand?     (Answer: No)
+Q1. Is the person wearing a white shirt?     (Answer: No)
 
-Potential next question: Is the person's right hand visible in the photo?
+Potential next question: Is the person wearing a black shirt?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -116,11 +118,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Turn off the garden hose
+Instruction: Dip the napkin in the bucket of water
 Previous questions and answers:
 None
 
-Potential next question: Is the hose connected to a source of water?
+Potential next question: Is there a bucket of water?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -132,12 +134,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Lift the robot
+Instruction: Close the refrigerator
 Previous questions and answers:
-Q1. Is the person wearing a white shirt?     (Answer: No)
-Q2. Is the person wearing a black shirt?     (Answer: No)
+None
 
-Potential next question: Is the person wearing a blue shirt?
+Potential next question: Is the refrigerator open?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -149,12 +150,12 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop a lid
+Instruction: Drop the foam on the hanger on the sink
 Previous questions and answers:
-Q1. Do you see a lid?     (Answer: No)
-Q2. Is the lid dropped?     (Answer: No)
+Q1. Is the hanger on the sink?     (Answer: Yes)
+Q2. Is the foam on the hanger on the sink?     (Answer: Yes)
 
-Potential next question: Is the lid on the ground?
+Potential next question: Is the foam dropped on the hanger on the sink?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -166,11 +167,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the tissue on the table with your hand
+Instruction: Plug the plug on the socket with your hand
 Previous questions and answers:
-Q1. Is the tissue on the table?     (Answer: No)
+None
 
-Potential next question: Is the tissue dropped on the table?
+Potential next question: Is there a plug in the image?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 

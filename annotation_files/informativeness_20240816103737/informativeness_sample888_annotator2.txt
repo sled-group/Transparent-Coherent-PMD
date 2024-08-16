@@ -20,11 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Hammer the ceiling with the hammer in your hand
+Instruction: Put the screw down
 Previous questions and answers:
 None
 
-Last question: Is the hammer in the person's hand?
+Last question: Is the person wearing a white shirt?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -37,12 +37,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Take an onions from the cupboard
+Instruction: Throw the brick molder towards your left with your hands
 Previous questions and answers:
 None
 
-Last question: Is the onion in the cupboard?
-Last answer: No
+Last question: Is the brick molder in the person's hands?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -54,12 +54,13 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Remove the paintbrush from the paint container
+Instruction: Hold a phone in your hand
 Previous questions and answers:
-Q1. Is the paintbrush in the person's hand?     (Answer: No)
+Q1. Is the phone in the person's hand?     (Answer: Yes)
+Q2. Is the phone in the person's right hand?     (Answer: Yes)
 
-Last question: Is the paintbrush in the person's hand upside down?
-Last answer: No
+Last question: Is the phone in the person's left hand?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -71,11 +72,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Cut the wood with the cutting machine
+Instruction: Put the weeds in a metal bin
 Previous questions and answers:
 None
 
-Last question: Do you see a cutting machine?
+Last question: Is the person wearing a tie?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -88,12 +89,12 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Hit the brick mold on the ground
+Instruction: Spread the socks on the cloth rack
 Previous questions and answers:
 None
 
-Last question: Is the brick mold on the ground?
-Last answer: No
+Last question: Are the socks on the cloth rack?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -105,11 +106,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Put the watercolor tube on the table
+Instruction: Throw the spoon into the sink
 Previous questions and answers:
 None
 
-Last question: Is the watercolor tube on the table?
+Last question: Is the spoon in the sink?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -122,12 +123,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Put your thumb into the hose
+Instruction: Fold the paper
 Previous questions and answers:
-None
+Q1. Is the person wearing a white shirt?     (Answer: No)
 
-Last question: Is the person's thumb in the hose?
-Last answer: No
+Last question: Is the person wearing a black shirt?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -139,11 +140,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Hold the   handle on the scooter with your hand
+Instruction: Remove a tray from the trolley
 Previous questions and answers:
 None
 
-Last question: Is the person holding the handle of the scooter?
+Last question: Do you see a tray?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -156,12 +157,16 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop the plastic container under the kitchen table
+Instruction: Paint the bench with the putty knife scraper
 Previous questions and answers:
-Q1. Is the plastic container on the kitchen table?     (Answer: No)
+Q1. Is the person working on a bench?     (Answer: Yes)
+Q2. Is the bench painted?     (Answer: Yes)
+Q3. Is the person using a putty knife scraper?     (Answer: Yes)
+Q4. Is the putty knife scraper being used to scrape paint off the bench?     (Answer: Yes)
+Q5. Is the bench painted with the putty knife scraper?     (Answer: Yes)
 
-Last question: Is the plastic container sitting on the kitchen table?
-Last answer: No
+Last question: Is the putty knife scraper in someone's hand?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -173,12 +178,12 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the third carrot on the plate
+Instruction: Put the polaroid camera in an upright position on the table
 Previous questions and answers:
 None
 
-Last question: Is the carrot on the plate?
-Last answer: No
+Last question: Has the polaroid camera been put in an upright position on the table?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 

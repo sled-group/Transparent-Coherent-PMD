@@ -20,11 +20,13 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Place a kettle on the countertop
+Instruction: Hold circuit board
 Previous questions and answers:
-None
+Q1. Is the person wearing safety goggles?     (Answer: No)
+Q2. Is the person wearing gloves?     (Answer: No)
+Q3. Is the person wearing any protective gear?     (Answer: No)
 
-Potential next question: Is the kettle on the countertop?
+Potential next question: Is the person wearing a shirt?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -36,11 +38,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Put the motherboard on the counter top
+Instruction: Smolder the motherboard
 Previous questions and answers:
-None
+Q1. Is the person wearing any protective gear?     (Answer: No)
 
-Potential next question: Is the person wearing a white shirt?
+Potential next question: Is the person wearing any gloves?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -52,11 +54,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Spread the dough with your both hands
+Instruction: Place the carton box on the table
 Previous questions and answers:
 None
 
-Potential next question: Is the person's hands on the dough?
+Potential next question: Is the carton box on the table?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -68,11 +70,12 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Throw the spoon into the sink
+Instruction: Remove the flower from the vase
 Previous questions and answers:
-None
+Q1. Is the vase empty now?     (Answer: Yes)
+Q2. Is the flower still in the vase?     (Answer: No)
 
-Potential next question: Is the sink visible in the photo?
+Potential next question: Has the flower been removed from the vase?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -84,11 +87,13 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Cut the picture
+Instruction: Measure the room with the tape measure
 Previous questions and answers:
-None
+Q1. Is the tape measure in the person's hand?     (Answer: Yes)
+Q2. Is the tape measure measuring the room?     (Answer: Yes)
+Q3. Is the person holding the tape measure correctly?     (Answer: Yes)
 
-Potential next question: Is there a picture in the image?
+Potential next question: Is the person using the tape measure to measure the room?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -100,11 +105,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Mark the wall with the pencil
+Instruction: Pick a spanners on the ground
 Previous questions and answers:
-Q1. Is the pencil in the person's hand?     (Answer: No)
+Q1. Do you see a spanners on the ground?     (Answer: Yes)
 
-Potential next question: Is the person holding the pencil in their hand?
+Potential next question: Are there any spanners on the ground?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -116,12 +121,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Pull the thread on both side of the shoe
+Instruction: Smoothen the stair railing with the angle grinder in your hand
 Previous questions and answers:
-Q1. Do you see a shoe?     (Answer: No)
-Q2. Is the shoe untied?     (Answer: No)
+None
 
-Potential next question: Is the thread pulled on both sides of the shoe?
+Potential next question: Is the person holding the angle grinder in their hand?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -133,11 +137,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Put the spray bottle on top of the counter top
+Instruction: Pick spoon from counter
 Previous questions and answers:
-None
+Q1. Do you see a spoon?     (Answer: Yes)
+Q2. Is the spoon on the counter?     (Answer: Yes)
 
-Potential next question: Is the spray bottle on top of the counter top?
+Potential next question: Is the spoon picked up by someone?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -149,11 +154,12 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Put the tray on top of a bin
+Instruction: Drop the mallet and the chisel in the cabinet drawer with your hand
 Previous questions and answers:
-None
+Q1. Is the person's hand visible in the photo?     (Answer: Yes)
+Q2. Is the person's hand holding the mallet and the chisel?     (Answer: Yes)
 
-Potential next question: Is the tray on top of the bin?
+Potential next question: Is the person's hand holding the mallet and the chisel outside the cabinet drawer?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
@@ -165,11 +171,12 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the second piece of wood on a third piece of wood on the stairs
+Instruction: Drop the twigs in the dustbin
 Previous questions and answers:
-Q1. Is the person working on the stairs?     (Answer: No)
+Q1. Is the person wearing any protective gear?     (Answer: No)
+Q2. Is the person wearing gloves?     (Answer: No)
 
-Potential next question: Is the person standing on the stairs?
+Potential next question: Is the person wearing safety goggles?
 Your rating (place an 'x' next to your choice):
 1 (very irrelevant): 
 2 (slightly irrelevant): 
