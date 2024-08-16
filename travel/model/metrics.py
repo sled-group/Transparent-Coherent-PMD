@@ -511,7 +511,7 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
         probs_past_yes = run_nli(nli_tokenizer, nli_model, list(zip(premise_past_yes, hypothesis_procedure)))
         probs_past_no = run_nli(nli_tokenizer, nli_model, list(zip(premise_past_no, hypothesis_procedure)))
         if answers:
-            probs_past_actual = torch.stack([probs_past_yes[i] if answers[i] == VQAResponse.Yes else probs_past_no[i] for i in range(len(answers))])
+            probs_past_actual = torch.stack([probs_past_yes[i] if answers[i] == "Yes" else probs_past_no[i] for i in range(len(answers))])
         
         # Marginal relevance: how much probability of success changes depending on the answer AND information we already extracted from the image
         relevance_marginal = torch.abs(probs_past_yes[:, 0] - probs_past_no[:, 0])
