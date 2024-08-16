@@ -694,7 +694,7 @@ if worker_index == 0:
                                             rephrase_batch_size=args.generation_batch_size)
 
     # Get accuracy and coherence metrics
-    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS)
+    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
     coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
 
     # Save accuracy and coherence metrics

@@ -39,7 +39,7 @@ parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)),
 parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
 parser.add_argument("--condition_questions_with_frames", action="store_true", help="Pass this argument to pass frame into VLM while generating questions (usually off by default since this hurts performance).")
-parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
+parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "relevance", "informativeness", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
 parser.add_argument("--exclude_history_from_vqa", action="store_true", help="Pass this argument to exclude the dialog history from VQA, and instead directly ask only questions.")
 parser.add_argument("--coherence_evaluation_strategy", type=str, default="vlm", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
@@ -361,7 +361,7 @@ if not is_complete:
 
                 new_questions = selected_questions
 
-            elif args.question_selection_strategy == "coherence":
+            elif args.question_selection_strategy in ["relevance", "informativeness", "coherence"]:
                 # Calculate coherence metrics for each candidate question
                 nli_outputs = question_coherence_metrics_nli(
                     nli_tokenizer, 
@@ -379,6 +379,11 @@ if not is_complete:
                 selected_questions = []
                 new_scores = []
                 parallel_idx = 0
+                ranking_key_mapping = {
+                    "relevance": "relevance_marginal",
+                    "informativeness": "informativeness_marginal",
+                    "coherence": "informativeness_marginal_x_relevance_marginal",
+                }
                 for batch_sub_idx, beam_search_questions in enumerate(new_questions):
                     this_nli_outputs = [{k: round(float(nli_outputs[k][i]), 3) if type(nli_outputs[k][i]) != str else nli_outputs[k][i] for k in nli_outputs} for i in range(parallel_idx, parallel_idx + len(beam_search_questions))]
                     candidate_questions_scores[batch_sub_idx].append(this_nli_outputs)
@@ -386,7 +391,7 @@ if not is_complete:
 
                     # Use marginal relevance (consistency) and expected informativeness (verifiability) to rank candidates
                     candidate_scores = np.array(
-                        [candidate_metrics['informativeness_marginal_x_relevance_marginal'] for candidate_metrics in this_nli_outputs]
+                        [candidate_metrics[ranking_key_mapping[args.question_selection_strategy]] for candidate_metrics in this_nli_outputs]
                     )
 
                     best_candidate = np.argmax(candidate_scores)
@@ -696,7 +701,7 @@ if worker_index == 0:
                 if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
                     break
             # OR if success score is within early_stop_delta / 2 of 0.0 or 1.0, stop
-            if success_prob < args.early_stop_delta / 2 or 1.0 - success_prob < args.early_stop_delta:
+            if success_prob < args.early_stop_delta / 2 or 1.0 - success_prob < args.early_stop_delta / 2:
                 break           
         all_probs.append(round(final_success_prob, 6))   
 
@@ -727,15 +732,15 @@ if worker_index == 0:
     print(f"({worker_index}) Evaluating outputs...")
     metrics = {}
 
-    # Calculate coherence metrics of final rollouts
-    all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
-    all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
-
-    label_answer_mapping = {0: "No", 1: "Yes"}
-    all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
-    all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
-
     if args.coherence_evaluation_strategy == "nli":
+        # Calculate coherence metrics of final rollouts
+        all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
+        all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+
+        label_answer_mapping = {0: "No", 1: "Yes"}
+        all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
+        all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+
         all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
                                                 nli_model,
                                                 tokenizer,
@@ -747,13 +752,14 @@ if worker_index == 0:
                                                 previous_answers=all_previous_answers,
                                                 mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)],
                                                 rephrase_batch_size=args.generation_batch_size)
+
     elif args.coherence_evaluation_strategy == "vlm":
         all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs, all_success_probs_negated)
     else:
         raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
 
     # Get accuracy and coherence metrics
-    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS)
+    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
     coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
 
     # Save accuracy and coherence metrics

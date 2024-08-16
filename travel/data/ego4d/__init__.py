@@ -787,10 +787,14 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                                                 ("with your right hand", "with your hand"),
                                                 ("with both hands", "with your hands"),
                                                 ("with left hand", "with your hand"),
-                                                ("with right hand", "with your hand")]:
+                                                ("with right hand", "with your hand"),
+                                                (" another ", " the "),
+                                                (" more ", " "),
+                                                (" additional ", " ")]:
             if not("left hand" in instruction_text and "right hand" in instruction_text):
                 # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove unneeded mentions of this
                 instruction_text = instruction_text.replace(original_text, replaced_text)
+
         return instruction_text
 
     def generate_examples(self,

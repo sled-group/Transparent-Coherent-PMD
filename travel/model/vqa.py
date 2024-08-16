@@ -26,7 +26,8 @@ def run_vqa(vlm: PreTrainedModel,
             prompts: list[str],
             frames: list[Image.Image],
             batch_size: int=1,
-            cache_path: Optional[str]=None) -> torch.FloatTensor:
+            cache_path: Optional[str]=None,
+            return_attention: bool=False) -> torch.FloatTensor:
     """
     Runs VQA for given prompts and frames in batches with a given VLM and its processor.
 
@@ -36,6 +37,7 @@ def run_vqa(vlm: PreTrainedModel,
     :param frames: List of images to ask visual questions about.
     :param batch_size: Batch size for running inference.
     :param cache_path: .pt file to cache incomplete logits in.
+    :param return_attention: Whether to return attentions for passed prompts in addition to logits.
     :return: Full tensor of logits output from each question. The process of mapping this into VQAOutputs instances requires task/process-specific information, so it should be done outside of this method.
     """
     assert len(prompts) == len(frames), "Need same number of prompts and frames to run VQA!"
@@ -64,7 +66,8 @@ def run_vqa(vlm: PreTrainedModel,
             # Run through VLM to get logits
             inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
             inputs = inputs.to(vlm.device)
-            this_logits = vlm(**inputs).logits
+            outputs = vlm(**inputs)
+            this_logits = outputs.logits
             inputs = inputs.to('cpu')
             this_logits = this_logits[:, -1].detach().cpu()
             logits = torch.cat([logits, this_logits], dim=0)

@@ -398,7 +398,6 @@ def generate_risk_coverage_plot(coverages, risks, result_names, save_paths):
 
 #     return negation_based_relevance, informativeness
 
-
 def rephrase_question_answer(questions: list[str], answers: list[str], tokenizer, lm, generation_batch_size: int=20):
     # return f"{question} {answer.name}."
     assert all(a == "Yes" or a == "No" for a in answers), "Expected all answers to be 'Yes' or 'No', but got " + str(answers)
@@ -410,7 +409,7 @@ def rephrase_question_answer(questions: list[str], answers: list[str], tokenizer
         "Question: Is the orange peeled?\nAnswer: Yes\nStatement: The orange is peeled.",
         "Question: Is the mug empty?\nAnswer: No\nStatement: The mug is not empty.",
         "Question: Are there hedge trimmers in the image?\nAnswer: Yes\nStatement: There are hedge trimmers in the image.",
-        "Question: Has the light switch been turned on?\nAnswer: No\nStatement: The light switch has been turned on.",
+        "Question: Has the light switch been turned on?\nAnswer: No\nStatement: The light switch has not been turned on.",
         "Question: Does the table have any cups on it?\nAnswer: Yes\nStatement: The table has cups on it.",
         "Question: Is the cabinet closed?\nAnswer: No\nStatement: The cabinet is not closed.",
     ]
@@ -474,12 +473,11 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     relevance = torch.abs(probs_yes[:, 0] - probs_no[:, 0])
     metrics['relevance'] = relevance.numpy()
 
-    # Expected informativeness: on average (or for actual answer), how confident are we that the answer to the question would indicate a success or mistake
+    # Potential informativeness: at most (or for actual answer), how confident will we be that the answer to the question would indicate a success or mistake
     if not answers:
-        informativeness = 1.0 - entropy_tensor(probs_yes[:, 0])
-        informativeness += 1.0 - entropy_tensor(probs_no[:, 0])
-        informativeness /= 2.0
-        informativeness = informativeness
+        informativeness_yes = 1.0 - entropy_tensor(probs_yes[:, 0])
+        informativeness_no = 1.0 - entropy_tensor(probs_no[:, 0])
+        informativeness = torch.max(torch.cat((informativeness_yes.unsqueeze(1), informativeness_no.unsqueeze(1)), dim=-1), dim=-1).values
     else:
         informativeness = 1.0 - entropy_tensor(probs_actual[:, 0])
     metrics['informativeness'] = informativeness.numpy()
@@ -521,9 +519,9 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
 
         # Marginal expected informativeness: with past questions and answers, how informative could (or is) the answer to this question be toward the final decision
         if not answers:
-            informativeness_marginal = 1.0 - entropy_tensor(probs_past_yes[:, 0])
-            informativeness_marginal += 1.0 - entropy_tensor(probs_past_no[:, 0])
-            informativeness_marginal /= 2.0
+            informativeness_yes = 1.0 - entropy_tensor(probs_past_yes[:, 0])
+            informativeness_no = 1.0 - entropy_tensor(probs_past_no[:, 0])
+            informativeness_marginal = torch.max(torch.cat((informativeness_yes.unsqueeze(1), informativeness_no.unsqueeze(1)), dim=-1), dim=-1).values
         else:
             informativeness_marginal = 1.0 - entropy_tensor(probs_past_actual[:, 0])
         metrics['informativeness_marginal'] = informativeness_marginal.numpy()
@@ -591,7 +589,7 @@ def question_coherence_metrics_vlm(success_probs, success_probs_negated):
     }
     return metrics
 
-def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, thresholds):
+def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, thresholds, unsure_range):
     # Aggregate coherence metrics by example and by turn
     coherence_metrics_by_example = defaultdict(list)
     coherence_metrics_by_turn = defaultdict(list)
@@ -609,7 +607,11 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
             for results_dict in all_results_dicts.values():
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
-                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx]), 6))
+                    if np.abs(results_dict['answer_probs'][question_idx][0] - 0.5) >= unsure_range:
+                        this_metrics.append(max(round(float(all_coherence_metrics[k][parallel_idx]), 6), 0.0)) # If negative, just round up to 0.0 for aggregated metrics
+                    else:
+                        # Don't count informativeness for "unsure" answers - model failed to get new information
+                        this_metrics.append(0.0)
                     parallel_idx += 1
                 coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
@@ -635,14 +637,16 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
         max_so_far = 0.0
         total_info_gain = 0.0
         for question_idx in range(results_dict['final_turn'] + 1):
-            info = all_coherence_metrics['informativeness_marginal_x_relevance_marginal'][parallel_idx]
+            info = max(all_coherence_metrics['informativeness_marginal_x_relevance_marginal_ref'][parallel_idx], 0.0)
             info_gain = max(info - max_so_far, 0.0)
             if info > max_so_far:
                 max_so_far = info
             this_metrics.append(round(float(info_gain), 6))            
             parallel_idx += 1
-        coherence_metrics_by_example["informativeness_marginal_x_relevance_marginal_gain_by_example"].append(round(float(np.sum(this_metrics)), 6))
-        coherence_metrics_by_turn["informativeness_marginal_x_relevance_marginal_gain_by_turn"].append(this_metrics)
+        coherence_metrics_by_example["informativeness_marginal_x_relevance_marginal_ref_gain_by_example"].append(round(float(np.mean(this_metrics)), 6))
+        coherence_metrics_by_turn["informativeness_marginal_x_relevance_marginal_ref_gain_by_turn"].append(this_metrics)
+
+    # Calculate 
 
     # Calculate accuracy metrics
     best_metrics = None
@@ -658,7 +662,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
 
         # Calculate consistency and verifiability for this example, which are conditional on correctness
         # TODO: also consider using "ref" form of informativeness for verifiability, and "information gain" version of informativeness
-        verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
+        verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_marginal_ref_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
         consistency = np.mean([coherence_metrics_by_example['relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
         coherence_metrics_by_threshold[threshold] = {"verifiability": verifiability, "consistency": consistency,}
 
