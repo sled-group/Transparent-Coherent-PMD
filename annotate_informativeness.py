@@ -70,7 +70,7 @@ if "samples" in st.session_state:
     st.write("""
     For each annotation task, you will be given the following information:
     - A **sentence** describing the procedure you're trying to perform.
-    - An list of **questions** you already asked, and **their answers**.
+    - An list of **questions** you asked your friend, and their **answers**.
     """)
 
     st.write("""
@@ -83,7 +83,8 @@ if "samples" in st.session_state:
 
     st.write("""
     *Some tips:*
-    - If some questions or answers are not informative or even contradict each other, that's okay; consider all questions and answers as a whole.
+    - Your task is to rate how sure you are, NOT whether you believe the procedure is successfully completed or not.
+    - Consider all questions and answers as a whole; if you have contradictory information, this may reduce your sureness.
     - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
     - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
     """)
@@ -107,11 +108,11 @@ if "samples" in st.session_state:
         rating = st.radio(
             "**Your rating (select one):**",
             options=[
-                "1 (very informative)", 
-                "2 (slightly informative)", 
-                "3 (neutral)", 
-                "4 (slightly uninformative)", 
-                "5 (very uninformative)", 
+                "1 (very uninformative/unsure)", 
+                "2 (slightly uninformative/unsure)", 
+                "3 (neutral; may or may not be informative)", 
+                "4 (slightly informative)", 
+                "5 (very informative)", 
                 "Instructions Unclear"
             ],
             index=2,

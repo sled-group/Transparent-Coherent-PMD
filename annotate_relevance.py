@@ -119,7 +119,7 @@ if st.session_state.page == 1:
             options=[
                 "1 (very irrelevant)",
                 "2 (slightly irrelevant)",
-                "3 (neutral)",
+                "3 (neutral; may or may not be relevant)",
                 "4 (slightly relevant)",
                 "5 (very relevant)",
                 "Instructions Unclear"
