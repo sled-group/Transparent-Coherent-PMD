@@ -170,7 +170,7 @@ if "samples" in st.session_state:
         if send_email_with_attachment(
             to_email=to_email,
             from_email=from_email,
-            subject=f"TRAVEl Annotation Results from Annotator {st.session_state.annotator_idx + 1}",
+            subject=f"TRAVEl Annotation Results from Annotator {st.session_state.annotator_idx}",
             body="Please find the attached annotation results.",
             attachment=csv_data
         ):
