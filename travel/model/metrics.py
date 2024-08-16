@@ -416,6 +416,7 @@ def rephrase_question_answer(questions: list[str], answers: list[str], tokenizer
     prompts = ["\n\n".join(examples) + f"\n\nQuestion: {question}\nAnswer: {answer}\nStatement: " for question, answer in zip(questions, answers)]
     rephrased_texts = simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=generation_batch_size, generation_kwargs={"pad_token_id": tokenizer.eos_token_id})
     rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
+    rephrased_texts = [text.strip() for text in rephrased_texts]
     return rephrased_texts
 
 def entropy(binary_prob):
@@ -442,6 +443,11 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
     """
+    if answers is not None:
+        assert all(a in ["Yes", "No"] for a in answers)
+    if previous_answers is not None:
+        assert all(a in ["Yes", "No"] for aa in previous_answers for a in aa)
+    
     metrics = {}
     
     hypothesis_procedure = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedures]
@@ -481,6 +487,10 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     else:
         informativeness = 1.0 - entropy_tensor(probs_actual[:, 0])
     metrics['informativeness'] = informativeness.numpy()
+    pprint(metrics['informativeness'])
+    pprint(probs_actual)
+    pprint(premise_yes)
+    pprint(premise_no)
 
     if previous_questions:
         assert len(previous_questions) == len(previous_answers), "Expected same number of questions and answers!"
