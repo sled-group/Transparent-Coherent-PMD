@@ -20,12 +20,12 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Put the screw down
+Instruction: Cut the wood plank with the miter saw in your hand
 Previous questions and answers:
 None
 
-Last question: Is the person wearing a white shirt?
-Last answer: No
+Last question: Is the person holding the miter saw in their hand?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -37,11 +37,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Throw the brick molder towards your left with your hands
+Instruction: Wash the mug with the sponge
 Previous questions and answers:
 None
 
-Last question: Is the brick molder in the person's hands?
+Last question: Is the person holding a sponge in their hand?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -54,13 +54,12 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Hold a phone in your hand
+Instruction: Hold flower
 Previous questions and answers:
-Q1. Is the phone in the person's hand?     (Answer: Yes)
-Q2. Is the phone in the person's right hand?     (Answer: Yes)
+None
 
-Last question: Is the phone in the person's left hand?
-Last answer: Yes
+Last question: Is the person wearing gloves?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -72,11 +71,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Put the weeds in a metal bin
+Instruction: Pick the torque wrench
 Previous questions and answers:
-None
+Q1. Is the person wearing safety goggles while working on the torque wrench?     (Answer: No)
 
-Last question: Is the person wearing a tie?
+Last question: Is the person wearing a mask while working on the torque wrench?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -89,12 +88,12 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Spread the socks on the cloth rack
+Instruction: Place the bucket of water in your hand on the floor
 Previous questions and answers:
 None
 
-Last question: Are the socks on the cloth rack?
-Last answer: Yes
+Last question: Is the person holding the bucket of water in their hand?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -106,12 +105,12 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Throw the spoon into the sink
+Instruction: Cut the plant
 Previous questions and answers:
 None
 
-Last question: Is the spoon in the sink?
-Last answer: No
+Last question: Is the person wearing gloves?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -123,11 +122,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Fold the paper
+Instruction: Cover the fuel container
 Previous questions and answers:
-Q1. Is the person wearing a white shirt?     (Answer: No)
+None
 
-Last question: Is the person wearing a black shirt?
+Last question: Is the person wearing gloves?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -140,12 +139,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Remove a tray from the trolley
+Instruction: Sew the material with the sewing machine on the table
 Previous questions and answers:
 None
 
-Last question: Do you see a tray?
-Last answer: No
+Last question: Is the sewing machine on the table?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -157,15 +156,13 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Paint the bench with the putty knife scraper
+Instruction: Pull the thread on both side of the shoe
 Previous questions and answers:
-Q1. Is the person working on a bench?     (Answer: Yes)
-Q2. Is the bench painted?     (Answer: Yes)
-Q3. Is the person using a putty knife scraper?     (Answer: Yes)
-Q4. Is the putty knife scraper being used to scrape paint off the bench?     (Answer: Yes)
-Q5. Is the bench painted with the putty knife scraper?     (Answer: Yes)
+Q1. Is the person wearing a shoe?     (Answer: Yes)
+Q2. Is the shoe on the person's right foot?     (Answer: Yes)
+Q3. Is the shoe on the person's left foot?     (Answer: Yes)
 
-Last question: Is the putty knife scraper in someone's hand?
+Last question: Is the shoe on the person's right shoe?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -178,11 +175,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Put the polaroid camera in an upright position on the table
+Instruction: Drop the peeled back of the avocado pear in the sink
 Previous questions and answers:
-None
+Q1. Do you see an avocado pear?     (Answer: Yes)
 
-Last question: Has the polaroid camera been put in an upright position on the table?
+Last question: Is the peeled back part of the avocado pear in the sink?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 

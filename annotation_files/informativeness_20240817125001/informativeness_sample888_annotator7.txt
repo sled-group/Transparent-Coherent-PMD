@@ -20,11 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Hammer the ceiling with the hammer in your hand
+Instruction: Pour oil from the bottle to the dough in the tray
 Previous questions and answers:
 None
 
-Last question: Is the hammer in the person's hand?
+Last question: Is there a bottle of oil?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -37,12 +37,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Take an onions from the cupboard
+Instruction: Put the pencil back into your mouth with your hand
 Previous questions and answers:
 None
 
-Last question: Is the onion in the cupboard?
-Last answer: Yes
+Last question: Is the pencil in the person's mouth?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -54,11 +54,11 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Remove the paintbrush from the paint container
+Instruction: Pick up the iron from the ironing board
 Previous questions and answers:
-Q1. Is the paintbrush in the person's hand?     (Answer: Yes)
+Q1. Is the person wearing a white shirt?     (Answer: No)
 
-Last question: Is the paintbrush in the person's hand upside down?
+Last question: Is the person wearing a blue shirt?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -71,12 +71,12 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Cut the wood with the cutting machine
+Instruction: Push the bowl on the newspaper forward with your hand
 Previous questions and answers:
 None
 
-Last question: Do you see a cutting machine?
-Last answer: Yes
+Last question: Is the person's hand on the bowl?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -88,11 +88,12 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Hit the brick mold on the ground
+Instruction: Place the dipstick on the rag on the lawn mower on the floor with your hand
 Previous questions and answers:
-None
+Q1. Is the dipstick on the rag on the lawn mower on the floor?     (Answer: Yes)
+Q2. Is the person's hand on the dipstick?     (Answer: Yes)
 
-Last question: Is the brick mold on the ground?
+Last question: Is the person's hand on the rag?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -105,11 +106,12 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Put the watercolor tube on the table
+Instruction: Place a plastic box on the bin
 Previous questions and answers:
-None
+Q1. Is the person wearing gloves?     (Answer: Yes)
+Q2. Is the person wearing a face mask?     (Answer: Yes)
 
-Last question: Is the watercolor tube on the table?
+Last question: Is the person wearing any other protective gear?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -122,12 +124,12 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Put your thumb into the hose
+Instruction: Open the door
 Previous questions and answers:
 None
 
-Last question: Is the person's thumb in the hose?
-Last answer: Yes
+Last question: Is the door open?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -139,11 +141,11 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Hold the   handle on the scooter with your hand
+Instruction: Dip the napkin into the bucket of water
 Previous questions and answers:
-None
+Q1. Is the person wearing a white shirt?     (Answer: No)
 
-Last question: Is the person holding the handle of the scooter?
+Last question: Is the person wearing a black shirt?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -156,12 +158,13 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop the plastic container under the kitchen table
+Instruction: Pick the paper on the table
 Previous questions and answers:
-Q1. Is the plastic container on the kitchen table?     (Answer: Yes)
+Q1. Is the paper on the table in front of the person?     (Answer: Yes)
+Q2. Is the person seated at the table while working on the procedure?     (Answer: Yes)
 
-Last question: Is the plastic container sitting on the kitchen table?
-Last answer: Yes
+Last question: Is the person wearing a tie while working on the procedure?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -173,12 +176,12 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the third carrot on the plate
+Instruction: Pick a solder gun
 Previous questions and answers:
 None
 
-Last question: Is the carrot on the plate?
-Last answer: No
+Last question: Do you see a solder gun?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 

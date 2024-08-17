@@ -20,11 +20,11 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Cut the wood plank with the miter saw in your hand
+Instruction: Hold the material with your both hands
 Previous questions and answers:
-Q1. Is the person holding the miter saw in their hand?     (Answer: Yes)
+None
 
-Last question: Is the wood plank cut?
+Last question: Are you holding the material?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -37,13 +37,12 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Wash the mug with the sponge
+Instruction: Carry shears
 Previous questions and answers:
-Q1. Is the person holding a sponge in their hand?     (Answer: Yes)
-Q2. Is the person using the sponge to wash the mug?     (Answer: Yes)
+Q1. Is the person wearing gloves?     (Answer: No)
 
-Last question: Is the person washing the mug with a sponge?
-Last answer: Yes
+Last question: Is the person wearing any protective gear?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -55,12 +54,13 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Hold flower
+Instruction: Hit the stick with the hammer
 Previous questions and answers:
-Q1. Is the person wearing gloves?     (Answer: No)
+Q1. Is the hammer in the person's hand?     (Answer: Yes)
+Q2. Is the stick in the person's hand?     (Answer: Yes)
 
-Last question: Is the person wearing a mask?
-Last answer: No
+Last question: Is the person's hand holding the hammer and the stick?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -72,11 +72,11 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Pick the torque wrench
+Instruction: Hold the plank with your hand
 Previous questions and answers:
 None
 
-Last question: Is the person wearing gloves while working on the torque wrench?
+Last question: Is the person's hand on the plank?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -89,12 +89,13 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Place the bucket of water in your hand on the floor
+Instruction: Raise the crochet with your hands
 Previous questions and answers:
-None
+Q1. Is the person's hands visible in the photo?     (Answer: Yes)
+Q2. Are the person's hands visible in the photo?     (Answer: Yes)
 
-Last question: Is the person holding the bucket of water in their hand?
-Last answer: No
+Last question: Are the person's hands visible in the photo?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -106,11 +107,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Cut the plant
+Instruction: Hold a torch
 Previous questions and answers:
-Q1. Is the person wearing gloves?     (Answer: Yes)
+None
 
-Last question: Is the person holding a pair of scissors?
+Last question: Is the person wearing gloves?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -123,11 +124,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Cover the fuel container
+Instruction: Drop the kettle on the cooker
 Previous questions and answers:
 None
 
-Last question: Is the person wearing gloves?
+Last question: Is the kettle on the cooker?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -140,14 +141,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Sew the material with the sewing machine on the table
+Instruction: Hold radio
 Previous questions and answers:
-Q1. Is the sewing machine on the table?     (Answer: Yes)
-Q2. Is the person working on the sewing machine on the table?     (Answer: Yes)
-Q3. Is the person sewing the material with the sewing machine on the table?     (Answer: Yes)
+None
 
-Last question: Is the person using the sewing machine to sew the material on the table?
-Last answer: Yes
+Last question: Is the person wearing gloves?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -162,6 +161,8 @@ Annotation 9
 Instruction: Pull the thread on both side of the shoe
 Previous questions and answers:
 Q1. Is the person wearing a shoe?     (Answer: Yes)
+Q2. Is the shoe on the person's left foot?     (Answer: Yes)
+Q3. Is the shoe on the person's right foot?     (Answer: Yes)
 
 Last question: Is the shoe on the person's right foot?
 Last answer: Yes
@@ -176,11 +177,11 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the peeled back of the avocado pear in the sink
+Instruction: Turn off the garden hose
 Previous questions and answers:
-None
+Q1. Is the hose connected to a water source?     (Answer: No)
 
-Last question: Do you see an avocado pear?
+Last question: Is the hose still connected to the water source?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 

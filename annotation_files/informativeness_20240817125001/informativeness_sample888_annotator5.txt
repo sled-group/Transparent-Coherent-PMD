@@ -20,13 +20,12 @@ Some tips:
 
 Annotation 1
 ===============================
-Instruction: Trim the grass
+Instruction: Take an onions from the cupboard
 Previous questions and answers:
-Q1. Is the person holding a pair of scissors?     (Answer: No)
-Q2. Is the grass trimmed?     (Answer: Yes)
+Q1. Is the onion in the cupboard?     (Answer: Yes)
 
-Last question: Is the grass trimmed evenly?
-Last answer: Yes
+Last question: Is the onion taken out?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -38,11 +37,11 @@ Instructions Unclear:
 
 Annotation 2
 ===============================
-Instruction: Pick a plant vessel
+Instruction: Remove the paintbrush from the paint container
 Previous questions and answers:
-Q1. Do you see a plant vessel?     (Answer: Yes)
+Q1. Is the paintbrush in the person's hand?     (Answer: Yes)
 
-Last question: Is the plant vessel in the person's hand?
+Last question: Is the paintbrush in the person's hand upside down?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -55,12 +54,12 @@ Instructions Unclear:
 
 Annotation 3
 ===============================
-Instruction: Pick up the spoon
+Instruction: Hit the brick mold on the ground
 Previous questions and answers:
-None
+Q1. Is the brick mold on the ground?     (Answer: Yes)
 
-Last question: Is the spoon in the person's hand?
-Last answer: Yes
+Last question: Is someone hitting the brick mold?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -72,12 +71,12 @@ Instructions Unclear:
 
 Annotation 4
 ===============================
-Instruction: Peel the piece of the second adhesive tape with your hands
+Instruction: Put the watercolor tube on the table
 Previous questions and answers:
 None
 
-Last question: Is the person wearing gloves while peeling the tape?
-Last answer: No
+Last question: Is the watercolor tube on the table?
+Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -89,12 +88,11 @@ Instructions Unclear:
 
 Annotation 5
 ===============================
-Instruction: Grab the thread
+Instruction: Put your thumb into the hose
 Previous questions and answers:
-Q1. Do you see a thread?     (Answer: Yes)
-Q2. Is the thread being held?     (Answer: Yes)
+None
 
-Last question: Is the person holding the thread?
+Last question: Is the person's thumb in the hose?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -107,11 +105,11 @@ Instructions Unclear:
 
 Annotation 6
 ===============================
-Instruction: Drag the water hose forward
+Instruction: Hold the   handle on the scooter with your hand
 Previous questions and answers:
-Q1. Is the person wearing a wetsuit?     (Answer: No)
+None
 
-Last question: Is the person wearing any protective gear?
+Last question: Is the person holding the handle of the scooter?
 Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -124,12 +122,11 @@ Instructions Unclear:
 
 Annotation 7
 ===============================
-Instruction: Hold the spray nozzle with your two hands
+Instruction: Drop the plastic container under the kitchen table
 Previous questions and answers:
-Q1. Is the spray nozzle being held?     (Answer: Yes)
-Q2. Is the spray nozzle being held with two hands?     (Answer: Yes)
+Q1. Is the plastic container on the kitchen table?     (Answer: Yes)
 
-Last question: Is the spray nozzle being held with one hand?
+Last question: Is the plastic container sitting on the kitchen table?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -142,12 +139,12 @@ Instructions Unclear:
 
 Annotation 8
 ===============================
-Instruction: Hold the pack of meat with your hand
+Instruction: Drop the third carrot on the plate
 Previous questions and answers:
 None
 
-Last question: Is the person holding the pack of meat with their hand?
-Last answer: Yes
+Last question: Is the carrot on the plate?
+Last answer: No
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
 2 (slightly informative): 
@@ -159,11 +156,11 @@ Instructions Unclear:
 
 Annotation 9
 ===============================
-Instruction: Drop the tray on the counter
+Instruction: Drop the pick axe
 Previous questions and answers:
 None
 
-Last question: Is the tray on the counter?
+Last question: Is the person holding the pick axe?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
@@ -176,11 +173,13 @@ Instructions Unclear:
 
 Annotation 10
 ===============================
-Instruction: Drop the scissors on the table with your hand
+Instruction: Put the thread in the sandal
 Previous questions and answers:
-None
+Q1. Do you see a sandal?     (Answer: Yes)
+Q2. Do you see a person wearing a sandal?     (Answer: Yes)
+Q3. Is the thread in the sandal?     (Answer: Yes)
 
-Last question: Is the person's hand holding the scissors?
+Last question: Is the person wearing the sandal?
 Last answer: Yes
 Your rating (place an 'x' next to your choice):
 1 (very informative): 
