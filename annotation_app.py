@@ -20,12 +20,6 @@ args = parser.parse_args()
 # Ensure arguments are provided
 assert args.data_source_relevance is not None and args.n_annotators_per_file is not None
 
-# Get source data
-source_data = json.load(open(args.data_source_relevance, "r"))
-data_name = args.data_source_relevance.split('/')[-1].replace(".json", "")
-output_dir = f"output_{data_name}"
-os.makedirs(output_dir, exist_ok=True)
-
 # Initialize session state for navigation
 if "page" not in st.session_state:
     st.session_state.page = 0
@@ -36,12 +30,6 @@ if "annotator_idx" not in st.session_state:
 # Initialize session state for the user's choice
 if "task_type" not in st.session_state:
     st.session_state.task_type = None
-
-# Store the user's choice in the session state
-st.session_state.task_type = task_type
-
-# Display the user's choice
-st.write(f"You selected: {st.session_state.task_type}")
 
 def next_page():
     st.session_state.page += 1
@@ -67,6 +55,18 @@ if st.session_state.page == 0:
             step=1
         )
         if st.button("Next"):
+            # Get source data
+            if st.session_state.task_type == "Relevance":
+                source_data = json.load(open(args.data_source_relevance, "r"))
+                data_name = args.data_source_relevance.split('/')[-1].replace(".json", "")
+                output_dir = f"output_{data_name}"
+                os.makedirs(output_dir, exist_ok=True)
+            elif st.session_state.task_type == "Informativeness":
+                source_data = json.load(open(args.data_source_informativeness, "r"))
+                data_name = args.data_source_informativeness.split('/')[-1].replace(".json", "")
+                output_dir = f"output_{data_name}"
+                os.makedirs(output_dir, exist_ok=True)
+
             assert len(source_data) % args.n_annotators_per_file == 0, "Length of annotated examples should be evenly divisible by number of annotators."
             samples_per_annotator = len(source_data) // args.n_annotators_per_file
             samples = source_data[samples_per_annotator * annotator_idx: samples_per_annotator * (annotator_idx + 1)]
@@ -88,8 +88,7 @@ if st.session_state.page == 0:
 
 # Page 2: Annotation Task
 if st.session_state.page == 1:
-    if task_type == "Relevance":
-
+    if st.session_state.task_type == "Relevance":
         st.title("Annotation Task")
         
         st.write("""
@@ -160,7 +159,8 @@ if st.session_state.page == 1:
 
         st.write("---")
 
-    elif task_type == "Informativeness":
+    elif st.session_state.task_type == "Informativeness":
+
         st.title("Annotation Task")
 
         st.write("""
