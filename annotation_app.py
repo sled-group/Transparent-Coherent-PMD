@@ -12,39 +12,37 @@ from email import encoders
 
 # Parse arguments
 parser = argparse.ArgumentParser()
-parser.add_argument("--data_source_relevance", default=os.environ['data_source_relevance'] if 'data_source_relevance' in os.environ else None, type=str, help="Path to .json file with source data for relevance annotation.")
-parser.add_argument("--data_source_informativeness", default=os.environ['data_source_informativeness'] if 'data_source_informativeness' in os.environ else None, type=str, help="Path to .json file with source data for informativeness annotation.")
-parser.add_argument("--n_annotators_per_file", default=os.environ['n_annotators_per_file'] if 'n_annotators_per_file' in os.environ else None, type=int, help="Number of annotators to split source file across.")
+parser.add_argument("--data_source_relevance", type=str, help="Path to .json file with source data for relevance annotation.")
+parser.add_argument("--data_source_informativeness", type=str, help="Path to .json file with source data for informativeness annotation.")
+parser.add_argument("--n_annotators_per_file", type=int, help="Number of annotators to split source file across.")
 args = parser.parse_args()
 
 # Ensure arguments are provided
-assert args.data_source_relevance is not None and args.n_annotators_per_file is not None
+assert args.data_source_relevance is not None, "Relevance data source must be provided."
+assert args.data_source_informativeness is not None, "Informativeness data source must be provided."
+assert args.n_annotators_per_file is not None, "Number of annotators per file must be provided."
 
-# Initialize session state for navigation
+# Initialize session state for navigation and annotator ID
 if "page" not in st.session_state:
     st.session_state.page = 0
 
 if "annotator_idx" not in st.session_state:
     st.session_state.annotator_idx = None
 
-# Initialize session state for the user's choice
 if "task_type" not in st.session_state:
     st.session_state.task_type = None
 
 def next_page():
     st.session_state.page += 1
 
-# Page 1: Enter Annotator ID
+# Page 1: Select Task Type and Enter Annotator ID
 if st.session_state.page == 0:
-
     st.title("Select Task Type and Enter Annotator ID")
 
-    # Dropdown menu to select between "Relevance" and "Informativeness"
     task_type = st.selectbox(
         "Select the type of annotation task:",
         options=["Relevance", "Informativeness"]
     )
-    # Store the user's choice in the session state
     st.session_state.task_type = task_type
 
     if st.session_state.annotator_idx is None:
@@ -56,18 +54,22 @@ if st.session_state.page == 0:
         )
         if st.button("Next"):
             # Get source data
-            if st.session_state.task_type == "Relevance":
-                source_data = json.load(open(args.data_source_relevance, "r"))
-                data_name = args.data_source_relevance.split('/')[-1].replace(".json", "")
-                output_dir = f"output_{data_name}"
-                os.makedirs(output_dir, exist_ok=True)
-            elif st.session_state.task_type == "Informativeness":
-                source_data = json.load(open(args.data_source_informativeness, "r"))
-                data_name = args.data_source_informativeness.split('/')[-1].replace(".json", "")
-                output_dir = f"output_{data_name}"
-                os.makedirs(output_dir, exist_ok=True)
+            if task_type == "Relevance":
+                data_path = args.data_source_relevance
+            else:
+                data_path = args.data_source_informativeness
 
-            assert len(source_data) % args.n_annotators_per_file == 0, "Length of annotated examples should be evenly divisible by number of annotators."
+            try:
+                with open(data_path, "r") as f:
+                    source_data = json.load(f)
+            except Exception as e:
+                st.error(f"Failed to load data: {e}")
+                st.stop()
+
+            data_name = os.path.basename(data_path).replace(".json", "")
+            output_dir = f"output_{data_name}"
+            os.makedirs(output_dir, exist_ok=True)
+
             samples_per_annotator = len(source_data) // args.n_annotators_per_file
             samples = source_data[samples_per_annotator * annotator_idx: samples_per_annotator * (annotator_idx + 1)]
             if len(samples) == 0:
@@ -88,147 +90,78 @@ if st.session_state.page == 0:
 
 # Page 2: Annotation Task
 if st.session_state.page == 1:
+    st.title(f"{st.session_state.task_type} Annotation Task")
+
     if st.session_state.task_type == "Relevance":
-        st.title("Annotation Task")
-        
-        st.write("""
-        *Imagine you just had eye surgery, and are currently unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it. You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.*
-        """)
+        task_intro = (
+            "You must rate how **relevant** the potential next question is. By relevant, we mean: "
+            "**given the previous questions and answers, how helpful could an answer to this question "
+            "be in determining whether you successfully completed the task?**"
+        )
+    else:
+        task_intro = (
+            "You must rate how **informative** the questions and answers are. By informative, we mean: "
+            "**based on all the information you have, how sure are you about whether you succeeded?**"
+        )
 
-        st.write("""
-        For each annotation task, you will be given the following information:
-        - A **sentence** describing the procedure you're trying to perform.
-        - An optional list of **previous questions** you already asked, and their answers.
-        - A **potential next question** you could ask your friend.
-        """)
+    st.write(task_intro)
 
-        st.write("""
-        You must rate how **relevant** the potential next question is. By relevant, we mean: **given the previous questions and answers, how helpful could an answer to this question be in determining whether you successfully completed the task?**
-        """)
-
-        st.write("""
-        You can also choose to mark "Instructions Unclear", which means that the sentence itself is not clear, so you're not sure how to determine whether the procedure is successful. This should only be used in rare cases.
-        """)
-
-        st.write("""
-        *Some tips:*
-        - Only judge the relevance of the potential next question, not the previous questions (which may or may not be relevant).
-        - A question may seem relevant to the task at hand, but you should consider it irrelevant if it can't provide essential information to judge whether the task was completed successfully.
-        - If a seemingly relevant question is redundant with previous questions, you may consider it less relevant.
-        - Assume that the answer to the question won't contradict the information you have from previous questions and answers. If previous questions and answers already contradict each other, consider whether this question could sway you one way or another.
-        - The instructional text and questions may refer to "someone" or "a person"; always assume this is referring to yourself (the person performing the task).
-        - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
-        """)
-
-        ratings = []
-        for sample_idx, sample in enumerate(st.session_state.samples):
-            st.write("---")
-            st.write(f"### Annotation {sample_idx + 1}")
-            st.write(f"**Sentence:** *{sample['procedure']}*")
-
-            st.write("**Previous questions and answers:**")
-            if len(sample['previous_questions_answers']) == 0:
-                st.write("None")
-            else:
-                for q_idx, (q, a) in enumerate(sample['previous_questions_answers']):
-                    st.write(f"{q_idx+1}. *{q}*     (Answer: *{a}*)")
-
-            st.write(f"**Potential next question:** *{sample['question']}*")
-
-            rating = st.radio(
-                "**Your rating (select one):**",
-                options=[
-                    "1 (very irrelevant)",
-                    "2 (slightly irrelevant)",
-                    "3 (neutral; may or may not be relevant)",
-                    "4 (slightly relevant)",
-                    "5 (very relevant)",
-                    "Instructions Unclear"
-                ],
-                index=2,
-                key=str(sample_idx)
-            )
-
-            ratings.append({
-                "annotator_index": st.session_state.annotator_idx,
-                "annotation_index": sample_idx,
-                "procedure": sample['procedure'],
-                "potential_question": sample['question'],
-                "rating": rating
-            })
-
+    ratings = []
+    for sample_idx, sample in enumerate(st.session_state.samples):
         st.write("---")
+        st.write(f"### Annotation {sample_idx + 1}")
+        st.write(f"**Sentence:** *{sample['procedure']}*")
 
-    elif st.session_state.task_type == "Informativeness":
+        st.write("**Previous questions and answers:**")
+        if len(sample['previous_questions_answers']) == 0:
+            st.write("None")
+        else:
+            for q_idx, (q, a) in enumerate(sample['previous_questions_answers']):
+                st.write(f"{q_idx+1}. *{q}*     (Answer: *{a}*)")
 
-        st.title("Annotation Task")
-
-        st.write("""
-        *Imagine you just had eye surgery, and are currently unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it. You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.*
-        """)
-
-        st.write("""
-        For each annotation task, you will be given the following information:
-        - A **sentence** describing the procedure you're trying to perform.
-        - An list of **questions** you asked your friend, and their **answers**.
-        """)
-
-        st.write("""
-        You must rate how **informative** the questions and answers are. By informative, we mean: **based on all the information you have, how sure are you about whether you succeeded?**
-        """)
-
-        st.write("""
-        You can also choose to mark "Instructions Unclear", which means that the sentence itself is not clear, so you're not sure how to determine whether the procedure is successful. This should only be used in rare cases.
-        """)
-
-        st.write("""
-        *Some tips:*
-        - Your task is to rate how sure you are, NOT whether you believe the procedure is successfully completed or not.
-        - Consider all questions and answers as a whole; if you have contradictory information, this may reduce your sureness.
-        - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
-        - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
-        """)
-
-        ratings = []
-        for sample_idx, sample in enumerate(st.session_state.samples):
-            st.write("---")
-            st.write(f"### Annotation {sample_idx + 1}")
-            st.write(f"**Sentence:** *{sample['procedure']}*")
-            
-            st.write("**Previous questions and answers:**")
-            if len(sample['previous_questions_answers']) == 0:
-                st.write("None")
-            else:
-                for q_idx, (q, a) in enumerate(sample['previous_questions_answers']):
-                    st.write(f"{q_idx+1}. *{q}*     (Answer: *{a}*)")
-
+        if st.session_state.task_type == "Relevance":
+            st.write(f"**Potential next question:** *{sample['question']}*")
+            rating_options = [
+                "1 (very irrelevant)",
+                "2 (slightly irrelevant)",
+                "3 (neutral; may or may not be relevant)",
+                "4 (slightly relevant)",
+                "5 (very relevant)",
+                "Instructions Unclear"
+            ]
+        else:
             st.write(f"**Last question:** *{sample['question']}*")
             st.write(f"**Last answer:** *{sample['answer']}*")
+            rating_options = [
+                "1 (very uninformative/unsure)", 
+                "2 (slightly uninformative/unsure)", 
+                "3 (neutral; may or may not be informative)", 
+                "4 (slightly informative)", 
+                "5 (very informative)", 
+                "Instructions Unclear"
+            ]
 
-            rating = st.radio(
-                "**Your rating (select one):**",
-                options=[
-                    "1 (very uninformative/unsure)", 
-                    "2 (slightly uninformative/unsure)", 
-                    "3 (neutral; may or may not be informative)", 
-                    "4 (slightly informative)", 
-                    "5 (very informative)", 
-                    "Instructions Unclear"
-                ],
-                index=2,
-                key=str(sample_idx)
-            )
+        rating = st.radio(
+            "**Your rating (select one):**",
+            options=rating_options,
+            index=2,
+            key=str(sample_idx)
+        )
 
-            ratings.append({
-                "annotator_index": st.session_state.annotator_idx,
-                "annotation_index": sample_idx,
-                "procedure": sample['procedure'],
-                "last_question": sample['question'],
-                "last_answer": sample['answer'],
-                "rating": rating
-            })
+        ratings.append({
+            "annotator_index": st.session_state.annotator_idx,
+            "annotation_index": sample_idx,
+            "procedure": sample['procedure'],
+            "rating": rating
+        })
 
-        st.write("---")
+        if st.session_state.task_type == "Relevance":
+            ratings[-1]["potential_question"] = sample['question']
+        else:
+            ratings[-1]["last_question"] = sample['question']
+            ratings[-1]["last_answer"] = sample['answer']
+
+    st.write("---")
 
     # Function to send email with attachment
     def send_email_with_attachment(to_email, from_email, subject, body, attachment):
