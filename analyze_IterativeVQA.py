@@ -28,75 +28,62 @@ run_folder_name = f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}"
 parent_output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name)
 
 for results_fnames, results_names, analysis_subdir in [
-    # (
-    #     [
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805180404/outputs_val.json",
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240807080723/outputs_val.json",
-    #     ],
-    #     [
-    #         "Likelihood Ranking",
-    #         "Coherence Ranking",
-    #     ],
-    #     "likelihood_vs_coherence"
-    # ),
-    # (
-    #     [
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_20240807080723/outputs_val.json",
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240806224704/outputs_val.json",
-    #     ],
-    #     [
-    #         "Coherence Ranking",
-    #         "Coherence Ranking (+ ICL candidates)",
-    #     ],
-    #     "introducing_icl"
-    # ),
-    # (
-    #     [
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_20240804224634/outputs_val.json",
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_contrastive_region1.0_20240805163803/outputs_val.json",
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_agla2.0_20240806115545/outputs_val.json",
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_coherence_icl20_spatial_blur55.0_20240807112322/outputs_val.json",
-    #     ],
-    #     [
-    #         "No Filter",
-    #         "CRG",
-    #         "AGLA",
-    #         "Spatial",
-    #     ],
-    #     "visual_filters_coherence"
-    # ),
-    # (
-    #     [
-    #         # "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_20240805122212/outputs_val.json",
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_20240805002323/outputs_val.json",
-    #         "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q5_ego4d_single_debug250_llava-1.5-7b-hf_likelihood_icl20_contrastive_region1.0_20240806132636/outputs_val.json",
-    #     ],
-    #     [
-    #         # "No ICL",
-    #         "No Filter",
-    #         "CRG",
-    #     ],
-    #     "visual_filters_likelihood"
-    # ),    
     (
         [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_topdown_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_20240812143901/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_topdown_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_20240812143858/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_20240812143853/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_20240812143853/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_20240812183411/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_20240812172402/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240815204213/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_20240816225456/outputs_val.json",
         ],
         [
-            "Top Down Likelihood Ranking",
-            "Top Down Coherence Ranking",
             "Likelihood Ranking",
             "Coherence Ranking",
-            "Likelihood Ranking + ICL",
-            "Coherence Ranking + ICL",
         ],
         "likelihood_vs_coherence"
-    )
+    ),
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_20240816225456/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20240815204213/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240815204213/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_20240816192439/outputs_val.json",
+        ],
+        [
+            "Coherence Ranking",
+            "Coherence Ranking (+ ICL candidates)",
+            "Likelihood Ranking",
+            "Likelihood Ranking (+ ICL candidates)",
+        ],
+        "introducing_icl"
+    ),
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20240815204213/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_contrastive_region1.0_20240817053024/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_visual_contrastive1.0_20240817135023/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_agla2.0_20240817190319/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_spatial_blur55.0_20240818001956/outputs_val.json",
+        ],
+        [
+            "No Filter",
+            "CRG",
+            "VCD"
+            "AGLA",
+            "Spatial",
+        ],
+        "visual_filters_coherence"
+    ),
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_20240816192439/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_contrastive_region1.0_20240818122420/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_agla2.0_20240818110210/outputs_val.json",
+        ],
+        [
+            "No Filter",
+            "CRG",
+            "AGLA",
+        ],
+        "visual_filters_likelihood"
+    ),    
 ]:
     # Set up subdirectory
     output_dir = os.path.join(parent_output_dir, analysis_subdir)

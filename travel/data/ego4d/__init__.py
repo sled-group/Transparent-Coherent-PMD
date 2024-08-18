@@ -443,7 +443,8 @@ class MisalignSRL:
         type_name_col_name_map = data["type_name_col_name_map"]
         return cls(misalignsrl, type_name_col_name_map)
     
-    def get_misaligned_samples(self, clip, random_seed, split_video_info, multi_frame=False):      
+    def get_misaligned_samples(self, clip, random_seed, split_video_info, multi_frame=False):     
+        # TODO: we should probably apply some of the blurriness/brightness filtering steps we do for positive video clips here 
         mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
         
         video_uid_narration_timestamp_sec = clip["video_uid"] + "_" + str(clip["narration_timestamp_sec"])
