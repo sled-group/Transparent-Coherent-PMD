@@ -91,7 +91,7 @@ def generate_det_curve(metrics: dict[Union[float, str], dict[str, float]], save_
 
     plt.savefig(save_path)
 
-def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]], curve_names: list[str], save_paths: list[str]):
+def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]], curve_names: list[str], save_paths: list[str], colors=None):
     """
     Generates and saves a PDF of a Detection Error Tradeoff (DET) curve for the metrics returned by `MistakeDetectionEvaluator.evaluate_mistake_detection()`.
      A DET curve plots false positive rate (x-axis) versus false negative rate (y-axis) for a space of detection thresholds, and indicates an "ideal" point 
@@ -103,8 +103,12 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
     """
     assert len(metrics) == len(curve_names), "Expected same number of metrics and curve names!"
 
-    colors = plt.get_cmap('tab10', len(metrics))
-    plt.figure(figsize=(8, 6))
+    if colors is None:
+        colors = plt.get_cmap('tab10', len(metrics))
+        colors = [colors(i) for i in range(len(metrics))]
+    
+    plt.figure(figsize=(6, 5.6))  # Adjusted to make the plot nearly square
+
     for i, (metric, name) in enumerate(zip(metrics, curve_names)):
         # Some of the keys in the metrics file may not be floats (for thresholds), e.g., a "best_metrics" key is also saved here
         metric = {k: v for k, v in metric.items() if isinstance(k, float)}
@@ -113,55 +117,40 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
         false_positive_rates = [round(metric[threshold]['false_positive_rate'], 3) for threshold in metric]
         false_negative_rates = [round(metric[threshold]['false_negative_rate'], 3) for threshold in metric]
 
-        # Ensure input rates are within the valid range for norm.ppf
-        # false_positive_rates = np.clip(false_positive_rates, 0.0001, 0.9999)
-        # false_negative_rates = np.clip(false_negative_rates, 0.0001, 0.9999)
-
-        # Convert FPR and FNR to normal deviate scale
-        # x = norm.ppf(false_positive_rates)
-        # y = norm.ppf(false_negative_rates)
-        
-        # Ensure all plotted values are finite by filtering out any non-finite values
-        # finite_indices = np.isfinite(x) & np.isfinite(y)
-        # x = x[finite_indices]
-        # y = y[finite_indices]
-
         x = false_positive_rates
         y = false_negative_rates
 
-        # Plot DET curve
-        plt.plot(x, y, marker='.', linestyle='-', color=colors(i), label=name)
+        # Plot DET curve with thicker lines and dots
+        plt.plot(x, y, marker='o', linestyle='-', color=colors[i], label=name, linewidth=2, markersize=6)
 
-    # Label axes with normal deviate scale
-    # plt.xlabel('False Positive Rate (Normal Deviate Scale)')
-    # plt.ylabel('False Negative Rate (Normal Deviate Scale)')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('False Negative Rate')
+    # Label axes with normal deviate scale, bold font, and slightly larger size
+    plt.xlabel('False Positive Rate', fontsize=14, fontweight='bold')
+    plt.ylabel('False Negative Rate', fontsize=14, fontweight='bold')
 
     # Set grid and title
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     
     # Customize axes for better readability
     tick_vals = np.linspace(0.00, 1.0, 11)
-    # ticks = norm.ppf(tick_vals)
     ticks = tick_vals
     tick_labels = [f"{round(val, 2)}" for val in tick_vals]
-    plt.xticks(ticks, tick_labels)
-    plt.yticks(ticks, tick_labels)
+    plt.xticks(ticks, tick_labels, fontsize=12)
+    plt.yticks(ticks, tick_labels, fontsize=12)
 
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.0])
-    # plt.xlim([norm.ppf(0.01), norm.ppf(0.99)])
-    # plt.ylim([norm.ppf(0.01), norm.ppf(0.99)])
 
-    # Add legend
-    plt.legend()
+    # Add legend with a slightly larger font size
+    plt.legend(fontsize=14)
+
+    # Remove extra space around the plot
+    plt.tight_layout()
 
     # Save to files
     for save_path in save_paths:
         if not os.path.exists("/".join(save_path.split("/")[:-1])):
             os.makedirs("/".join(save_path.split("/")[:-1]))
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches='tight')
 
 
 def generate_roc_curves(metrics: list[dict[Union[float, str], dict[str, float]]], curve_names: list[str], save_paths: list[str]):

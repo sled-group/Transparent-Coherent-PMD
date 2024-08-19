@@ -201,7 +201,7 @@ class EpicKitchensMistakeDetectionDataset(MistakeDetectionDataset):
                             select_key = random.choice(keys)
                             other_example_data = random.choice(data_by_verb_noun[select_key])
 
-                            # TODO: also need to make sure we don't use pick or place verbs here
+                            # TODO: also need to make sure we don't use pick or place verbs here, following Ego4D's __init__.py at line 967
                             misalign_frame = extract_frames(video, [example_data['start_timestamp']])
                             easyneg_example = MistakeDetectionExample(
                                 task_name=MistakeDetectionTasks.EpicKitchens_Single,

@@ -27,7 +27,19 @@ timestamp = datetime.datetime.now()
 run_folder_name = f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}"
 parent_output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name)
 
-for results_fnames, results_names, analysis_subdir in [
+for results_fnames, results_names, results_colors, analysis_subdir in [
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_topdown_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240817105952/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240815204213/outputs_val.json",
+        ],
+        [
+            "Top-Down",
+            "Bottom-Up",
+        ],
+        ['#C1C100', '#C10000'],
+        "reasoning_direction"
+    ),
     (
         [
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240815204213/outputs_val.json",
@@ -37,6 +49,7 @@ for results_fnames, results_names, analysis_subdir in [
             "Likelihood Ranking",
             "Coherence Ranking",
         ],
+        ['#C10000', '#0000C1'],
         "likelihood_vs_coherence"
     ),
     (
@@ -52,6 +65,7 @@ for results_fnames, results_names, analysis_subdir in [
             "Likelihood Ranking",
             "Likelihood Ranking (+ ICL candidates)",
         ],
+        ['#C10000', '#C100C1', '#0000C1', '#00C1C1'],
         "introducing_icl"
     ),
     (
@@ -65,10 +79,11 @@ for results_fnames, results_names, analysis_subdir in [
         [
             "No Filter",
             "CRG",
-            "VCD"
+            "VCD",
             "AGLA",
             "Spatial",
         ],
+        ['#00C1C1', '#5E00C1', '#E4912C', '#00B906', '#875242'],
         "visual_filters_coherence"
     ),
     (
@@ -82,6 +97,7 @@ for results_fnames, results_names, analysis_subdir in [
             "CRG",
             "AGLA",
         ],
+        ['#C10000', '#5E00C1', '#00B906'],
         "visual_filters_likelihood"
     ),    
 ]:
@@ -106,7 +122,7 @@ for results_fnames, results_names, analysis_subdir in [
     print("(0) Generating DET curves...")
     output_fname = f"det_comparison_{'_'.join(results_names).replace(' ', '-')}.pdf"
     save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
-    generate_det_curves(metrics_det, results_names, save_paths=save_paths)
+    generate_det_curves(metrics_det, results_names, save_paths=save_paths, colors=results_colors)
 
     print("Compiling pred data...")
     mistake_probs = [[] for _ in results_fnames]
