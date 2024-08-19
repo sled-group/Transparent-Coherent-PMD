@@ -12,7 +12,7 @@ NLI_RELEVANCE_DELTA = float(config["mistake_detection_strategies"]["nli_relevanc
 NLI_REPLACE_PROBS = bool(config["mistake_detection_strategies"]["nli_replace_probs"])
 NLI_RERUN_ON_RELEVANT_EVIDENCE = bool(config["mistake_detection_strategies"]["nli_rerun_on_relevant_evidence"])
 
-NLI_HYPOTHESIS_TEMPLATE = 'The procedure "{procedure}" has been successfully completed.' 
+NLI_HYPOTHESIS_TEMPLATE = 'The procedure "{procedure}" has been successfully executed.' 
 
 def run_nli(nli_tokenizer, nli_model, premise_hypothesis_pairs):
     with torch.inference_mode():

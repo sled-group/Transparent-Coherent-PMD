@@ -15,23 +15,25 @@ from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProce
                          
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
-from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves
+from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves, compile_accuracy_and_coherence_metrics
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH
 from travel.model.vqa import run_qa 
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--results_dir", type=str, help="Path to results directory for previous completed run of iterative VQA.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
 parser.add_argument("--coherence_evaluation_strategy", type=str, default="vlm", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
+parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
 parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch size for question generation with LM.")
 parser.add_argument("--qa_batch_size", type=int, default=20, help="Batch size for QA with VLM.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
+parser.add_argument("--get_negated_success_probs", action="store_true", help="Pass this argument to calculate success probabilities for negated answers to questions.")
 args = parser.parse_args()
 
 assert torch.cuda.device_count() == 1, "Iterative VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
@@ -109,7 +111,7 @@ for example_idx, (questions, candidate_questions, candidate_questions_scores, ca
         prompt = f'{USER_START_TOKENS[type(vlm)]}{IVQA_PREAMBLE.format(procedure=procedure)}'
         for question, answer in zip(questions[:question_idx + 1], answers[:question_idx + 1]):
             prompt += f"{ASSISTANT_END_TOKENS[type(vlm)] if question_idx != 0 else USER_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: "
-            prompt += f'{question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A: {VQAResponse(answer).name}'
+            prompt += f'{question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A: {answer}'
 
             all_prompts[question_idx].append(prompt + success_prompt)
 
@@ -139,7 +141,7 @@ for question_idx in range(n_questions_per_example):
                                   all_prompts[question_idx], 
                                   batch_size=max(args.qa_batch_size // (2 ** question_idx), 1),
                                   cache_path=os.path.join(cache_dir, f"noimg_qa_logits{worker_index}-{question_idx}.pt"))
-    if args.coherence_evaluation_strategy == "vlm":
+    if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
         logits_negated[question_idx] = run_qa(lm, 
                                               tokenizer, 
                                               all_prompts[question_idx], 
@@ -175,7 +177,7 @@ if worker_index == 0:
                     time.sleep(delay_per_try)
                     delay_so_far += delay_per_try
 
-                if args.coherence_evaluation_strategy == "vlm":
+                if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
                     # Grab negated logits if needed
                     delay_so_far = 0
                     while True:
@@ -257,7 +259,7 @@ if worker_index == 0:
         ] for example_idx in range(len(logits[0]))
     ]
     all_success_probs_negated_noimg = [[] for _ in range(len(all_example_ids))]
-    if args.coherence_evaluation_strategy == "vlm":
+    if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
         all_success_probs_negated_noimg = [
             [
                 # Use code in VQAOutputs class to calculate Yes/No probabilities from logits
@@ -332,10 +334,11 @@ if worker_index == 0:
 
     # Calculate coherence metrics of final rollouts
     all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
-    all_previous_questions = [results_dict['questions'][:question_idx] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+    all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
-    all_predicted_answers = [VQAResponse(answer) for results_dict in all_results_dicts.values() for answer in results_dict['answers'][:results_dict['final_turn'] + 1]]
-    all_previous_answers = [[VQAResponse(a) for a in results_dict['answers'][:question_idx]] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+    label_answer_mapping = {0: "No", 1: "Yes"}
+    all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
+    all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
     if args.coherence_evaluation_strategy == "nli":
         all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
@@ -347,65 +350,22 @@ if worker_index == 0:
                                                 answers=all_predicted_answers,
                                                 previous_questions=all_previous_questions,
                                                 previous_answers=all_previous_answers,
+                                                mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)],
                                                 rephrase_batch_size=args.generation_batch_size)
     elif args.coherence_evaluation_strategy == "vlm":
         all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs, all_success_probs_negated)
     else:
         raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
 
-    # Aggregate coherence metrics by example and by turn
-    parallel_idx = 0
-    coherence_metrics_by_example = defaultdict(list)
-    coherence_metrics_by_turn = defaultdict(list)
-    coherence_metric_names = ['relevance', 'informativeness', 'relevance_marginal', 'informativeness_marginal', 'informativeness_marginal_x_relevance_marginal']
-    for k in coherence_metric_names:
-        if k in all_coherence_metrics:
-            for results_dict in all_results_dicts.values():
-                this_metrics = []
-                for question_idx in range(results_dict['final_turn'] + 1):
-                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx]), 6))
-                    parallel_idx += 1
-                coherence_metrics_by_example[k + "_by_example"].append(round(float(np.mean(this_metrics)), 6))
-                coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
-    
-    # Calculate accuracy metrics
-    best_metrics = None
-    best_threshold = None
-    accuracy_metrics_by_threshold = {}
-    coherence_metrics_by_threshold = {}
-    all_labels_binary = [True if l is not None else False for l in all_labels]
-    for threshold in MISTAKE_DETECTION_THRESHOLDS:
-        preds = [1.0 - p >= threshold for p in all_probs] # Have to do 1.0 - probability since we got "success" probability from VLM
-        assert len(preds) == len(all_probs) == len(all_labels), "Expected same number of preds, probs, and labels."
-        pprint(all_labels_binary)
-        pprint(preds)
-        this_metrics = mistake_detection_metrics(all_labels_binary, preds)
-        accuracy_metrics_by_threshold[threshold] = this_metrics
-
-        # Calculate consistency and verifiability for this example, which are conditional on correctness
-        verifiability = np.mean([coherence_metrics_by_example['informativeness_marginal_x_relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
-        consistency = np.mean([coherence_metrics_by_example['relevance_marginal_by_example'][i] if preds[i] == all_labels_binary[i] else 0.0 for i in range(len(preds))])
-        coherence_metrics_by_threshold[threshold] = {"verifiability": verifiability, "consistency": consistency,}
-
-        if best_metrics is None or (this_metrics['false_positive_rate'] + this_metrics['false_negative_rate']) < (best_metrics['false_positive_rate'] + best_metrics['false_negative_rate']):
-            best_metrics = this_metrics
-            best_threshold = threshold
-
-    accuracy_metrics_by_threshold['best_metrics'] = best_metrics
-    accuracy_metrics_by_threshold['best_threshold'] = best_threshold
+    # Get accuracy and coherence metrics
+    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
+    coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
 
     # Save accuracy and coherence metrics
     json.dump(accuracy_metrics_by_threshold, 
             open(os.path.join(this_results_dir_noimg, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
             indent=4)
     
-    coherence_metrics = {
-        k: round(float(np.mean(coherence_metrics_by_example[k + "_by_example"])), 6) for k in coherence_metric_names if k + "_by_example" in coherence_metrics_by_example
-    } | {
-        "metrics_by_threshold": coherence_metrics_by_threshold,
-        "metrics_by_example": coherence_metrics_by_example,
-        "metrics_by_turn": coherence_metrics_by_turn,
-    }
     json.dump(coherence_metrics, 
             open(os.path.join(this_results_dir_noimg, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
             indent=4)

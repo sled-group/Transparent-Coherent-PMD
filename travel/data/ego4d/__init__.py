@@ -443,7 +443,8 @@ class MisalignSRL:
         type_name_col_name_map = data["type_name_col_name_map"]
         return cls(misalignsrl, type_name_col_name_map)
     
-    def get_misaligned_samples(self, clip, random_seed, split_video_info, multi_frame=False):      
+    def get_misaligned_samples(self, clip, random_seed, split_video_info, multi_frame=False):     
+        # TODO: we should probably apply some of the blurriness/brightness filtering steps we do for positive video clips here 
         mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
         
         video_uid_narration_timestamp_sec = clip["video_uid"] + "_" + str(clip["narration_timestamp_sec"])
@@ -781,16 +782,18 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     def ego4d_narration_to_instruction(self, narration_text: str, nlp: English) -> str:
         instruction_text = clean_narration_text(narration_text) # Replace symbols in narration text with words
         instruction_text = simple_present_to_imperative(nlp, instruction_text)
+        # TODO: consider removing "another" and "more" here in a later iteration
         for original_text, replaced_text in [("in your left hand", "in your hand"),
                                                 ("in your right hand", "in your hand"),
                                                 ("with your left hand", "with your hand"),
                                                 ("with your right hand", "with your hand"),
                                                 ("with both hands", "with your hands"),
                                                 ("with left hand", "with your hand"),
-                                                ("with right hand", "with your hand")]:
+                                                ("with right hand", "with your hand"),]:
             if not("left hand" in instruction_text and "right hand" in instruction_text):
                 # In Ego4D, it was often narrated which hands were being used for various actions; since our focus is the state changes of objects in these actions, we remove unneeded mentions of this
                 instruction_text = instruction_text.replace(original_text, replaced_text)
+
         return instruction_text
 
     def generate_examples(self,

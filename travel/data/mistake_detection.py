@@ -15,9 +15,10 @@ def get_cutoff_time_by_proportion(frame_times: list[float], proportion: float):
 
 class MistakeDetectionTasks(str, Enum):
     CaptainCook4D = "captaincook4d"
+    CaptainCook4D_Single = "captaincook4d_single"
     Ego4D = "ego4d" # Ego4D following SuccessVQA format augmented with additional sampled mismatch examples for more easy negatives
     Ego4D_Single = "ego4d_single" # Ego4D with only annotated effect frames from video clips
-    # EpicKitchens = "epickitchens" # Can consider adding EK later if need more training data for VQG
+    EpicKitchens_Single = "epickitchens_single"
 
 @dataclass
 class MistakeDetectionExample:
@@ -192,6 +193,7 @@ class MistakeDetectionDataset:
         :param example_id: Unique example ID.
         :return: Directory name.
         """
+        # TODO: this fails for datasets where the data is stored somewhere besides self.cache_dir - maybe should retrieve example_dir first
         return os.path.join(self.cache_dir, example_id)
 
     def save_example_to_file(self, example: MistakeDetectionExample):

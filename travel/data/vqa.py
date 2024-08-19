@@ -63,8 +63,11 @@ ASSISTANT_END_TOKENS = {
     Phi3ForCausalLM: "<|end|>\n",
 }
 
-IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions about the state of the scene to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
-IVQA_SUCCESS_QUESTION = 'Based on the above information, has the procedure "{procedure}" been successfully executed?'
+IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to gather information about the scene, then use it to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
+IVQA_PREAMBLE_TOPDOWN = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to determine whether the person has successfully executed the procedure, then explain why based on information about the scene. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
+
+IVQA_SUCCESS_QUESTION = 'Based on the image and above information, has the procedure "{procedure}" been successfully executed?'
+IVQA_SUCCESS_QUESTION_TOPDOWN = 'Based on the image, has the procedure "{procedure}" been successfully executed?'
 
 class VQAResponse(int, Enum):
     No = 0

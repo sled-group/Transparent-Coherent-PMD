@@ -1,0 +1,192 @@
+Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it.
+You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.
+
+For each annotation task, you will be given the following information:
+ - A sentence describing the procedure you're trying to perform.
+ - An optional list of previous questions you already asked, and their answers.
+ - The last question you just asked your friend, and its answer.
+
+You must rate how informative the last question and its answer are. By informative, we mean: compared to what you knew from the previous questions and answers, how much more sure would the last question and answer be about whether you succeeded?
+You can also choose to mark 'Instructions Unclear', which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+
+Some tips:
+ - Only judge the informativeness of the last question and answer, not the previous questions and answers (which may or may not be informative).
+ - A question may seem relevant to the task at hand, but you should consider it uninformative if it doesn't provide essential information to judge the success of the task.
+ - If a seemingly informative question is redundant with previous questions, you may consider it less informative.
+ - If the last answer contradicts critical information you had from previous questions and answers, you may consider it more informative.
+ - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
+ - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
+
+
+Annotation 1
+===============================
+Instruction: Pour oil from the bottle to the dough in the tray
+Previous questions and answers:
+None
+
+Last question: Is there a bottle of oil?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 2
+===============================
+Instruction: Put the pencil back into your mouth with your hand
+Previous questions and answers:
+None
+
+Last question: Is the pencil in the person's mouth?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 3
+===============================
+Instruction: Pick up the iron from the ironing board
+Previous questions and answers:
+Q1. Is the person wearing a white shirt?     (Answer: No)
+
+Last question: Is the person wearing a blue shirt?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 4
+===============================
+Instruction: Push the bowl on the newspaper forward with your hand
+Previous questions and answers:
+None
+
+Last question: Is the person's hand on the bowl?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 5
+===============================
+Instruction: Place the dipstick on the rag on the lawn mower on the floor with your hand
+Previous questions and answers:
+Q1. Is the dipstick on the rag on the lawn mower on the floor?     (Answer: Yes)
+Q2. Is the person's hand on the dipstick?     (Answer: Yes)
+
+Last question: Is the person's hand on the rag?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 6
+===============================
+Instruction: Place a plastic box on the bin
+Previous questions and answers:
+Q1. Is the person wearing gloves?     (Answer: Yes)
+Q2. Is the person wearing a face mask?     (Answer: Yes)
+
+Last question: Is the person wearing any other protective gear?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 7
+===============================
+Instruction: Open the door
+Previous questions and answers:
+None
+
+Last question: Is the door open?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 8
+===============================
+Instruction: Dip the napkin into the bucket of water
+Previous questions and answers:
+Q1. Is the person wearing a white shirt?     (Answer: No)
+
+Last question: Is the person wearing a black shirt?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 9
+===============================
+Instruction: Pick the paper on the table
+Previous questions and answers:
+Q1. Is the paper on the table in front of the person?     (Answer: Yes)
+Q2. Is the person seated at the table while working on the procedure?     (Answer: Yes)
+
+Last question: Is the person wearing a tie while working on the procedure?
+Last answer: No
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 10
+===============================
+Instruction: Pick a solder gun
+Previous questions and answers:
+None
+
+Last question: Do you see a solder gun?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+

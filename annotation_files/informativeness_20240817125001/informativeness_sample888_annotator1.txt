@@ -1,0 +1,193 @@
+Imagine you just had eye surgery, and are unable to see. You're performing a task you're familiar with, but need help to determine whether you successfully completed it.
+You video call a friend (who is unfamiliar with the task) and show them what you're working on. You then ask them some yes/no questions to figure out whether you successfully completed the task.
+
+For each annotation task, you will be given the following information:
+ - A sentence describing the procedure you're trying to perform.
+ - An optional list of previous questions you already asked, and their answers.
+ - The last question you just asked your friend, and its answer.
+
+You must rate how informative the last question and its answer are. By informative, we mean: compared to what you knew from the previous questions and answers, how much more sure would the last question and answer be about whether you succeeded?
+You can also choose to mark 'Instructions Unclear', which means that the instructional text itself is not clear, so you're not sure how to determine whether it's successful. This should only be used in rare cases.
+
+Some tips:
+ - Only judge the informativeness of the last question and answer, not the previous questions and answers (which may or may not be informative).
+ - A question may seem relevant to the task at hand, but you should consider it uninformative if it doesn't provide essential information to judge the success of the task.
+ - If a seemingly informative question is redundant with previous questions, you may consider it less informative.
+ - If the last answer contradicts critical information you had from previous questions and answers, you may consider it more informative.
+ - The instructional text and questions may refer to "someone" or a "person"; always assume this is referring to yourself (the person performing the task).
+ - The questions may refer to a "photo" or "image"; always assume this is referring to the video feed your friend would see through the video call.
+
+
+Annotation 1
+===============================
+Instruction: Smoothen a wooden stand with a sand paper
+Previous questions and answers:
+Q1. Is the person wearing safety goggles?     (Answer: No)
+Q2. Is the person wearing gloves?     (Answer: No)
+
+Last question: Is the person wearing a shirt?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 2
+===============================
+Instruction: Open a tap with your hand
+Previous questions and answers:
+Q1. Is the person's hand visible in the photo?     (Answer: Yes)
+Q2. Is the person's hand touching the tap?     (Answer: No)
+Q3. Is the person's hand close to the tap?     (Answer: Yes)
+
+Last question: Is the person's hand in front of the tap?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 3
+===============================
+Instruction: Clean the bowl
+Previous questions and answers:
+None
+
+Last question: Is there a bowl in the image?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 4
+===============================
+Instruction: Remove the driller from the wall
+Previous questions and answers:
+None
+
+Last question: Is the driller wearing a hard hat?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 5
+===============================
+Instruction: Drop sandpaper
+Previous questions and answers:
+None
+
+Last question: Is there sandpaper in the photo?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 6
+===============================
+Instruction: Join the wood with the bicycle tube again
+Previous questions and answers:
+None
+
+Last question: Is the bicycle tube connected to the wood?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 7
+===============================
+Instruction: Pick the tray from a tray rack with your hands
+Previous questions and answers:
+Q1. Is the tray on the tray rack?     (Answer: Yes)
+Q2. Is the tray on the top shelf of the tray rack?     (Answer: Yes)
+
+Last question: Is the tray on the middle shelf of the tray rack?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 8
+===============================
+Instruction: Put wood frame on a combination machine
+Previous questions and answers:
+None
+
+Last question: Do you see a combination machine?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 9
+===============================
+Instruction: Spray water on the rear end of the car with the spray nozzle in your two hands
+Previous questions and answers:
+None
+
+Last question: Is the person holding the spray nozzle in their two hands?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+
+
+Annotation 10
+===============================
+Instruction: Open a bottle of
+Previous questions and answers:
+None
+
+Last question: Is there a bottle in the image?
+Last answer: Yes
+Your rating (place an 'x' next to your choice):
+1 (very informative): 
+2 (slightly informative): 
+3 (neutral): 
+4 (slightly informative): 
+5 (very informative): 
+Instructions Unclear: 
+

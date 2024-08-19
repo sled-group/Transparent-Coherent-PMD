@@ -320,7 +320,7 @@ class TargetObjectCounterFilter(AdaptiveVisualFilter):
         if return_dict:
             target_object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_count_results)]
         else:
-            target_object_counts = [sum(list(result.values())) for result in object_count_results]
+            target_object_counts = [sum([min(1, v) for v in result.values()]) for result in object_count_results] # Count 1 for every target object that was recognized
 
         return target_object_counts
 
