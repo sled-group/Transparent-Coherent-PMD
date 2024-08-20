@@ -54,16 +54,16 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
     ),
     (
         [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_20240816225456/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20240815204213/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240815204213/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_20240816192439/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_20240816225456/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20240815204213/outputs_val.json",
         ],
         [
-            "Coherence Ranking",
-            "Coherence Ranking (+ ICL candidates)",
             "Likelihood Ranking",
-            "Likelihood Ranking (+ ICL candidates)",
+            "Likelihood Ranking + ICL",
+            "Coherence Ranking",
+            "Coherence Ranking + ICL",
         ],
         ['#C10000', '#C100C1', '#0000C1', '#00C1C1'],
         "introducing_icl"
@@ -77,7 +77,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_spatial_blur55.0_20240818001956/outputs_val.json",
         ],
         [
-            "No Filter",
+            "None",
             "CRG",
             "VCD",
             "AGLA",
@@ -93,7 +93,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_agla2.0_20240818110210/outputs_val.json",
         ],
         [
-            "No Filter",
+            "None",
             "CRG",
             "AGLA",
         ],
@@ -141,6 +141,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
     turn_success_probs_noimg = [[] for _ in results_fnames]
     turn_questions = [[] for _ in results_fnames]
     turn_questions_sources = [[] for _ in results_fnames]
+    turn_answer_probs = [[] for _ in results_fnames]
     for i, result_fname in enumerate(results_fnames):
         result_preds = json.load(open(result_fname, "r"))
         result_preds_noimg = None
@@ -174,6 +175,8 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             turn_questions[i].append(pred['questions'])
             if 'candidate_questions_sources' in pred:
                 turn_questions_sources[i].append([cs[cq.index(q)] for q, cq, cs in zip(pred['questions'], pred['candidate_questions'], pred['candidate_questions_sources'])])
+            
+            turn_answer_probs[i].append(pred['answer_probs'])
 
     # Analysis 1: save number of turns spent on each example and other stats about VQG->VQA turns
     print("(1) Running efficiency analysis...")
@@ -193,6 +196,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
         all_turn_info_diffs = []
 
         question_sources = Counter()
+        question_sources_position = {"vlm": [], "icl": []}
         for label_idx, label in enumerate(all_labels[i]):
             turn_info_gains = []
             turn_info_gains_noimg = []
@@ -234,6 +238,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
                 if len(turn_questions_sources[i]) > 0:
                     q_source = turn_questions_sources[i][label_idx][turn_idx]
                     question_sources[q_source] += 1
+                    question_sources_position[q_source].append(turn_idx)
 
             all_dialog_info_gains.append(np.sum(turn_info_gains))
             all_turn_info_gains.append(np.mean(turn_info_gains))
@@ -254,6 +259,9 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
         lines.append(f"{results_names[i]} average information gained per dialog: {mean_dialog_info_gain}")
         lines.append(f"{results_names[i]} MSE across turns: {mean_mse}")
 
+        result_answer_sureness = np.mean([np.mean([max(prob) for prob in probs[:turns]]) for probs, turns in zip(turn_answer_probs[i], n_turns[i])])
+        lines.append(f"{results_names[i]} average sureness about answers: {result_answer_sureness}")
+
         if len(turn_success_probs_noimg[i]) > 0:
             mean_dialog_info_gain_noimg = np.mean(all_dialog_info_gains_noimg)
             mean_turn_info_gain_noimg = np.mean(all_turn_info_gains_noimg)
@@ -269,13 +277,43 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
 
         for source in question_sources:
             lines.append(f"{results_names[i]} percent of turns from source '{source}': {question_sources[source] / sum(list(question_sources.values()))}")
+            lines.append(f"{results_names[i]} average position of source '{source}': {np.mean(question_sources_position[source])}")
         lines.append("")
+
+        if "vlm" in question_sources and "icl" in question_sources:
+            # Also generate a plot of turn sources
+            plt.figure(figsize=(12, 2))
+
+            # Define the bins and width of the bars
+            bins = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            bar_width = 0.7
+
+            # Plotting the first histogram
+            plt.hist([question_sources_position['vlm'], question_sources_position['icl']], bins=[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], color=["#DC9CBE", "#58B2C5"], label=["Dialog", "ICL"], density=False, rwidth=bar_width)
+
+            # Adjusting the tick positions to be centered between the groups
+            tick_positions = [x + bar_width * 0.7 for x in bins[:-1]]
+            plt.xticks(tick_positions, labels=[str(i) for i in range(len(tick_positions))])
+
+            # Adding labels and title
+            plt.xlabel('VQG Iteration', fontsize=14, fontweight='bold')
+            plt.ylabel('Count', fontsize=14, fontweight='bold')
+
+            # Adding legend
+            plt.legend(loc='upper right', fontsize=14)  
+
+            output_fname = f"question_source_hist_{results_names[i]}.pdf"
+            save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+            for save_path in save_paths:
+                plt.savefig(save_path, bbox_inches='tight')
 
     output_fname = f"turn_metrics_{'_'.join(results_names).replace(' ', '-')}.txt"
     save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
     for save_path in save_paths:
         with open(save_path, 'w') as f:
             f.write("\n".join(lines))
+
+
     print("(1) Done!")
 
     # Analysis 2: Plot confidence and variance for model predictions on success and mistake predictions
@@ -521,7 +559,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
 
         if coherence_metrics is not None:
             all_relevance = coherence_metrics['metrics_by_example']["relevance_marginal_by_example"]
-            all_informativeness = coherence_metrics['metrics_by_example']["informativeness_marginal_x_relevance_marginal_by_example"]
+            all_informativeness = coherence_metrics['metrics_by_example']["informativeness_marginal_x_relevance_marginal_ref_by_example"]
 
             res = spearmanr(all_informativeness, all_error[i])
             lines.append(f"{results_names[i]} Spearman correlation between informativeness x relevance and error: {res.statistic} (p={res.pvalue})")

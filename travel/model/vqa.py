@@ -500,6 +500,8 @@ def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames,
             batch_frames_filtered = visual_filter(batch_frames)
         elif visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
             batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
+        elif visual_filter_mode == VisualFilterTypes.Spatial:
+            batch_frames_filtered, new_questions = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
         elif visual_filter_mode == VisualFilterTypes.AGLA:
             batch_frames_filtered = visual_filter(batch_frames, new_questions)
 
