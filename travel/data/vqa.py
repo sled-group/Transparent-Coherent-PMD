@@ -41,26 +41,31 @@ IMAGE_TOKENS = {
     InstructBlipForConditionalGeneration: "",
     LlavaForConditionalGeneration: "<image>\n",
     Phi3ForCausalLM: "<|image_1|>\n",
+    Kosmos2ForConditionalGeneration: "<grounding>",
 }
 USER_START_TOKENS = {
     InstructBlipForConditionalGeneration: " ",
     LlavaForConditionalGeneration: "USER: ",
     Phi3ForCausalLM: "<|user|>\n",
+    Kosmos2ForConditionalGeneration: " ",
 }
 USER_END_TOKENS = {
     InstructBlipForConditionalGeneration: " ",
     LlavaForConditionalGeneration: " ",
     Phi3ForCausalLM: "<|end|>\n",
+    Kosmos2ForConditionalGeneration: " ",
 }
 ASSISTANT_START_TOKENS = {
     InstructBlipForConditionalGeneration: " ",
     LlavaForConditionalGeneration: "ASSISTANT: ",
     Phi3ForCausalLM: "<|assistant|>\n",
+    Kosmos2ForConditionalGeneration: " ",
 }
 ASSISTANT_END_TOKENS = {
     InstructBlipForConditionalGeneration: " ",
     LlavaForConditionalGeneration: " ",
     Phi3ForCausalLM: "<|end|>\n",
+    Kosmos2ForConditionalGeneration: " ",
 }
 
 IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to gather information about the scene, then use it to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'

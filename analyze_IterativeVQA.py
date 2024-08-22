@@ -30,7 +30,7 @@ parent_output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name
 for results_fnames, results_names, results_colors, analysis_subdir in [
     (
         [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_topdown_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240817105952/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_topdown_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240817105952/allturns2/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240815204213/outputs_val.json",
         ],
         [
@@ -74,7 +74,25 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_contrastive_region1.0_20240817053024/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_visual_contrastive1.0_20240817135023/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_agla2.0_20240817190319/outputs_val.json",
+        ],
+        [
+            "None",
+            "CRG",
+            "VCD",
+            "AGLA",
+        ],
+        ['#00C1C1', '#5E00C1', '#E4912C', '#00B906'],
+        "visual_filters_coherence_defense"
+    ),
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20240815204213/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_contrastive_region1.0_20240817053024/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_visual_contrastive1.0_20240817135023/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_agla2.0_20240817190319/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_spatial_blur55.0_20240818001956/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_spatial_blur55.0_20240821203114/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_spatial1.0_20240821095333/outputs_val.json",
         ],
         [
             "None",
@@ -82,10 +100,12 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             "VCD",
             "AGLA",
             "Spatial",
+            "Spatial (- Reranking Based on Position)",
+            "Spatial (+ Rephrase + Darkness, Still Reranking)"
         ],
-        ['#00C1C1', '#5E00C1', '#E4912C', '#00B906', '#875242'],
+        ['#00C1C1', '#5E00C1', '#E4912C', '#00B906', '#875242', "#AF08AA", "#123456"],
         "visual_filters_coherence"
-    ),
+    ),    
     (
         [
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_20240816192439/outputs_val.json",
@@ -558,14 +578,14 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             coherence_metrics = json.load(open(coherence_metrics_path, "r"))
 
         if coherence_metrics is not None:
-            all_relevance = coherence_metrics['metrics_by_example']["relevance_marginal_by_example"]
-            all_informativeness = coherence_metrics['metrics_by_example']["informativeness_marginal_x_relevance_marginal_ref_by_example"]
+            all_relevance = np.array(coherence_metrics['metrics_by_example']["relevance_marginal_by_example"])
+            all_verifiability = np.array(coherence_metrics['metrics_by_example']["informativeness_marginal_ref_by_example"]) * all_relevance
 
-            res = spearmanr(all_informativeness, all_error[i])
-            lines.append(f"{results_names[i]} Spearman correlation between informativeness x relevance and error: {res.statistic} (p={res.pvalue})")
+            res = spearmanr(all_verifiability, all_error[i])
+            lines.append(f"{results_names[i]} Spearman correlation between informativeness x relevance (per example verifiability) and error: {res.statistic} (p={res.pvalue})")
 
-            res2 = pointbiserialr(all_correctness[i], all_informativeness)
-            lines.append(f"{results_names[i]} point-biserial correlation between informativeness x relevance and correctness: {res2[0]} (p={res2[1]})")
+            res2 = pointbiserialr(all_correctness[i], all_verifiability)
+            lines.append(f"{results_names[i]} point-biserial correlation between informativeness x relevance (per example verifiability) and correctness: {res2[0]} (p={res2[1]})")
                          
             lines.append("")
 

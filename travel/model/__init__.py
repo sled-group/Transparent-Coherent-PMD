@@ -2,6 +2,7 @@ import numpy as np
 from pprint import pprint
 import torch
 from tqdm import tqdm
+from transformers import InstructBlipForConditionalGeneration
 
 def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batch_size=20, generation_kwargs={}):
     """
@@ -164,7 +165,10 @@ def compute_completion_log_likelihoods(model, tokenizer, prompts: list[str], com
 
         # Get the logits from the model in a single forward pass
         with torch.inference_mode():
-            outputs = model(batch_inputs)
+            if type(model) != InstructBlipForConditionalGeneration:
+                outputs = model(batch_inputs)
+            else:
+                outputs = model(batch_inputs, decoder_input_ids=batch_inputs)
 
         logits = outputs.logits[:, :-1, :]  # Exclude the last token's logits
         sequences = batch_inputs[:, 1:].contiguous()  # Shift input sequences for alignment
@@ -248,7 +252,11 @@ def compute_completion_log_likelihoods_vlm(model, processor, prompts: list[str],
 
         # Get the logits from the model in a single forward pass
         with torch.inference_mode():
-            outputs = model(batch_inputs, attention_mask=attention_mask, **image_inputs)
+            if type(model) != InstructBlipForConditionalGeneration:
+                outputs = model(batch_inputs, attention_mask=attention_mask, **image_inputs)
+            else:
+                outputs = model(batch_inputs, decoder_input_ids=batch_inputs, attention_mask=attention_mask, **image_inputs)
+        
 
         logits = outputs.logits[:, :-1, :]  # Exclude the last token's logits
         sequences = batch_inputs[:, 1:].contiguous()  # Shift input sequences for alignment

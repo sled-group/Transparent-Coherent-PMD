@@ -493,35 +493,35 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
 
             # print(old_question, noun)
 
-            # Reweight the confidence of each candidate bounding box based on how close it is to the center of the image (central objects are more likely to be important)
-            if bboxes.shape[0] > 0:
+            # # Reweight the confidence of each candidate bounding box based on how close it is to the center of the image (central objects are more likely to be important)
+            # if bboxes.shape[0] > 0:
 
-                # Merge together overlapping bounding boxes
-                bboxes = np.array([bbox.coords for bbox in BoundingBoxCluster([BoundingBox(*bbox, score) for bbox, score in zip(bboxes, scores)]).get_merged_boxes()])
+            #     # Merge together overlapping bounding boxes
+            #     bboxes = np.array([bbox.coords for bbox in BoundingBoxCluster([BoundingBox(*bbox, score) for bbox, score in zip(bboxes, scores)]).get_merged_boxes()])
 
-                for bbox_idx, bbox in enumerate(bboxes):
-                    # old_score = scores[bbox_idx]
+            #     for bbox_idx, bbox in enumerate(bboxes):
+            #         # old_score = scores[bbox_idx]
 
-                    bbox_centroid = np.array(((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0))
-                    image_centroid = np.array((frame_padded.width / 2.0, (frame_padded.width / frame.width * frame.height) / 2.0)) # NOTE: this assumes image is horizontal (width >= height)
-                    bbox_dist_from_center = min(np.linalg.norm(image_centroid - bbox_centroid) / np.sqrt(image_centroid[0] ** 2 + image_centroid[1] ** 2), 1.0) # normalize by maximum distance
-                    assert 0.0 <= bbox_dist_from_center <= 1.0, f"Bounding box distance out of range: {bbox_dist_from_center}"
-                    bbox_dist_from_center_reweighted = 0.5 / (1 + np.exp(-20 * (0.5 - bbox_dist_from_center))) + 0.5 # Use a sigmoid function to re-weight the distance
-                    scores[bbox_idx] *= bbox_dist_from_center_reweighted
+            #         bbox_centroid = np.array(((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0))
+            #         image_centroid = np.array((frame_padded.width / 2.0, (frame_padded.width / frame.width * frame.height) / 2.0)) # NOTE: this assumes image is horizontal (width >= height)
+            #         bbox_dist_from_center = min(np.linalg.norm(image_centroid - bbox_centroid) / np.sqrt(image_centroid[0] ** 2 + image_centroid[1] ** 2), 1.0) # normalize by maximum distance
+            #         assert 0.0 <= bbox_dist_from_center <= 1.0, f"Bounding box distance out of range: {bbox_dist_from_center}"
+            #         bbox_dist_from_center_reweighted = 0.5 / (1 + np.exp(-20 * (0.5 - bbox_dist_from_center))) + 0.5 # Use a sigmoid function to re-weight the distance
+            #         scores[bbox_idx] *= bbox_dist_from_center_reweighted
 
-                    # print(f"bbox {bbox} in {frame.width}x{frame.height} image: {old_score} -> {scores[bbox_idx]} (dist={bbox_dist_from_center}, {bbox_dist_from_center_reweighted} after reweight)")
-                    # print("padded frame size:", frame_padded.size)
-                    # print("image centroid:", image_centroid)
-                    # print("bbox centroid:", bbox_centroid)
-                    # print("")
-                    # frame_padded.save("temp.png")
+            #         # print(f"bbox {bbox} in {frame.width}x{frame.height} image: {old_score} -> {scores[bbox_idx]} (dist={bbox_dist_from_center}, {bbox_dist_from_center_reweighted} after reweight)")
+            #         # print("padded frame size:", frame_padded.size)
+            #         # print("image centroid:", image_centroid)
+            #         # print("bbox centroid:", bbox_centroid)
+            #         # print("")
+            #         # frame_padded.save("temp.png")
 
-                # Remove any bboxes that are no longer above the threshold
-                bboxes = np.array([bbox for bbox, score in zip(bboxes, scores) if score >= OWL_THRESHOLD])
-                scores = np.array([score for score in scores if score >= OWL_THRESHOLD])
-                if len(bboxes.shape) == 1:
-                    # There's only one bbox left, which takes away a dim
-                    bboxes = np.expand_dims(bboxes, axis=0)
+            #     # Remove any bboxes that are no longer above the threshold
+            #     bboxes = np.array([bbox for bbox, score in zip(bboxes, scores) if score >= OWL_THRESHOLD])
+            #     scores = np.array([score for score in scores if score >= OWL_THRESHOLD])
+            #     if len(bboxes.shape) == 1:
+            #         # There's only one bbox left, which takes away a dim
+            #         bboxes = np.expand_dims(bboxes, axis=0)
 
             if bboxes.shape[0] > 0 and bboxes.shape[1] > 0:
                 # If we still have some bboxes
@@ -833,7 +833,13 @@ class AGLAFilter(AdaptiveVisualFilter):
         images = [self.vis_processors["eval"](frame).unsqueeze(0).to('cuda') for frame in frames]
         questions = [self.text_processors["eval"](question) for question in questions]
         tokenized_texts = [self.model_itm.tokenizer(question, padding='longest', truncation=True, return_tensors="pt").to('cuda') for question in questions]
-        augmented_images = [augmentation(image, question, tensor_image, self.model_itm, tokenized_text, raw_image) for raw_image, tensor_image, image, question, tokenized_text in zip(frames, tensor_images, images, questions, tokenized_texts)]
+        augmented_images = []
+        for raw_image, tensor_image, image, question, tokenized_text in zip(frames, tensor_images, images, questions, tokenized_texts):
+            try:
+                augmented_images.append(augmentation(image, question, tensor_image, self.model_itm, tokenized_text, raw_image)) 
+            except:
+                # In rare cases this line fails due to size mismatch error - just fall back to using original image
+                augmented_images.append(raw_image)
         augmented_images = [frame.resize(original_size) for frame, original_size in zip(augmented_images, original_sizes)]
         
         return augmented_images

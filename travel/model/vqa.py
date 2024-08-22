@@ -43,7 +43,15 @@ def run_vqa(vlm: PreTrainedModel,
     assert len(prompts) == len(frames), "Need same number of prompts and frames to run VQA!"
 
     # Run VQA in batches
-    logits = torch.zeros((0, vlm.vocab_size)).float()
+    if type(vlm) != InstructBlipForConditionalGeneration:
+        if getattr(vlm, "vocab_size", None):
+            vocab_size = vlm.vocab_size
+        else:
+            vocab_size = max(processor.tokenizer.vocab_size, max([k + 1 for k in processor.tokenizer.added_tokens_decoder.keys()]))
+    else:
+        vocab_size = 32128
+
+    logits = torch.zeros((0, vocab_size)).float()
     if cache_path is not None:
         assert cache_path.endswith(".pt"), "Cache path should be .pt to store logits tensor!"
         if os.path.exists(cache_path):
@@ -66,6 +74,8 @@ def run_vqa(vlm: PreTrainedModel,
             # Run through VLM to get logits
             inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
             inputs = inputs.to(vlm.device)
+            if type(vlm) == InstructBlipForConditionalGeneration:
+                inputs['decoder_input_ids'] = inputs['input_ids']
             outputs = vlm(**inputs)
             this_logits = outputs.logits
             inputs = inputs.to('cpu')

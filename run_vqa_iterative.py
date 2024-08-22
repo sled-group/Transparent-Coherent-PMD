@@ -113,15 +113,18 @@ bnb_config = BitsAndBytesConfig(
 
 # Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
 try:
-    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config)   
+    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)   
 except:
-    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config)
-vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
+    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)
+vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True)
 vlm_processor.tokenizer.padding_side = "left"
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
 # We'll use VLM's LM directly to generate questions
-lm = vlm.language_model
+if getattr(vlm, "language_model", None):
+    lm = vlm.language_model
+else:
+    lm = vlm
 tokenizer = vlm_processor.tokenizer
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -273,8 +276,8 @@ if not is_complete:
             # Generate a question (with beam search so we have several candidates)
             prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[type(vlm)] if question_idx != 0 else USER_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q:" for prompt in prompts]
             if not args.condition_questions_with_frames:
-                new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
-                                                                vlm_processor.tokenizer,
+                new_questions, _ = simple_lm_prompt_beam_search(lm,
+                                                                tokenizer,
                                                                 [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q],
                                                                 max_new_tokens=20,
                                                                 batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
@@ -298,8 +301,8 @@ if not is_complete:
                     prompt + '\n'.join([str(pqi+1) + ' ' + pq for pqi, pq in enumerate(previous_questions[-2:])]) + ("\n" if len(previous_questions) > 0 else "") + f"{len(previous_questions) + 1}. " 
                     for prompt, previous_questions in zip(icl_prompts, questions)
                 ] # Add some previous questions if possible (take last 2 that were asked)
-                icl_new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
-                                                                    vlm_processor.tokenizer,
+                icl_new_questions, _ = simple_lm_prompt_beam_search(lm,
+                                                                    tokenizer,
                                                                     icl_prompts,
                                                                     max_new_tokens=20,
                                                                     batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1),
@@ -797,6 +800,10 @@ if worker_index == 0:
     json.dump(coherence_metrics, 
             open(os.path.join(this_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
             indent=4)
+
+    json.dump(all_coherence_metrics, 
+            open(os.path.join(this_results_dir, f"metrics_coherence_raw_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
+            indent=4)            
 
     # Generate DET curves for accuracy
     generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
