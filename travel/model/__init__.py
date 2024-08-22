@@ -165,7 +165,7 @@ def compute_completion_log_likelihoods(model, tokenizer, prompts: list[str], com
 
         # Get the logits from the model in a single forward pass
         with torch.inference_mode():
-            if type(model) != InstructBlipForConditionalGeneration:
+            if not model.config.is_encoder_decoder:
                 outputs = model(batch_inputs)
             else:
                 outputs = model(batch_inputs, decoder_input_ids=batch_inputs)
