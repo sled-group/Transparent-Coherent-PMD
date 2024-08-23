@@ -30,9 +30,11 @@ def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batc
 
         scores = lm.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False).cpu().numpy()
         all_scores += [round(float(np.mean(s)), 6) for s in scores] # Save sequence probability
-        outputs = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
-        
-        all_outputs += [output.replace(batch_prompts[output_idx // num_seq], "") for output_idx, output in enumerate(outputs)]
+
+        outputs = outputs.sequences[:, inputs['input_ids'].shape[-1]:]
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        all_outputs += outputs
 
     # Collate generated texts and scores from beam search
     all_outputs_collated = []
@@ -71,8 +73,10 @@ def simple_vlm_prompt_beam_search(vlm, processor, prompts, frames, image_token, 
         with torch.inference_mode():
             outputs = vlm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
 
-        outputs = processor.tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
-        all_outputs += [output.replace(batch_prompts[output_idx // num_seq].replace(image_token.strip(), " "), "") for output_idx, output in enumerate(outputs)]
+        outputs = outputs.sequences[:, inputs['input_ids'].shape[-1]:]
+        outputs = processor.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        all_outputs += outputs
 
     # Collate generated texts and scores from beam search
     all_outputs_collated = []
@@ -99,10 +103,10 @@ def simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=20, g
 
         outputs = lm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
 
-        outputs = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
+        outputs = outputs.sequences[:, inputs['input_ids'].shape[-1]:]
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         
-        all_outputs += [output.replace(batch_prompts[output_idx], "") for output_idx, output in enumerate(outputs)]
-        # TODO: return likelihoods from simple_prompt_lm
+        all_outputs += outputs
 
     return all_outputs
 

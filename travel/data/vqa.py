@@ -40,6 +40,7 @@ VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES = {
 IMAGE_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": "",
     "Salesforce/instructblip-flan-t5-xxl": "",
+    "Salesforce/instructblip-vicuna-7b": "",
     "llava-hf/llava-1.5-7b-hf": "<image>\n",
     "microsoft/Phi-3-vision-128k-instruct": "<|image_1|>\n",
     "microsoft/Phi-3.5-vision-instruct": "<|image_1|>\n",
@@ -47,7 +48,8 @@ IMAGE_TOKENS = {
 }
 USER_START_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": " ",
-    "Salesforce/instructblip-flan-t5-xxl": "",
+    "Salesforce/instructblip-flan-t5-xxl": " ",
+    "Salesforce/instructblip-vicuna-7b": " ",
     "llava-hf/llava-1.5-7b-hf": "USER: ",
     "microsoft/Phi-3-vision-128k-instruct": "<|user|>\n",
     "microsoft/Phi-3.5-vision-instruct": "<|user|>\n",
@@ -55,7 +57,8 @@ USER_START_TOKENS = {
 }
 USER_END_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": " ",
-    "Salesforce/instructblip-flan-t5-xxl": "",
+    "Salesforce/instructblip-flan-t5-xxl": " ",
+    "Salesforce/instructblip-vicuna-7b": " ",
     "llava-hf/llava-1.5-7b-hf": " ",
     "microsoft/Phi-3-vision-128k-instruct": "<|end|>\n",
     "microsoft/Phi-3.5-vision-instruct": "<|end|>\n",
@@ -63,7 +66,8 @@ USER_END_TOKENS = {
 }
 ASSISTANT_START_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": " ",
-    "Salesforce/instructblip-flan-t5-xxl": "",
+    "Salesforce/instructblip-flan-t5-xxl": " ",
+    "Salesforce/instructblip-vicuna-7b": " ",
     "llava-hf/llava-1.5-7b-hf": "ASSISTANT: ",
     "microsoft/Phi-3-vision-128k-instruct": "<|assistant|>\n",
     "microsoft/Phi-3.5-vision-instruct": "<|assistant|>\n",
@@ -72,6 +76,7 @@ ASSISTANT_START_TOKENS = {
 ASSISTANT_END_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": " ",
     "Salesforce/instructblip-flan-t5-xxl": "",
+    "Salesforce/instructblip-vicuna-7b": " ",
     "llava-hf/llava-1.5-7b-hf": " ",
     "microsoft/Phi-3-vision-128k-instruct": "<|end|>\n",
     "microsoft/Phi-3.5-vision-instruct": "<|end|>\n",

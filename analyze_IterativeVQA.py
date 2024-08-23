@@ -30,15 +30,15 @@ parent_output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name
 for results_fnames, results_names, results_colors, analysis_subdir in [
     (
         [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-flan-t5-xl/IterativeVQA_topdown_q10_ego4d_single_debug250_instructblip-flan-t5-xl_beam8-4_likelihood_nohistory_20240822203648/allturns4/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-flan-t5-xl/IterativeVQA_q10_ego4d_single_debug250_instructblip-flan-t5-xl_beam8-4_likelihood_nohistory_20240822201540/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/Phi-3-vision-128k-instruct/IterativeVQA_topdown_q10_ego4d_single_debug250_Phi-3-vision-128k-instruct_beam8-4_likelihood_nohistory_20240823121212/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/Phi-3-vision-128k-instruct/IterativeVQA_q10_ego4d_single_debug250_Phi-3-vision-128k-instruct_beam8-4_likelihood_nohistory_20240823112243/outputs_val.json",
         ],
         [
             "Top-Down",
             "Bottom-Up",
         ],
         ['#C1C100', '#C10000'],
-        "instructblip_reasoning_direction"
+        "phi3_reasoning_direction"
     ),
     (
         [
@@ -128,7 +128,27 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
         ['#C10000', '#5E00C1', '#00B906'],
         "llava_visual_filters_likelihood"
     ),    
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug1000/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug1000_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240821150324/outputs_test.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug1000/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug1000_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20240821144253/outputs_test.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug1000/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug1000_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_agla2.0_20240821195807/outputs_test.json"
+        ],
+        [
+            "Likelihood",
+            "Coherence + ICL",
+            "Coherence + ICL + AGLA"
+        ],
+        ['#C10000', '#00C1C1', '#00B906'],
+        "llava_testing"
+    ),
 ]:
+
+    if "_val.json" in results_fnames[0]:
+        eval_partition = "val"
+    else:
+        eval_partition = "test"
+
     # Set up subdirectory
     output_dir = os.path.join(parent_output_dir, analysis_subdir)
     if not os.path.exists(output_dir):
@@ -173,8 +193,8 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
     for i, result_fname in enumerate(results_fnames):
         result_preds = json.load(open(result_fname, "r"))
         result_preds_noimg = None
-        if os.path.exists(result_fname.replace("outputs_val.json", "/results_image_free_SuccessVQA/outputs_val.json")):
-            result_preds_noimg = json.load(open(result_fname.replace("outputs_val.json", "/results_image_free_SuccessVQA/outputs_val.json"), "r"))
+        if os.path.exists(result_fname.replace(f"outputs_{eval_partition}.json", "/results_image_free_SuccessVQA/outputs_{eval_partition}.json")):
+            result_preds_noimg = json.load(open(result_fname.replace(f"outputs_{eval_partition}.json", "/results_image_free_SuccessVQA/outputs_{eval_partition}.json"), "r"))
 
         for pred_idx, pred in enumerate(result_preds.values()):
             mistake = pred['mistake']
@@ -382,7 +402,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
 
     fig.tight_layout()
 
-    output_fname = f"confidence_comparison1_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+    output_fname = f"confidence_comparison1_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
     save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
     for path in save_paths:
         fig.savefig(path)
@@ -412,7 +432,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
 
     fig.tight_layout()
 
-    output_fname = f"confidence_comparison2_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+    output_fname = f"confidence_comparison2_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
     save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
     for path in save_paths:
         fig.savefig(path)
@@ -463,7 +483,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
         # Display the plot
         plt.show()
 
-        output_fname = f"confidence_histogram_val_{result_name.replace(' ', '-')}.pdf"
+        output_fname = f"confidence_histogram_{eval_partition}_{result_name.replace(' ', '-')}.pdf"
         save_paths = [os.path.join("/".join(result_fname.split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
         for path in save_paths:
             fig.savefig(path)
@@ -509,7 +529,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
     plt.legend(loc='best')
     plt.grid()
 
-    output_fname = f"calibration_curves_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+    output_fname = f"calibration_curves_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
     save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
     for path in save_paths:
         plt.savefig(path)
@@ -533,7 +553,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             eff_reliabilities.append(e)
             sp_recalls.append(spr)
 
-        output_fname = f"selective_prediction_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
+        output_fname = f"selective_prediction_metrics_{eval_partition}_{results_names[i].replace(' ', '-')}.pdf"
         save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
 
         plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)
@@ -564,13 +584,13 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
                 eff_reliabilities.append(e)
                 sp_recalls.append(spr)
 
-            output_fname = f"selective_prediction_calibrated_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
+            output_fname = f"selective_prediction_calibrated_metrics_{eval_partition}_{results_names[i].replace(' ', '-')}.pdf"
             save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
 
             plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)    
 
 
-    output_fname = f"risk_coverage_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+    output_fname = f"risk_coverage_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
     save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
     generate_risk_coverage_plot(all_coverages, all_risks, results_names, save_paths)
     print("(4) Done!")
@@ -580,7 +600,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
     print("(5) Beginning tiered metrics correlation analysis...")
     lines = []
     for i, result_fname in enumerate(results_fnames):
-        coherence_metrics_path = result_fname.replace("outputs_val.json", "metrics_coherence_nli_val.json")
+        coherence_metrics_path = result_fname.replace(f"outputs_{eval_partition}.json", f"metrics_coherence_nli_{eval_partition}.json")
         coherence_metrics = None
         if os.path.exists(coherence_metrics_path):
             coherence_metrics = json.load(open(coherence_metrics_path, "r"))
@@ -611,7 +631,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
     all_accuracy_metrics = []
     all_calibrated_mistake_probs = []
     for i, result_fname in enumerate(results_fnames):
-        coherence_metrics_path = result_fname.replace("outputs_val.json", "metrics_coherence_nli_val.json")
+        coherence_metrics_path = result_fname.replace(f"outputs_{eval_partition}.json", f"metrics_coherence_nli_{eval_partition}.json")
         coherence_metrics = None
         if os.path.exists(coherence_metrics_path):
             coherence_metrics = json.load(open(coherence_metrics_path, "r"))
@@ -664,7 +684,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             eff_reliabilities.append(e)
             sp_recalls.append(spr)
 
-        output_fname = f"selective_prediction_coherence_calibrated_metrics_val_{results_names[i].replace(' ', '-')}.pdf"
+        output_fname = f"selective_prediction_coherence_calibrated_metrics_{eval_partition}_{results_names[i].replace(' ', '-')}.pdf"
         save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
 
         plot_abstention_metrics(thresholds, coverages, risks, eff_reliabilities, sp_recalls, results_names[i], save_paths)
@@ -673,7 +693,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
         all_coverages.append(coverages)
         all_risks.append(risks)
 
-    output_fname = f"risk_coverage_coherence_calibrated_val_{'_'.join(results_names).replace(' ', '-')}.pdf"
+    output_fname = f"risk_coverage_coherence_calibrated_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
     save_paths = [os.path.join("/".join(results_fnames[i].split("/")[:-1]), run_folder_name, output_fname) for i in range(len(results_fnames))] + [os.path.join(output_dir, output_fname)]
     generate_risk_coverage_plot(all_coverages, all_risks, results_names, save_paths)
     print("(4) Done!")

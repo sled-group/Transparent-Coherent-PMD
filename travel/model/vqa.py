@@ -76,7 +76,16 @@ def run_vqa(vlm: PreTrainedModel,
                 batch_prompts = [p.replace("A: ", "") for p in batch_prompts]
 
             # Run through VLM to get logits
-            inputs = processor(batch_prompts, batch_frames, padding=True, return_tensors="pt")
+            if "phi3" not in str(type(vlm)):
+                inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
+            else:
+                # Phi 3 processor does not support multiple texts and images together, have to process separately
+                text_inputs = processor(batch_prompts, padding=True, return_tensors="pt")
+                image_inputs = processor.image_processor(batch_frames, return_tensors="pt")
+                inputs = text_inputs | image_inputs
+                if 'num_img_tokens' in inputs:
+                    del inputs['num_img_tokens']
+
             inputs = inputs.to(vlm.device)
             if is_encoder_decoder:
                 # For encoder-decoder, move "A:" part of prompt to decoder input IDs

@@ -109,10 +109,10 @@ bnb_config = BitsAndBytesConfig(
 
 # Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
 try:
-    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config)   
+    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)   
 except:
-    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config)
-vlm_processor = AutoProcessor.from_pretrained(args.vlm_name)
+    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)
+vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True)
 vlm_processor.tokenizer.padding_side = "left"
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
@@ -287,7 +287,7 @@ if not is_complete:
                                                             nlp=nlp,
                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
                                                             frame_cache_dir=this_results_dir if args.cache_vqa_frames else None,
-                                                            is_encoder_decoder="instructblip" in args.vlm_name.lower())
+                                                            is_encoder_decoder="-t5-" in args.vlm_name.lower())
         success_vqa_outputs = [
             VQAOutputs(
                 task_name=MistakeDetectionTasks(args.task),
@@ -390,7 +390,7 @@ if not is_complete:
                 # 
                 # Some relevant discussion on this issue here: https://discuss.huggingface.co/t/compute-log-probabilities-of-any-sequence-provided/11710/10
                 if not args.condition_questions_with_frames:
-                    if not lm.config.is_encoder_decoder:
+                    if "-t5-" not in args.vlm_name:
                         generation_scores = compute_completion_log_likelihoods(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
                     else:
                         generation_scores = compute_completion_log_likelihoods_encoder_decoder(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
@@ -480,7 +480,7 @@ if not is_complete:
                                                             nlp=nlp,
                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
                                                             frame_cache_dir=this_results_dir if args.cache_vqa_frames else None,
-                                                            is_encoder_decoder="instructblip" in args.vlm_name.lower())
+                                                            is_encoder_decoder="-t5-" in args.vlm_name.lower())
 
             # Gather up VQA outputs (which automatically calculates answer probabilities from logits)
             new_answers = [
