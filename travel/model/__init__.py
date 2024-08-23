@@ -3,6 +3,7 @@ from pprint import pprint
 import torch
 from tqdm import tqdm
 from transformers import InstructBlipForConditionalGeneration
+from transformers.models.encoder_decoder.modeling_encoder_decoder import shift_tokens_right
 
 def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batch_size=20, generation_kwargs={}):
     """
@@ -165,10 +166,7 @@ def compute_completion_log_likelihoods(model, tokenizer, prompts: list[str], com
 
         # Get the logits from the model in a single forward pass
         with torch.inference_mode():
-            if not model.config.is_encoder_decoder:
-                outputs = model(batch_inputs)
-            else:
-                outputs = model(batch_inputs, decoder_input_ids=batch_inputs)
+            outputs = model(batch_inputs)
 
         logits = outputs.logits[:, :-1, :]  # Exclude the last token's logits
         sequences = batch_inputs[:, 1:].contiguous()  # Shift input sequences for alignment
@@ -196,6 +194,71 @@ def compute_completion_log_likelihoods(model, tokenizer, prompts: list[str], com
     
     return results
     
+import torch
+
+def compute_completion_log_likelihoods_encoder_decoder(model, tokenizer, prompts: list[str], completions: list[list[str]], batch_size: int):
+    # Tokenize prompts
+    tokenized_prompts = [tokenizer(prompt, return_tensors='pt', add_special_tokens=True)['input_ids'][0] for prompt in prompts]
+    
+    # Tokenize completions
+    completions = [[f"{tokenizer.pad_token} {completion}" for completion in some_completions] for some_completions in completions] # NOTE: pad token signals to InstructBLIP encoder-decoder model to start - but this isn't compatible with all encoder-decoder models
+    tokenized_completions = [[tokenizer(completion, return_tensors='pt', add_special_tokens=True)['input_ids'][0] for completion in completion_list] for completion_list in completions]
+    
+    # Find the maximum length of prompts and completions
+    max_prompt_length = max(len(prompt) for prompt in tokenized_prompts)
+    max_completion_length = max(len(completion) for completion_list in tokenized_completions for completion in completion_list)
+    
+    # Pad prompts
+    padded_prompts = torch.stack([torch.cat((torch.tensor([tokenizer.pad_token_id] * (max_prompt_length - len(prompt))).long().to(model.device), prompt.to(model.device)), dim=-1) for prompt in tokenized_prompts])
+
+    # Flatten and pad completions
+    flattened_completions = [completion for completion_list in tokenized_completions for completion in completion_list]
+    padded_completions = torch.stack([torch.cat((completion.to(model.device), torch.tensor([tokenizer.pad_token_id] * (max_completion_length - len(completion))).long().to(model.device)), dim=-1) for completion in flattened_completions])
+    
+    # Split into batches
+    num_batches = (len(flattened_completions) + batch_size - 1) // batch_size
+    all_log_likelihoods = []
+
+    idx = 0
+    for batch_idx in range(num_batches):
+        batch_start = batch_idx * batch_size
+        batch_end = min((batch_idx + 1) * batch_size, len(flattened_completions))
+
+        batch_prompts = torch.cat([padded_prompts[i].unsqueeze(0).repeat(len(completions[i]), 1) for i in range(len(prompts))], dim=0)[batch_start:batch_end]
+        batch_completions = padded_completions[batch_start:batch_end]
+
+        # Run forward pass
+        with torch.inference_mode():
+            outputs = model(input_ids=batch_prompts, decoder_input_ids=batch_completions)
+        
+        logits = outputs.logits[:, :-1, :]  # Exclude the last token's logits
+        sequences = batch_completions[:, 1:].contiguous()  # Shift input sequences for alignment
+
+        # Compute log softmax to get log probabilities
+        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+        
+        # Gather the log probabilities of the selected tokens
+        selected_log_probs = torch.gather(log_probs, 2, sequences.unsqueeze(-1)).squeeze(-1)
+        
+        # Calculate the average log likelihood for each completion in the batch
+        for i in range(batch_end - batch_start):
+            non_pad_mask = (sequences[i] != tokenizer.pad_token_id)
+            completion_log_probs = selected_log_probs[i]
+            non_pad_log_probs = completion_log_probs[non_pad_mask]
+            average_log_likelihood = non_pad_log_probs.mean().item()
+            all_log_likelihoods.append(average_log_likelihood)
+    
+    # Organize all_log_likelihoods into a list of lists corresponding to the prompts and their completions
+    results = [[] for _ in range(len(prompts))]
+    idx = 0
+    for prompt_idx, completion_list in enumerate(completions):
+        for completion_idx in range(len(completion_list)):
+            results[prompt_idx].append(all_log_likelihoods[idx])
+            idx += 1
+    
+    return results
+
+
 def compute_completion_log_likelihoods_vlm(model, processor, prompts: list[str], frames: list[str], completions: list[list[str]], batch_size: int):
     assert len(prompts) == len(frames)
     
@@ -252,10 +315,7 @@ def compute_completion_log_likelihoods_vlm(model, processor, prompts: list[str],
 
         # Get the logits from the model in a single forward pass
         with torch.inference_mode():
-            if type(model) != InstructBlipForConditionalGeneration:
-                outputs = model(batch_inputs, attention_mask=attention_mask, **image_inputs)
-            else:
-                outputs = model(batch_inputs, decoder_input_ids=batch_inputs, attention_mask=attention_mask, **image_inputs)
+            outputs = model(batch_inputs, attention_mask=attention_mask, **image_inputs)
         
 
         logits = outputs.logits[:, :-1, :]  # Exclude the last token's logits

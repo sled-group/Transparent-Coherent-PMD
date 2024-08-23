@@ -71,11 +71,16 @@ def run_vqa(vlm: PreTrainedModel,
             batch_frames = frames[i:i+batch_size]
             batch_prompts = prompts[i:i+batch_size]
 
+            if vlm.language_model.config.is_encoder_decoder:
+                batch_prompts = [p.replace("A: ", "") for p in batch_prompts]
+
             # Run through VLM to get logits
             inputs = processor(text=batch_prompts, images=batch_frames, padding=True, return_tensors="pt")
             inputs = inputs.to(vlm.device)
-            if type(vlm) == InstructBlipForConditionalGeneration:
-                inputs['decoder_input_ids'] = inputs['input_ids']
+            if vlm.language_model.config.is_encoder_decoder:
+                # For encoder-decoder, move "A:" part of prompt to decoder input IDs
+                inputs['decoder_input_ids'] = processor.tokenizer([f"{processor.tokenizer.pad_token} A: "] * len(batch_prompts), return_tensors="pt")['input_ids'].to(vlm.device) # NOTE: this only works for encoder-decoder models whose decoder_start_token is the pad token
+
             outputs = vlm(**inputs)
             this_logits = outputs.logits
             inputs = inputs.to('cpu')

@@ -90,9 +90,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_contrastive_region1.0_20240817053024/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_visual_contrastive1.0_20240817135023/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_agla2.0_20240817190319/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_spatial_blur55.0_20240818001956/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_spatial_blur55.0_20240821203114/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_spatial1.0_20240821095333/outputs_val.json",
         ],
         [
             "None",
@@ -100,10 +98,8 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             "VCD",
             "AGLA",
             "Spatial",
-            "Spatial (- Reranking Based on Position)",
-            "Spatial (+ Rephrase + Darkness, Still Reranking)"
         ],
-        ['#00C1C1', '#5E00C1', '#E4912C', '#00B906', '#875242', "#AF08AA", "#123456"],
+        ['#00C1C1', '#5E00C1', '#E4912C', '#00B906', '#875242'],
         "visual_filters_coherence"
     ),    
     (
