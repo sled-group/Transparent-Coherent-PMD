@@ -117,7 +117,10 @@ vlm_processor.tokenizer.padding_side = "left"
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
 # We'll use VLM's LM directly to generate questions
-lm = vlm.language_model
+if getattr(vlm, "language_model", None):
+    lm = vlm.language_model
+else:
+    lm = vlm
 tokenizer = vlm_processor.tokenizer
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -244,7 +247,7 @@ if not is_complete:
         this_batch_size = len(batch_examples)
 
         prompts = [
-            f'{USER_START_TOKENS[type(vlm)]}{IMAGE_TOKENS[type(vlm)]}{IVQA_PREAMBLE_TOPDOWN.format(procedure=procedure)}' 
+            f'{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}{IVQA_PREAMBLE_TOPDOWN.format(procedure=procedure)}' 
             for procedure in batch_procedures
         ]
         if args.print_prompts:
@@ -267,7 +270,7 @@ if not is_complete:
             for procedure in batch_procedures
         ]
         prompts_success = [
-            prompt + f'{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q: {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:'
+            prompt + f'{ASSISTANT_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q: {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A:'
             for prompt, question in zip(prompts, questions_success)
         ]
         if args.print_prompts:
@@ -283,7 +286,8 @@ if not is_complete:
                                                             visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
                                                             nlp=nlp,
                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
-                                                            frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
+                                                            frame_cache_dir=this_results_dir if args.cache_vqa_frames else None,
+                                                            is_encoder_decoder="instructblip" in args.vlm_name.lower())
         success_vqa_outputs = [
             VQAOutputs(
                 task_name=MistakeDetectionTasks(args.task),
@@ -312,11 +316,11 @@ if not is_complete:
                 )
 
             # Generate a question (with beam search so we have several candidates)
-            prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[type(vlm)]}{USER_START_TOKENS[type(vlm)]}Q:" for prompt in prompts]
+            prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q:" for prompt in prompts]
             if not args.condition_questions_with_frames:
-                new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
+                new_questions, _ = simple_lm_prompt_beam_search(lm,
                                                                 vlm_processor.tokenizer,
-                                                                [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q],
+                                                                [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q],
                                                                 max_new_tokens=30,
                                                                 batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                                 generation_kwargs=generation_kwargs)
@@ -325,7 +329,7 @@ if not is_complete:
                                                               vlm_processor,
                                                               prompts_q,
                                                               batch_frames,
-                                                              IMAGE_TOKENS[type(vlm)],
+                                                              IMAGE_TOKENS[args.vlm_name],
                                                               max_new_tokens=30,
                                                               batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                               generation_kwargs=generation_kwargs)
@@ -339,7 +343,7 @@ if not is_complete:
                     prompt + '\n'.join([str(pqi+1) + ' ' + pq for pqi, pq in enumerate(previous_questions[-2:])]) + ("\n" if len(previous_questions) > 0 else "") + f"{len(previous_questions) + 1}. " 
                     for prompt, previous_questions in zip(icl_prompts, questions)
                 ] # Add some previous questions if possible (take last 2 that were asked)
-                icl_new_questions, _ = simple_lm_prompt_beam_search(vlm.language_model,
+                icl_new_questions, _ = simple_lm_prompt_beam_search(lm,
                                                                     vlm_processor.tokenizer,
                                                                     icl_prompts,
                                                                     max_new_tokens=30,
@@ -387,9 +391,9 @@ if not is_complete:
                 # Some relevant discussion on this issue here: https://discuss.huggingface.co/t/compute-log-probabilities-of-any-sequence-provided/11710/10
                 if not args.condition_questions_with_frames:
                     if not lm.config.is_encoder_decoder:
-                        generation_scores = compute_completion_log_likelihoods(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
+                        generation_scores = compute_completion_log_likelihoods(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
                     else:
-                        generation_scores = compute_completion_log_likelihoods_encoder_decoder(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[type(vlm)], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
+                        generation_scores = compute_completion_log_likelihoods_encoder_decoder(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
                 else:
                     generation_scores = compute_completion_log_likelihoods_vlm(vlm, vlm_processor, prompts_q, batch_frames, new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
 
@@ -454,7 +458,7 @@ if not is_complete:
                 questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
             # Run VQA with generated questions (and optional spatial filter)
-            prompts_a = [prompt + f' {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:' for prompt, question in zip(prompts_q, new_questions)]
+            prompts_a = [prompt + f' {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A:' for prompt, question in zip(prompts_q, new_questions)]
             if args.print_prompts:
                 pprint(prompts_a[0])
 
@@ -462,7 +466,7 @@ if not is_complete:
             if not args.exclude_history_from_vqa:
                 use_prompts_a = prompts_a
             else:
-                use_prompts_a = [f'{USER_START_TOKENS[type(vlm)]}{IMAGE_TOKENS[type(vlm)]}Q: {question}{USER_END_TOKENS[type(vlm)]}{ASSISTANT_START_TOKENS[type(vlm)]}A:' for prompt, question in zip(prompts_q, new_questions)]
+                use_prompts_a = [f'{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}Q: {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A:' for prompt, question in zip(prompts_q, new_questions)]
 
             new_answers_logits = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
                                                             vlm=vlm, 
@@ -475,7 +479,8 @@ if not is_complete:
                                                             visual_filter=visual_filter,
                                                             nlp=nlp,
                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
-                                                            frame_cache_dir=this_results_dir if args.cache_vqa_frames else None)
+                                                            frame_cache_dir=this_results_dir if args.cache_vqa_frames else None,
+                                                            is_encoder_decoder="instructblip" in args.vlm_name.lower())
 
             # Gather up VQA outputs (which automatically calculates answer probabilities from logits)
             new_answers = [

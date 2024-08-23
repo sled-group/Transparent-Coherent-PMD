@@ -38,34 +38,44 @@ VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES = {
 
 # Important prompt components for iterative VQA
 IMAGE_TOKENS = {
-    InstructBlipForConditionalGeneration: "",
-    LlavaForConditionalGeneration: "<image>\n",
-    Phi3ForCausalLM: "<|image_1|>\n",
-    Kosmos2ForConditionalGeneration: "<grounding>",
+    "Salesforce/instructblip-flan-t5-xl": "",
+    "Salesforce/instructblip-flan-t5-xxl": "",
+    "llava-hf/llava-1.5-7b-hf": "<image>\n",
+    "microsoft/Phi-3-vision-128k-instruct": "<|image_1|>\n",
+    "microsoft/Phi-3.5-vision-instruct": "<|image_1|>\n",
+    "microsoft/kosmos-2-patch14-224": "<grounding>",
 }
 USER_START_TOKENS = {
-    InstructBlipForConditionalGeneration: " ",
-    LlavaForConditionalGeneration: "USER: ",
-    Phi3ForCausalLM: "<|user|>\n",
-    Kosmos2ForConditionalGeneration: " ",
+    "Salesforce/instructblip-flan-t5-xl": " ",
+    "Salesforce/instructblip-flan-t5-xxl": "",
+    "llava-hf/llava-1.5-7b-hf": "USER: ",
+    "microsoft/Phi-3-vision-128k-instruct": "<|user|>\n",
+    "microsoft/Phi-3.5-vision-instruct": "<|user|>\n",
+    "microsoft/kosmos-2-patch14-224": " ",
 }
 USER_END_TOKENS = {
-    InstructBlipForConditionalGeneration: " ",
-    LlavaForConditionalGeneration: " ",
-    Phi3ForCausalLM: "<|end|>\n",
-    Kosmos2ForConditionalGeneration: " ",
+    "Salesforce/instructblip-flan-t5-xl": " ",
+    "Salesforce/instructblip-flan-t5-xxl": "",
+    "llava-hf/llava-1.5-7b-hf": " ",
+    "microsoft/Phi-3-vision-128k-instruct": "<|end|>\n",
+    "microsoft/Phi-3.5-vision-instruct": "<|end|>\n",
+    "microsoft/kosmos-2-patch14-224": " ",
 }
 ASSISTANT_START_TOKENS = {
-    InstructBlipForConditionalGeneration: " ",
-    LlavaForConditionalGeneration: "ASSISTANT: ",
-    Phi3ForCausalLM: "<|assistant|>\n",
-    Kosmos2ForConditionalGeneration: " ",
+    "Salesforce/instructblip-flan-t5-xl": " ",
+    "Salesforce/instructblip-flan-t5-xxl": "",
+    "llava-hf/llava-1.5-7b-hf": "ASSISTANT: ",
+    "microsoft/Phi-3-vision-128k-instruct": "<|assistant|>\n",
+    "microsoft/Phi-3.5-vision-instruct": "<|assistant|>\n",
+    "microsoft/kosmos-2-patch14-224": " ",
 }
 ASSISTANT_END_TOKENS = {
-    InstructBlipForConditionalGeneration: " ",
-    LlavaForConditionalGeneration: " ",
-    Phi3ForCausalLM: "<|end|>\n",
-    Kosmos2ForConditionalGeneration: " ",
+    "Salesforce/instructblip-flan-t5-xl": " ",
+    "Salesforce/instructblip-flan-t5-xxl": "",
+    "llava-hf/llava-1.5-7b-hf": " ",
+    "microsoft/Phi-3-vision-128k-instruct": "<|end|>\n",
+    "microsoft/Phi-3.5-vision-instruct": "<|end|>\n",
+    "microsoft/kosmos-2-patch14-224": " ",
 }
 
 IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to gather information about the scene, then use it to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
