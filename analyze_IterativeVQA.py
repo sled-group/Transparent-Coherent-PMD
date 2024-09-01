@@ -30,16 +30,80 @@ parent_output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name
 for results_fnames, results_names, results_colors, analysis_subdir in [
     (
         [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/Phi-3-vision-128k-instruct/IterativeVQA_topdown_q10_ego4d_single_debug250_Phi-3-vision-128k-instruct_beam8-4_likelihood_nohistory_20240823121212/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/Phi-3-vision-128k-instruct/IterativeVQA_q10_ego4d_single_debug250_Phi-3-vision-128k-instruct_beam8-4_likelihood_nohistory_20240823112243/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug1000/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug1000_instructblip-vicuna-7b_beam8-4_likelihood_nohistory_20240824151243/outputs_test.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug1000/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug1000_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_20240824151326/outputs_test.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug1000/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug1000_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_agla2.0_20240824151356/outputs_test.json"
+        ],
+        [
+            "Likelihood",
+            "Coherence + ICL",
+            "Coherence + ICL + AGLA"
+        ],
+        ['#C10000', '#00C1C1', '#00B906'],
+        "instructblip_testing"
+    ),
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_topdown_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_likelihood_nohistory_20240824121639/allturns3/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_likelihood_nohistory_20240823200759/outputs_val.json",
         ],
         [
             "Top-Down",
             "Bottom-Up",
         ],
         ['#C1C100', '#C10000'],
-        "phi3_reasoning_direction"
+        "instructblip_reasoning_direction"
     ),
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_likelihood_nohistory_20240823200759/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_likelihood_icl20_nohistory_20240823160329/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_nohistory_20240824085541/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_20240823200808/outputs_val.json",
+        ],
+        [
+            "Likelihood Ranking",
+            "Likelihood Ranking + ICL",
+            "Coherence Ranking",
+            "Coherence Ranking + ICL",
+        ],
+        ['#C10000', '#C100C1', '#0000C1', '#00C1C1'],
+        "instructblip_introducing_icl"
+    ),    
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_20240823200808/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_contrastive_region1.0_20240824085623/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_visual_contrastive1.0_20240823200829/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_agla2.0_20240823212828/outputs_val.json",
+        ],
+        [
+            "None",
+            "CRG",
+            "VCD",
+            "AGLA",
+        ],
+        ['#00C1C1', '#5E00C1', '#E4912C', '#00B906'],
+        "instructblip_visual_filters_coherence_defense"
+    ),
+    (
+        [
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_20240823200808/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_contrastive_region1.0_20240824085623/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_visual_contrastive1.0_20240823200829/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_agla2.0_20240823212828/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_spatial_blur55.0_20240824145855/outputs_val.json",
+        ],
+        [
+            "None",
+            "CRG",
+            "VCD",
+            "AGLA",
+            "Spatial",
+        ],
+        ['#00C1C1', '#5E00C1', '#E4912C', '#00B906', '#875242'],
+        "instructblip_visual_filters_coherence"
+    ),    
     (
         [
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_topdown_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240817105952/allturns2/outputs_val.json",
@@ -168,7 +232,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
 
     # Analysis 0: Generate DET curves
     print("(0) Generating DET curves...")
-    output_fname = f"det_comparison_{'_'.join(results_names).replace(' ', '-')}.pdf"
+    output_fname = f"det_comparison_{analysis_subdir}.pdf"
     save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
     generate_det_curves(metrics_det, results_names, save_paths=save_paths, colors=results_colors)
 
@@ -350,7 +414,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             # Adding legend
             plt.legend(loc='upper right', fontsize=14)  
 
-            output_fname = f"question_source_hist_{results_names[i]}.pdf"
+            output_fname = f"question_source_hist_{analysis_subdir}_{results_names[i]}.pdf"
             save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
             for save_path in save_paths:
                 plt.savefig(save_path, bbox_inches='tight')

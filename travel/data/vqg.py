@@ -318,7 +318,7 @@ VQG_DEMONSTRATIONS = [
         procedure_id=25084,
         procedure_description="Chop green beans with a knife on the chopping board",
         questions=[
-            "Do you see green beams on a cutting board?",
+            "Do you see green beans on a cutting board?",
             "Are the green beans sliced?",
             "Is someone using a knife?",
         ],
@@ -504,7 +504,12 @@ def generate_vqg_prompt_icl(procedure_description: str, n_demonstrations: int=3,
     demonstrations = demonstrations[:n_demonstrations] # We'll randomly select n_demonstrations of the available demonstrations
     examples = [generate_vqg_example(demo, include_answer=include_answers) for demo in demonstrations]
     examples += [generate_vqg_prompt(procedure_description)]
-    return "\n\n".join(examples)
+    return_str =  "\n\n".join(examples)
+    if not include_answers:
+        new_return_str = return_str.replace("and their expected answers?", "?")
+        assert new_return_str != return_str
+        return_str = new_return_str
+    return return_str
 
 def parse_vqg_outputs(generated_language: str, procedure_id: int, procedure_description: str, expected_n_questions: int=2) -> VQGOutputs:
     """
