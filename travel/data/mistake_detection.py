@@ -193,8 +193,10 @@ class MistakeDetectionDataset:
         :param example_id: Unique example ID.
         :return: Directory name.
         """
-        # TODO: this fails for datasets where the data is stored somewhere besides self.cache_dir - maybe should retrieve example_dir first
-        return os.path.join(self.cache_dir, example_id)
+        example_dir = [d for d in self.example_dirs if example_id in d]
+        assert len(example_dir) == 1, "Found more than one example with this ID - are you sure you passed a unique example ID?"
+        example_dir = example_dir[0]
+        return example_dir
 
     def save_example_to_file(self, example: MistakeDetectionExample):
         """
@@ -222,6 +224,13 @@ class MistakeDetectionDataset:
         example = MistakeDetectionExample.from_dict(example, load_frames=load_frames)
         return example
     
+    def get_example_by_id(self, example_id: str, load_frames: bool=True) -> MistakeDetectionExample:
+        """
+        Loads an example by its ID.
+        """
+        example_dir = self.get_example_dir(example_id)
+        return self.load_example_from_file(example_dir, load_frames=load_frames)
+        
     def save_dataset_metadata(self):
         """
         Saves dataset metadata for later.
