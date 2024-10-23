@@ -1,21 +1,27 @@
+# TODO: Finish updating this following vlm_ppo_prototyping.ipynb
+
 from travel import init_travel
 init_travel()
 
 import argparse
 from collections import defaultdict, Counter
+from datasets import Dataset
 import json
 import numpy as np
 import os
+from peft import PeftModelForCausalLM, LoraConfig
 import pickle
 from PIL import Image
 from pprint import pprint
+import random
 import spacy
 import time
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
+from trl import PPOConfig, AutoModelForCausalLMWithValueHead
 
-from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
+from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, DATA_CACHE_DIR
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
@@ -33,16 +39,13 @@ from travel.model.vqg import cleanup_generated_question
 parser = argparse.ArgumentParser()
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["Salesforce/instructblip-vicuna-7b", "llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
-parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
+parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
+parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
+parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
+parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha (weight update scaling coefficient).")
 parser.add_argument("--max_iterations", type=int, default=10, help="Maximum number of questions to generate before making a final mistake detection decision.")
 parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)), help="Number of beams in beam search.")
 parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
-parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
-parser.add_argument("--condition_questions_with_frames", action="store_true", help="Pass this argument to pass frame into VLM while generating questions (usually off by default since this hurts performance).")
-parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "relevance", "informativeness", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
-parser.add_argument("--exclude_history_from_vqa", action="store_true", help="Pass this argument to exclude the dialog history from VQA, and instead directly ask only questions.")
-parser.add_argument("--coherence_evaluation_strategy", type=str, default="nli", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
-parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
@@ -50,20 +53,13 @@ parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch
 parser.add_argument("--vqa_batch_size", type=int, default=10, help="Batch size for VQA with VLM.")
 parser.add_argument("--nli_batch_size", type=int, default=NLI_BATCH_SIZE, help="Batch size for scoring candidate questions with NLI model.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
-parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA.")
+parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA training.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
-parser.add_argument("--get_negated_success_probs", action="store_true", help="Pass this argument to calculate success probabilities for negated answers to questions.")
-parser.add_argument("--run_allturns_metrics", action="store_true", help="Pass this argument run an additional set of metrics without early stopping.")
-parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
 parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
 args = parser.parse_args()
 
 assert torch.cuda.device_count() == 1, "Iterative VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
-if args.cache_vqa_frames and args.visual_filter_mode is None:
-    print("Warning: --cache_vqa_frames only applies to frames modified by visual filters (configured through --visual_filter_mode and --visual_filter_strength).")
-if args.run_allturns_metrics and args.coherence_evaluation_strategy != "nli":
-    print("Warning: --run_allturns_metrics only works with NLI-based coherence evaluation. Will not run all-turns metrics.")
 
 # Get parallelization details from srun if any
 if "SLURM_PROCID" in os.environ and "SLURM_NPROCS" in os.environ:
@@ -83,17 +79,10 @@ if args.resume_dir is None:
     this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}"
     this_results_dir += f"_beam{args.num_beams}-{args.num_return_sequences}"
-    this_results_dir += f"_{args.question_selection_strategy}"
-    if args.condition_questions_with_frames:
-        this_results_dir += f"_cqframe"    
-    if args.n_icl_demonstrations > 0:
-        this_results_dir += f"_icl{args.n_icl_demonstrations}"
-    if args.exclude_history_from_vqa:
-        this_results_dir += "_nohistory"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{args.run_id}"
-    this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
+    this_results_dir = os.path.join(RESULTS_DIR, "vqg_training", this_results_dir)
     if worker_index == 0 and not os.path.exists(this_results_dir):
         os.makedirs(this_results_dir)
 else:
@@ -110,6 +99,13 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
     bnb_4bit_quant_type="nf4",
 )
+peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
+                        inference_mode=False,           # enable training - for inference, we can pre-compute the weight update matrix
+                        r=args.lora_r,                           # dimension of low-rank matrices
+                        lora_alpha=args.lora_alpha,                  # scaling coefficient of weight update
+                        # target_modules="all-linear",
+                        # lora_dropout=0.1,               # dropout regularization on LoRA weights
+                        bias="none")                     # use LoRA to train "all" biases (alternatives: "none", "lora_only")
 
 # Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
 try:
@@ -128,6 +124,8 @@ if getattr(vlm, "language_model", None):
     lm = vlm.language_model
 else:
     lm = vlm
+lm = PeftModelForCausalLM(vlm.language_model, peft_config)
+lm = AutoModelForCausalLMWithValueHead.from_pretrained(lm)
 tokenizer = vlm_processor.tokenizer
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -189,20 +187,19 @@ generation_kwargs = {
     "pad_token_id": tokenizer.eos_token_id,
 }
 
-# NLI model to score consistency and verifiability
+# NLI model to score coherence
 nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
 nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
 
-# Load approopriate evaluation dataset
+# Load approopriate training dataset
 dataset = None
 for retry in range(5):
     print(f"({worker_index}) Loading evaluation dataset (try {retry})...")
     try:
-        if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
-            dataset = CaptainCook4DDataset(data_split=args.eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-        elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
-            dataset = Ego4DMistakeDetectionDataset(data_split=args.eval_partition, 
+        # TODO: can think about whether we should combine multiple data sources for training
+        if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
+            dataset = Ego4DMistakeDetectionDataset(data_split="train", 
                                                    mismatch_augmentation=True,
                                                    multi_frame=False,
                                                    debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
@@ -216,7 +213,10 @@ for retry in range(5):
 if dataset is None:
     raise ValueError("Could not load dataset after retrying!")
 
+# Balance the data
+dataset.balance_classes()
 
+# TODO: left off here in updating script
 print(f"({worker_index}) Beginning iterative VQA inference...")
 all_questions = []
 all_candidate_questions = []
@@ -278,44 +278,14 @@ if not is_complete:
 
             # Generate a question (with beam search so we have several candidates)
             prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[args.vlm_name] if question_idx != 0 else USER_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q:" for prompt in prompts]
-            if not args.condition_questions_with_frames:
-                new_questions, _ = simple_lm_prompt_beam_search(lm,
-                                                                tokenizer,
-                                                                [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q],
-                                                                max_new_tokens=20,
-                                                                batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
-                                                                generation_kwargs=generation_kwargs)
-            else:
-                new_questions = simple_vlm_prompt_beam_search(vlm,
-                                                              vlm_processor,
-                                                              prompts_q,
-                                                              batch_frames,
-                                                              IMAGE_TOKENS[args.vlm_name],
-                                                              max_new_tokens=20,
-                                                              batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
-                                                              generation_kwargs=generation_kwargs)
+            new_questions, _ = simple_lm_prompt_beam_search(lm,
+                                                            tokenizer,
+                                                            [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q],
+                                                            max_new_tokens=20,
+                                                            batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
+                                                            generation_kwargs=generation_kwargs)
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
             new_questions_sources = [["vlm"] * len(beam_search_questions) for beam_search_questions in new_questions]
-
-            # Optionally inject more candidates from original VQG ICL code
-            if args.n_icl_demonstrations > 0:
-                icl_prompts = [generate_vqg_prompt_icl(procedure, args.n_icl_demonstrations, include_answers=False) for procedure in batch_procedures] # Create ICL prompt
-                icl_prompts = [
-                    prompt + '\n'.join([str(pqi+1) + ' ' + pq for pqi, pq in enumerate(previous_questions[-2:])]) + ("\n" if len(previous_questions) > 0 else "") + f"{len(previous_questions) + 1}. " 
-                    for prompt, previous_questions in zip(icl_prompts, questions)
-                ] # Add some previous questions if possible (take last 2 that were asked)
-                icl_new_questions, _ = simple_lm_prompt_beam_search(lm,
-                                                                    tokenizer,
-                                                                    icl_prompts,
-                                                                    max_new_tokens=20,
-                                                                    batch_size=max(args.generation_batch_size // args.n_icl_demonstrations, 1),
-                                                                    generation_kwargs=generation_kwargs)
-                
-                icl_new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in icl_new_questions]
-                
-                for batch_sub_idx in range(this_batch_size):
-                    new_questions[batch_sub_idx] += icl_new_questions[batch_sub_idx]
-                    new_questions_sources[batch_sub_idx] += ["icl"] * len(icl_new_questions[batch_sub_idx])
 
             # Remove duplicate candidates
             keep_idxs = [[question_idx for question_idx, question in enumerate(beam_search_outputs) if question not in beam_search_outputs[:question_idx]] for beam_search_outputs in new_questions]
@@ -332,6 +302,9 @@ if not is_complete:
             for batch_sub_idx in range(len(candidate_questions)):
                 candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
                 candidate_questions_sources[batch_sub_idx].append(new_questions_sources[batch_sub_idx])
+
+            # TODO: question_selection_strategy is not an arg anymore - but we do need to be able to calculate coherence metrics still for supervision
+            ################################################################################################################################################
 
             # Select best candidate question from pool
             if args.question_selection_strategy == "likelihood":
@@ -350,13 +323,10 @@ if not is_complete:
                 # each question.
                 # 
                 # Some relevant discussion on this issue here: https://discuss.huggingface.co/t/compute-log-probabilities-of-any-sequence-provided/11710/10
-                if not args.condition_questions_with_frames:
-                    if "-t5-" not in args.vlm_name:
-                        generation_scores = compute_completion_log_likelihoods(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
-                    else:
-                        generation_scores = compute_completion_log_likelihoods_encoder_decoder(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
+                if "-t5-" not in args.vlm_name:
+                    generation_scores = compute_completion_log_likelihoods(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=args.generation_batch_size)
                 else:
-                    generation_scores = compute_completion_log_likelihoods_vlm(vlm, vlm_processor, prompts_q, batch_frames, new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
+                    generation_scores = compute_completion_log_likelihoods_encoder_decoder(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=args.generation_batch_size)
 
                 # Select most likely question (first one in list)
                 selected_questions = []
@@ -415,6 +385,8 @@ if not is_complete:
                 
                 new_questions = selected_questions
                     
+            ################################################################################################################################################
+
             # Save scores for best questions
             for batch_sub_idx in range(this_batch_size):
                 scores[batch_sub_idx].append(new_scores[batch_sub_idx])
@@ -428,11 +400,8 @@ if not is_complete:
             if args.print_prompts:
                 pprint(prompts_a[0])
 
-            # Effective prompt for VQA depends on whether we want to exclude dialog history from prompt
-            if not args.exclude_history_from_vqa:
-                use_prompts_a = prompts_a
-            else:
-                use_prompts_a = [f'{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}Q: {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A:' for prompt, question in zip(prompts_q, new_questions)]
+            # Always exclude dialog history from VQA prompt - it only distracts
+            use_prompts_a = [f'{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}Q: {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A:' for prompt, question in zip(prompts_q, new_questions)]
 
             new_answers_logits = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
                                                             vlm=vlm, 
@@ -441,11 +410,11 @@ if not is_complete:
                                                             prompts_a=use_prompts_a, 
                                                             new_questions=new_questions, 
                                                             question_idx=question_idx,
-                                                            batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1) if not args.exclude_history_from_vqa else args.vqa_batch_size,
+                                                            batch_size=args.vqa_batch_size,
                                                             visual_filter=visual_filter,
                                                             nlp=nlp,
                                                             visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
-                                                            frame_cache_dir=this_results_dir if args.cache_vqa_frames else None,
+                                                            frame_cache_dir=None,
                                                             is_encoder_decoder="-t5-" in args.vlm_name.lower())
 
             # Gather up VQA outputs (which automatically calculates answer probabilities from logits)
@@ -469,13 +438,7 @@ if not is_complete:
                 answer_probs[batch_sub_idx].append([round(float(new_answers[batch_sub_idx].answer_probs[VQAResponse(answer_idx)]), 6) for answer_idx in range(2)])
                 answers[batch_sub_idx].append(new_answers_str[batch_sub_idx])
 
-            # Update prompts with answers
-            if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
-                # Save negated version of new prompt if we're using VLM-based coherence evaluation
-                new_answers_str_negated = [VQAResponse(1 - output.predicted_answer.value).name if np.abs(output.answer_probs[VQAResponse.Yes] - 0.5) >= args.unsure_range else "Unsure" for output in new_answers]
-                prompts_negated = [prompt + output for prompt, output in zip(prompts_a, new_answers_str_negated)] 
-            
-            
+            # Update prompts with answers          
             prompts = [prompt + " " + output for prompt, output in zip(prompts_a, new_answers_str)]
 
             # Ask VLM probability of success
@@ -500,7 +463,7 @@ if not is_complete:
                                                              visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
                                                              nlp=nlp,
                                                              visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
-                                                             frame_cache_dir=this_results_dir if args.cache_vqa_frames else None,
+                                                             frame_cache_dir=None,
                                                              is_encoder_decoder="-t5-" in args.vlm_name.lower())
             success_vqa_outputs = [
                 VQAOutputs(
@@ -525,48 +488,6 @@ if not is_complete:
             # Clear out VQA outputs now because they occupy a lot of memory
             del new_answers
             del success_vqa_outputs
-
-            # If using VLM-based coherence evaluation, also need to get success probability for negated answers
-            if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
-                prompts_success_negated = [
-                    prompt + f'{ASSISTANT_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q: {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A:'
-                    for prompt, question in zip(prompts_negated, questions_success)
-                ]
-                success_vqa_outputs_negated = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
-                                                                         vlm=vlm, 
-                                                                         batch_examples=batch_examples, 
-                                                                         batch_frames=batch_frames, 
-                                                                         prompts_a=prompts_success_negated, 
-                                                                         new_questions=questions_success, 
-                                                                         question_idx=f"{question_idx}_success_negated",
-                                                                         batch_size=max(args.vqa_batch_size // (2 ** question_idx), 1),
-                                                                         visual_filter=visual_filter if visual_filter and VisualFilterTypes(args.visual_filter_mode) not in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur] else None, # Don't use spatial filter for SuccessVQA step, since this may remove important information
-                                                                         nlp=nlp,
-                                                                         visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
-                                                                         is_encoder_decoder="-t5-" in args.vlm_name.lower())
-                success_vqa_outputs_negated = [
-                    VQAOutputs(
-                        task_name=MistakeDetectionTasks(args.task),
-                        example_id=example.example_id,
-                        procedure_id=example.procedure_id,
-                        frame=example.frames[0],
-                        prompt=prompt,
-                        expected_answer=None,
-                        response_token_ids=response_token_ids,
-                        logits=logits,
-                        question=question,
-                    ) for logits, example, prompt, question in zip(success_vqa_outputs_negated, batch_examples, prompts_a, new_questions)
-                ]
-
-                # Save success probability for negated question answers for this turn
-                for batch_sub_idx in range(this_batch_size):
-                    success_probs_negated[batch_sub_idx].append(
-                        round(float(success_vqa_outputs_negated[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
-                    )
-
-                # Delete VQAOutputs now since they occupy a lot of memory
-                del success_vqa_outputs_negated
-
 
         # Update global lists of tracked outputs
         all_questions += questions
@@ -643,205 +564,7 @@ if batch_idx is not None:
 print(f"({worker_index}) Done running iterative VQA inference!")
 
 
-# Gather up results across processes and evaluate
-if worker_index == 0:
-    print(f"({worker_index}) Gathering all results...")
-    for other_worker_index in range(1, n_workers):
-        print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
-        delay_per_try = 10
-        delay_so_far = 0
-        max_delay = 7200 if args.resume_dir is not None else 1800 # Allow a longer delay in case some processes are already finished in resumed run
-        while True:
-            other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
-            if os.path.exists(other_cache_path):
-                is_complete, \
-                _, \
-                other_questions, \
-                other_candidate_questions, \
-                other_candidate_questions_scores, \
-                other_candidate_questions_sources, \
-                other_scores, \
-                other_answers, \
-                other_answer_probs, \
-                other_success_probs, \
-                other_success_probs_negated, \
-                other_example_ids, \
-                other_procedures, \
-                other_labels = pickle.load(open(other_cache_path, "rb"))
-                if is_complete:
-                    # Add other process results to our results
-                    all_questions += other_questions
-                    all_candidate_questions += other_candidate_questions
-                    all_candidate_questions_scores += other_candidate_questions_scores
-                    all_candidate_questions_sources += other_candidate_questions_sources
-                    all_scores += other_scores
-                    all_answers += other_answers
-                    all_answer_probs += other_answer_probs
-                    all_success_probs += other_success_probs
-                    all_success_probs_negated += other_success_probs_negated
-                    all_example_ids += other_example_ids
-                    all_procedures += other_procedures
-                    all_labels += other_labels
-                    print(f"({worker_index}) Collected results from worker {other_worker_index}.")
-                    break
-
-            # Decide whether to try again
-            if delay_so_far >= max_delay:
-                raise TimeoutError(f"Waited for {max_delay} seconds for results from worker {other_worker_index}. Process may have failed.")
-            print(f"({worker_index}) Still waiting for results from worker {other_worker_index} ({delay_so_far} sec.)!")
-            time.sleep(delay_per_try)
-            delay_so_far += delay_per_try
-
-    # Collect key information from results rollouts and final success probabilities
-    all_results_dicts = {}
-    all_probs = []
-    for questions, candidate_questions, candidate_questions_scores, candidate_questions_sources, scores, answers, answer_probs, success_probs, success_probs_negated, example_id, procedure, label \
-        in tqdm(zip(all_questions,
-                    all_candidate_questions,
-                    all_candidate_questions_scores,
-                    all_candidate_questions_sources,
-                    all_scores,
-                    all_answers,
-                    all_answer_probs,
-                    all_success_probs,
-                    all_success_probs_negated,
-                    all_example_ids,
-                    all_procedures,
-                    all_labels), desc="compiling results"):
-        
-        final_success_prob = None
-        for success_prob_idx, success_prob in enumerate(success_probs):
-            # Early stopping mechanism: 
-            # if success score doesn't change enough over 3 turns, stop incorporating questions
-            # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
-            final_success_prob = success_prob
-            if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
-                if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
-                    break
-            # OR if success score is within early_stop_delta / 2 of 0.0 or 1.0, stop
-            if success_prob < args.early_stop_delta / 2 or 1.0 - success_prob < args.early_stop_delta / 2:
-                break           
-        all_probs.append(round(final_success_prob, 6))   
-
-        results_dict = {
-            "procedure": procedure,
-            "mistake": True if label is not None else False,
-            "mistake_type": label,
-            "questions": questions,
-            "frame_dir": os.path.join(this_results_dir, f"vqa_frames/{example_id}") if args.cache_vqa_frames else dataset.get_example_dir(example_id),
-            "answers": answers,
-            "answer_probs": answer_probs,
-            "scores": scores,
-            "success_probs": success_probs,
-            "success_probs_negated": success_probs_negated,
-            "final_turn": success_prob_idx,
-            "final_success_prob": final_success_prob,
-            "candidate_questions": candidate_questions,
-            "candidate_questions_scores": candidate_questions_scores,
-            "candidate_questions_sources": candidate_questions_sources,
-        }
-        all_results_dicts[example_id] = results_dict
-
-    json.dump(all_results_dicts, 
-            open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
-            indent=4)
 
 
-    print(f"({worker_index}) Evaluating outputs...")
-    metrics = {}
 
-    if args.coherence_evaluation_strategy == "nli":
-        # Calculate coherence metrics of final rollouts
-        all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
-        all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
-
-        label_answer_mapping = {0: "No", 1: "Yes"}
-        all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
-        all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
-
-        all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
-                                                nli_model,
-                                                tokenizer,
-                                                lm,                                         
-                                                [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
-                                                all_chosen_questions,
-                                                answers=all_predicted_answers,
-                                                previous_questions=all_previous_questions,
-                                                previous_answers=all_previous_answers,
-                                                mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)],
-                                                rephrase_batch_size=args.generation_batch_size)
-
-        if args.run_allturns_metrics:
-            # Calculate alternative metrics based on all iterations
-            all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in range(len(results_dict['questions']))]
-            all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(len(results_dict['questions']))]
-
-            label_answer_mapping = {0: "No", 1: "Yes"}
-            all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in range(len(results_dict['answer_probs']))]
-            all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(len(results_dict['answers']))]
-
-            all_coherence_metrics_allturns = question_coherence_metrics_nli(nli_tokenizer,
-                                                    nli_model,
-                                                    tokenizer,
-                                                    lm,                                         
-                                                    [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(args.max_iterations)],
-                                                    all_chosen_questions,
-                                                    answers=all_predicted_answers,
-                                                    previous_questions=all_previous_questions,
-                                                    previous_answers=all_previous_answers,
-                                                    mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(args.max_iterations)],
-                                                    rephrase_batch_size=args.generation_batch_size)
-
-    elif args.coherence_evaluation_strategy == "vlm":
-        all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs, all_success_probs_negated)
-    else:
-        raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
-
-    # Get accuracy and coherence metrics
-    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
-    coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
-
-    # Save accuracy and coherence metrics
-    json.dump(accuracy_metrics_by_threshold, 
-            open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
-            indent=4)
-    
-    json.dump(coherence_metrics, 
-            open(os.path.join(this_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
-            indent=4)
-
-    json.dump(all_coherence_metrics, 
-            open(os.path.join(this_results_dir, f"metrics_coherence_raw_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
-            indent=4)            
-
-    # Generate DET curves for accuracy
-    generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
-
-    # Get all-turns form of metrics and save them
-    if args.coherence_evaluation_strategy == 'nli' and args.run_allturns_metrics:
-        all_probs_allturns = [results_dict['success_probs'][-1] for results_dict in all_results_dicts.values()]
-        accuracy_metrics_by_threshold_allturns, coherence_metrics_allturns = compile_accuracy_and_coherence_metrics(all_labels, all_probs_allturns, all_coherence_metrics_allturns, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
-
-        allturns_results_dir = os.path.join(this_results_dir, "allturns")
-        if not os.path.exists(allturns_results_dir):
-            os.makedirs(allturns_results_dir)
-        json.dump(accuracy_metrics_by_threshold_allturns, 
-                open(os.path.join(allturns_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
-                indent=4)
-        
-        json.dump(coherence_metrics_allturns, 
-                open(os.path.join(allturns_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
-                indent=4)
-        
-        json.dump({k: v | {"final_turn": args.max_iterations - 1} for k, v in all_results_dicts.items()}, 
-                open(os.path.join(allturns_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
-                indent=4)
-
-    # Generate curves for all metrics by threshold
-    generate_tiered_metric_curves(MISTAKE_DETECTION_THRESHOLDS, 
-                                  [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                  [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
-                                  [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                  [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
-    
-    print(f"({worker_index}) Done!")
+print(f"({worker_index}) Done!")
