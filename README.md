@@ -60,56 +60,96 @@ In a Slurm script, ensure you prepend commands with `poetry run` to activate the
 
 ## Running Experiments
 
-Before running experiments, be sure to configure the directories in `config.yml` accordingly.
-
 ### Configuration
 
-Make a copy of `sample_config.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the cache directories). If you ever need multiple config files in the same environment (e.g., to run multiple experiments with different settings at the same time), you can set the environment variable `TRAVEl_config_path` to an appropriate specialized `config_xxx.yml` file before running a script.
+Make a copy of `sample_config.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the cache directories). If you ever need multiple config files in the same environment (e.g., to run multiple experiments with different settings at the same time), you can set the environment variable `TRAVEl_config_path` to an appropriate specialized `config_xxx.yml` file before running a script. Keep the random seed as 222 to replicate results presented in Shane's dissertation.
 
-### SuccessVQA Baseline
+### Iterative VQA
 
-Baseline that simply asks VLMs whether some procedure was successfully performed. Check `run_vqa_successvqa.py` for more command-line arguments.
+The below commands can reproduce the iterative VQA results presented in Shane's dissertation. These are example commands for LLaVA evaluated on the validation data subset. You can configure the VLM type using the choices specified for `--vlm_name` in `run_vqa_iterative.py`. You can evaluate on the testing data subset by adding `--eval_partition test` and changing `--debug_n_examples` to `1000`.
 
-```
-python run_vqa_successvqa.py --eval_split <val|test>
-```
+#### Base Job Script
 
-### VQG2VQA
-
-First, run visual question generation (VQG) to generate questions for each recipe step:
+All commands are run on the Great Lakes Slurm cluster using srun. A job script typically starts like this, followed by one of the later commands:
 
 ```
-python run_vqg.py --temperature <temperature> --top_p <top_p>
+#!/bin/bash
+# JOB HEADERS HERE
+
+#SBATCH --job-name vqa_mistake_detection
+#SBATCH --ntasks=4
+#SBATCH --gpus-per-task=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem-per-cpu=10g
+#SBATCH --time=24:00:00
+#SBATCH --account=chaijy2
+#SBATCH --partition=spgpu
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+cd ~/path/to/TRAVEl
+bash prepare_great_lakes.sh
 ```
 
-Then, based on the outputs generated from the VQG script, run VQA mistake detection:
+#### Likelihood-Based Ranking
+
+Without in-context learning:
 
 ```
-python run_vqa_vqg2vqa.py --eval_split <val|test> --vqg_directory "path/to/vqg/outputs"
+srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "$timestamp" --max_iterations 10 --question_selection_strategy likelihood --generation_batch_size 20 --vqa_batch_size 20 --debug --debug_n_examples 250 --coherence_evaluation_strategy nli --exclude_history_from_vqa --vlm_name "llava-hf/llava-1.5-7b-hf"
 ```
 
-Check `run_vqa_vqg2vqa.py` for more configurable command-line arguments.
+With in-context learning:
 
-### Learning VQG
-
-#### Generating Training Data from Ego4D
 ```
-python run_vqg_learning_generation.py
-python run_vqg_learning_vqa.py --vqg_directory /saved_results/path/to/generated/questions/from/previous/step/
+srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "$timestamp" --max_iterations 10 --question_selection_strategy likelihood --generation_batch_size 20 --vqa_batch_size 20 --debug --debug_n_examples 250 --n_icl_demonstrations 20 --coherence_evaluation_strategy nli --exclude_history_from_vqa --vlm_name "llava-hf/llava-1.5-7b-hf"
 ```
 
-Add `--visual_filter_mode spatial` to the second command if you want to use the spatial attention filter.
+#### Coherence-Based Ranking
 
-#### Training VQG from Generated Data
+Without in-context learning:
 
-With only 1 GPU:
 ```
-python run_vqg_learning_training.py --data_directory <path/to/generated/training/data/directory>
-```
-
-With multiple GPUs:
-```
-python -m torch.distributed.launch --nproc_per_node=2 run_vqg_learning_training.py --data_directory <path/to/generated/training/data/directory>
+srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "$timestamp" --max_iterations 10 --question_selection_strategy coherence --generation_batch_size 20 --vqa_batch_size 20 --debug --debug_n_examples 250 --coherence_evaluation_strategy nli --get_negated_success_probs --exclude_history_from_vqa --vlm_name "llava-hf/llava-1.5-7b-hf"
 ```
 
-Evaluate the trained pipeline with `run_vqa_vqg2vqa.py` following the above.
+With in-context learning:
+
+```
+srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "$timestamp" --max_iterations 10 --question_selection_strategy coherence --generation_batch_size 20 --vqa_batch_size 20 --debug --debug_n_examples 250 --n_icl_demonstrations 20 --coherence_evaluation_strategy nli --get_negated_success_probs --exclude_history_from_vqa --vlm_name "llava-hf/llava-1.5-7b-hf"
+```
+
+#### Visual Strategies
+
+To add visual strategies, add one of the following groups of arguments to your command from above.
+
+Contrastive Region Guidance (CRG):
+
+```
+--visual_filter_mode contrastive_region --visual_filter_strength 1.0
+```
+
+Visual Contrastive Decoding (VCD):
+
+```
+--visual_filter_mode visual_contrastive --visual_filter_strength 1.0
+```
+
+Assembling Global and Local Attention (AGLA):
+
+```
+--visual_filter_mode agla --visual_filter_strength 2.0
+```
+
+Proposed "spatial" filter (using Gaussian blur):
+
+```
+--visual_filter_mode spatial_blur --visual_filter_strength 55.0
+```
+
+### Analysis of Results
+
+There are several analysis scripts and notebooks which must be manually configured to point to results you want to analyze:
+
+1. `graph_classification_curves.py` graphs DET and ROC curves.
+2. `analyze_IterativeVQA.py` runs several kinds of analysis on the iterative VQA results.
+3. `notebooks/generate_overview_graphs.ipynb` can be used to generate 3D graphs of error and coherence metrics.
