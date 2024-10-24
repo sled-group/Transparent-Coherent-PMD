@@ -688,7 +688,6 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
 
     return accuracy_metrics_by_threshold, coherence_metrics
 
-
 # NOTE: below consistency and verifiability metrics are from legacy results and not in use/maintained
 def effectiveness(is_mistake: bool, mistake_probs: Union[list[float], list[list[float]]]):
     """

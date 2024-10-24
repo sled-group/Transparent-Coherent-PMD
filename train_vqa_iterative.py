@@ -20,6 +20,7 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
 from trl import PPOConfig, AutoModelForCausalLMWithValueHead
+import wandb
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, DATA_CACHE_DIR
 from travel.data.captaincook4d import CaptainCook4DDataset
@@ -32,6 +33,7 @@ from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, V
 from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves, entropy, compile_accuracy_and_coherence_metrics
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
+from travel.model.ppo_trainer import PerTokenPPOTrainer as PPOTrainer
 from travel.model.vqa import run_vqa_with_visual_filter
 from travel.model.vqg import cleanup_generated_question
 
@@ -56,7 +58,8 @@ parser.add_argument("--run_id", type=str, required=False, help="Unique ID for th
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA training.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
-parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
+parser.add_argument("--verbose", action="store_true", help="Pass this argument to display prompts and generations on every batch.")
+parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
 args = parser.parse_args()
 
 assert torch.cuda.device_count() == 1, "Iterative VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
@@ -87,6 +90,20 @@ if args.resume_dir is None:
         os.makedirs(this_results_dir)
 else:
     this_results_dir = args.resume_dir
+
+this_run_id = args.run_id if args.resume_dir is None else args.resume_dir.split("_")[-1]
+wandb_run_name = f"PPO_lr{args.learning_rate}_bs{args.batch_size}_e{args.n_epochs}_r{args.lora_r}_alpha{args.lora_alpha}_{this_run_id}"
+
+if worker_index == 0:
+    wandb.init(name=wandb_run_name)
+    wandb.log({
+        "hyperparameters/visual_filter_strength": args.visual_filter_strength if args.visual_filter_mode is not None else 0.0,
+        "hyperparameters/batch_size": args.train_batch_size,
+        "hyperparameters/learning_rate": args.learning_rate,
+        "hyperparameters/n_demonstrations": args.n_demonstrations,
+        "hyperparameters/lora_r": args.lora_r,
+        "hyperparameters/lora_alpha": args.lora_alpha,
+    })
 
 
 print(f"({worker_index}) Setting up models...")
@@ -216,38 +233,52 @@ if dataset is None:
 # Balance the data
 dataset.balance_classes()
 
-# TODO: left off here in updating script
-print(f"({worker_index}) Beginning iterative VQA inference...")
-all_questions = []
-all_candidate_questions = []
-all_candidate_questions_scores = []
-all_candidate_questions_sources = []
-all_scores = []
-all_answers = []
-all_answer_probs = []
-all_success_probs = []
-all_success_probs_negated = []
 
-all_example_ids = []
-all_procedures = []
-all_labels = []
+# Set up PPO trainer
+wandb.init(name=wandb_run_name) # initialize wandb
+def collator(data): # TODO: this will need to be updated
+    return {key: [d[key] for d in data] for key in data[0]}
+ppo_config = PPOConfig(
+    learning_rate=args.learning_rate,
+    batch_size=4,
+    mini_batch_size=4,
+    gradient_accumulation_steps=1,
+    remove_unused_columns=False,
+    optimize_cuda_cache=True,
+    early_stopping=True,
+    is_peft_model=True,
+    seed=args.random_seed,
+)
+ppo_trainer = PPOTrainer(
+    model=lm,
+    ref_model=vlm.language_model, # TODO: don't think this makes sense
+    config=ppo_config,
+    dataset=dataset,
+    tokenizer=vlm_processor.tokenizer,
+    data_collator=collator
+)
 
-cache_path = os.path.join(this_results_dir, f"cached_outputs{worker_index}.pkl")
-is_complete = False
-last_batch_idx = -1
-if os.path.exists(cache_path):
-    is_complete, last_batch_idx, all_questions, all_candidate_questions, all_candidate_questions_scores, all_candidate_questions_sources, all_scores, all_answers, all_answer_probs, all_success_probs, all_success_probs_negated, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
 
-batch_idx = None
-if not is_complete:
+print(f"({worker_index}) Beginning iterative VQA training...")
+training_progress_path = os.path.join(this_results_dir, "training_progress.pkl")
+if os.path.exists(training_progress_path):
+    current_epoch, current_batch_idx = pickle.load(open(training_progress_path, "rb"))
+else:
+    current_epoch, current_batch_idx = 0, 0
+for epoch in tqdm(range(args.n_epochs), desc="epochs"):
+
+    # If already completed this epoch, skip it
+    if epoch < current_epoch:
+        continue
+
     for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK_SIZE, 
                                                                         n_workers=n_workers, 
                                                                         worker_index=worker_index,
                                                                         load_frames=False)), 
-                                                    desc="running iterative VQA inference"):
+                                                    desc=f"epoch {epoch} batches"):
 
-        # If already in cache, skip this batch
-        if batch_idx <= last_batch_idx:
+        # If already ran this batch, skip it
+        if batch_idx < current_batch_idx:
             continue    
 
         # Take first frame (expect there to only be one frame)
@@ -260,18 +291,13 @@ if not is_complete:
             f'{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}{IVQA_PREAMBLE.format(procedure=procedure)}' 
             for procedure in batch_procedures
         ]
-        if args.print_prompts:
+        if args.verbose:
             pprint(prompts[0])
         questions = [[] for _ in range(this_batch_size)]
         frames = [[] for _ in range(this_batch_size)]
-        candidate_questions = [[] for _ in range(this_batch_size)]
-        candidate_questions_scores = [[] for _ in range(this_batch_size)]
-        candidate_questions_sources = [[] for _ in range(this_batch_size)]
-        scores = [[] for _ in range(this_batch_size)]
         answer_probs = [[] for _ in range(this_batch_size)] 
         answers = [[] for _ in range(this_batch_size)]
         success_probs = [[] for _ in range(this_batch_size)]
-        success_probs_negated = [[] for _ in range(this_batch_size)]
 
         # Iteratively generate questions
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
@@ -285,7 +311,6 @@ if not is_complete:
                                                             batch_size=max(args.generation_batch_size // (2 ** question_idx), 1),
                                                             generation_kwargs=generation_kwargs)
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
-            new_questions_sources = [["vlm"] * len(beam_search_questions) for beam_search_questions in new_questions]
 
             # Remove duplicate candidates
             keep_idxs = [[question_idx for question_idx, question in enumerate(beam_search_outputs) if question not in beam_search_outputs[:question_idx]] for beam_search_outputs in new_questions]
@@ -294,102 +319,25 @@ if not is_complete:
             keep_idxs_filtered = [[question_idx for question_idx, question in enumerate(beam_search_outputs) if question_idx in keep_idxs[batch_sub_idx] and question not in questions[batch_sub_idx]] for batch_sub_idx, beam_search_outputs in enumerate(new_questions)]
             keep_idxs = [keep_idxs_filtered[batch_sub_idx] if len(keep_idxs_filtered[batch_sub_idx]) > 0 else keep_idxs[batch_sub_idx] for batch_sub_idx in range(this_batch_size)]
 
-            # Apply kept indices to new questions and their sources
+            # Apply kept indices and grab first one in the list (which should have the highest likelihood)
             new_questions = [[new_questions[batch_sub_idx][question_idx] for question_idx in this_keep_idxs] for batch_sub_idx, this_keep_idxs in enumerate(keep_idxs)]
-            new_questions_sources = [[new_questions_sources[batch_sub_idx][question_idx] for question_idx in this_keep_idxs] for batch_sub_idx, this_keep_idxs in enumerate(keep_idxs)]
+            new_questions = [beam_search_questions[0] for beam_search_questions in new_questions]
 
-            # Save all candidates from beam search
-            for batch_sub_idx in range(len(candidate_questions)):
-                candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
-                candidate_questions_sources[batch_sub_idx].append(new_questions_sources[batch_sub_idx])
-
-            # TODO: question_selection_strategy is not an arg anymore - but we do need to be able to calculate coherence metrics still for supervision
-            ################################################################################################################################################
-
-            # Select best candidate question from pool
-            if args.question_selection_strategy == "likelihood":
-
-                # First recalculate likelihood of each cleaned up question in iterative VQA context
-
-                # (this is mostly important when we're using ICL injected questions)
-                # NOTE: for some (unknown at this time) reason, LLaVA's LM likelihoods calculated during beam search (returned by output.scores) do not
-                # match the likelihoods we get from a forward pass (which is unlike other models, e.g., T5). As such, we need to recompute completion
-                # log likelihoods no matter what when using the "likelihood" candidate selection strategy. 
-                # 
-                # While this doesn't seem to affect the ordering of contextually generated candidates, the scores used here are slightly different. It's also 
-                # worth noting that this step is especially important when ranking ICL-generated candidates among contextually generated candidates, as they may 
-                # reasonably have higher likelihood than beam search candidates, but we need to be sure scores are calculated consistently. Further, since 
-                # questions aren't "cleaned up" in initial generation, scores can be affected by this and at minimum need to be clipped at "?" token that ends
-                # each question.
-                # 
-                # Some relevant discussion on this issue here: https://discuss.huggingface.co/t/compute-log-probabilities-of-any-sequence-provided/11710/10
-                if "-t5-" not in args.vlm_name:
-                    generation_scores = compute_completion_log_likelihoods(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=args.generation_batch_size)
-                else:
-                    generation_scores = compute_completion_log_likelihoods_encoder_decoder(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=args.generation_batch_size)
-
-                # Select most likely question (first one in list)
-                selected_questions = []
-                new_scores = []
-                for batch_sub_idx, (beam_search_questions, beam_search_scores) in enumerate(zip(new_questions, generation_scores)):                    
-                    assert len(beam_search_questions) == len(beam_search_scores), "Expected candidate questions and their scores to have the same shape!"
-
-                    # Save all candidate scores
-                    candidate_questions_scores[batch_sub_idx].append(beam_search_scores)
-
-                    candidate_idxs = list(range(len(beam_search_questions)))
-
-                    # Then pick candidate with highest score
-                    best_candidate = max(candidate_idxs, key=lambda x: beam_search_scores[x] == max(beam_search_scores))
-                    selected_questions.append(beam_search_questions[best_candidate])
-                    new_scores.append(beam_search_scores[best_candidate])
-
-                new_questions = selected_questions
-
-            elif args.question_selection_strategy in ["relevance", "informativeness", "coherence"]:
-                # Calculate coherence metrics for each candidate question
-                nli_outputs = question_coherence_metrics_nli(
-                    nli_tokenizer, 
-                    nli_model,
-                    tokenizer,
-                    lm,
-                    [procedure for procedure, beam_search_questions in zip(batch_procedures, new_questions) for _ in beam_search_questions],
-                    [question for beam_search_questions in new_questions for question in beam_search_questions],
-                    previous_questions=[[q for qi, q in enumerate(batch_idx_questions) if batch_idx_answers[qi] != "Unsure"] for batch_idx_questions, batch_idx_answers, beam_search_questions in zip(questions, answers, new_questions) for _ in beam_search_questions],
-                    previous_answers=[[a for a in batch_idx_answers if a != "Unsure"] for batch_idx_answers, beam_search_questions in zip(answers, new_questions) for _ in beam_search_questions],
-                    rephrase_batch_size=args.generation_batch_size
-                )
-
-                # Select best candidate based on coherence metrics
-                selected_questions = []
-                new_scores = []
-                parallel_idx = 0
-                ranking_key_mapping = {
-                    "relevance": "relevance_marginal",
-                    "informativeness": "informativeness_marginal",
-                    "coherence": "informativeness_marginal_x_relevance_marginal",
-                }
-                for batch_sub_idx, beam_search_questions in enumerate(new_questions):
-                    this_nli_outputs = [{k: round(float(nli_outputs[k][i]), 3) if type(nli_outputs[k][i]) != str else nli_outputs[k][i] for k in nli_outputs} for i in range(parallel_idx, parallel_idx + len(beam_search_questions))]
-                    candidate_questions_scores[batch_sub_idx].append(this_nli_outputs)
-                    parallel_idx += len(beam_search_questions)
-
-                    # Use marginal relevance (consistency) and expected informativeness (verifiability) to rank candidates
-                    candidate_scores = np.array(
-                        [candidate_metrics[ranking_key_mapping[args.question_selection_strategy]] for candidate_metrics in this_nli_outputs]
-                    )
-
-                    best_candidate = np.argmax(candidate_scores)
-                    selected_questions.append(beam_search_questions[best_candidate])
-                    new_scores.append(round(float(candidate_scores[best_candidate]), 6))
-                
-                new_questions = selected_questions
-                    
-            ################################################################################################################################################
-
-            # Save scores for best questions
-            for batch_sub_idx in range(this_batch_size):
-                scores[batch_sub_idx].append(new_scores[batch_sub_idx])
+            # Calculate coherence metrics for generated questions
+            nli_outputs = question_coherence_metrics_nli(
+                nli_tokenizer, 
+                nli_model,
+                tokenizer,
+                lm,
+                batch_procedures,
+                new_questions,
+                previous_questions=[[q for qi, q in enumerate(batch_idx_questions) if batch_idx_answers[qi] != "Unsure"] for batch_idx_questions, batch_idx_answers in zip(questions, answers)],
+                previous_answers=[[a for a in batch_idx_answers if a != "Unsure"] for batch_idx_answers in answers],
+                rephrase_batch_size=args.generation_batch_size
+            )
+            relevance = [round(float(nli_outputs['relevance_marginal'][i]), 6) for i in range(this_batch_size)]
+            informativeness = [round(float(nli_outputs['informativeness_marginal'][i]), 6) for i in range(this_batch_size)]
+            relevance_x_informativeness = [round(float(nli_outputs['informativeness_marginal_x_relevance_marginal'][i]), 6) for i in range(this_batch_size)]
 
             # Save generated questions
             for batch_sub_idx in range(this_batch_size):
@@ -397,7 +345,7 @@ if not is_complete:
 
             # Run VQA with generated questions (and optional spatial filter)
             prompts_a = [prompt + f' {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A:' for prompt, question in zip(prompts_q, new_questions)]
-            if args.print_prompts:
+            if args.verbose:
                 pprint(prompts_a[0])
 
             # Always exclude dialog history from VQA prompt - it only distracts
@@ -450,7 +398,7 @@ if not is_complete:
                 prompt + f'{ASSISTANT_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q: {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A: '
                 for prompt, question in zip(prompts, questions_success)
             ]
-            if args.print_prompts:
+            if args.verbose:
                 pprint(prompts_success[0])
             success_vqa_outputs = run_vqa_with_visual_filter(vlm_processor=vlm_processor, 
                                                              vlm=vlm, 
@@ -485,86 +433,41 @@ if not is_complete:
                     round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
                 )
 
+            try:
+                wandb.log(
+                    {
+                        "rewards/relevance_mean": np.mean(relevance),
+                        "rewards/informativeness_mean": np.mean(informativeness),
+                        "rewards/relevance_x_informativeness_mean": np.mean(relevance_x_informativeness),
+                        "rewards/success_correctness_mean": np.mean([sp[-1] for sp in success_probs]),
+                    }
+                )
+            except Exception as e:
+                print("Warning: failed to log to wandb!")
+                pprint(e)
+
+            # TODO: need to do step with PPO trainer still
+
             # Clear out VQA outputs now because they occupy a lot of memory
             del new_answers
             del success_vqa_outputs
 
-        # Update global lists of tracked outputs
-        all_questions += questions
-        all_candidate_questions += candidate_questions
-        all_candidate_questions_scores += candidate_questions_scores
-        all_candidate_questions_sources += candidate_questions_sources
-        all_scores += scores
-        all_answers += answers
-        all_answer_probs += answer_probs
-        all_success_probs += success_probs
-        all_success_probs_negated += success_probs_negated
-        all_example_ids += [example.example_id for example in batch_examples]
-        all_procedures += [example.procedure_description for example in batch_examples]
-        all_labels += [example.mistake_type for example in batch_examples]
+        #### Save model
+        if epoch % 5 == 0 and worker_index == 0 and args.save_strategy == "epoch":
+            if not os.path.exists(os.path.join(this_results_dir, f"epoch{epoch}")):
+                os.makedirs(os.path.join(this_results_dir, f"epoch{epoch}"))
+            ppo_trainer.save_pretrained(os.path.join(this_results_dir, f"epoch{epoch}"))    
 
         for frame in batch_frames:
             frame.close()
         del batch_frames
 
-        # And cache tracked outputs
-        pickle.dump((    
-            False,
-            batch_idx,
-            all_questions, 
-            all_candidate_questions, 
-            all_candidate_questions_scores, 
-            all_candidate_questions_sources,
-            all_scores, 
-            all_answers, 
-            all_answer_probs, 
-            all_success_probs,
-            all_success_probs_negated,
-            all_example_ids,
-            all_procedures,
-            all_labels,
-        ), open(cache_path, "wb"))
+print(f"({worker_index}) Done running iterative VQA training!")
 
-# Verify we got correct number of outputs
-all_results = [
-    all_questions, 
-    all_candidate_questions, 
-    all_candidate_questions_scores, 
-    all_candidate_questions_sources,
-    all_scores, 
-    all_answers, 
-    all_answer_probs, 
-    all_success_probs,
-    all_success_probs_negated,
-    all_example_ids,
-    all_procedures,
-    all_labels,
-]
-assert all(len(l) == len(all_results[0]) for l in all_results), f"Expected to get same number of all outputs! ({', '.join([str(len(l)) for l in all_results])})"
-
-# Cache one more time to indicate the generation is finished
-if batch_idx is not None:
-    pickle.dump((    
-        True,
-        batch_idx,
-        all_questions, 
-        all_candidate_questions, 
-        all_candidate_questions_scores, 
-        all_candidate_questions_sources,
-        all_scores, 
-        all_answers, 
-        all_answer_probs, 
-        all_success_probs,
-        all_success_probs_negated,
-        all_example_ids,
-        all_procedures,
-        all_labels,
-    ), open(cache_path, "wb"))
-
-print(f"({worker_index}) Done running iterative VQA inference!")
-
-
-
-
+#### Save model
+if worker_index == 0:
+    print(f"({worker_index}) Saving model...")
+    ppo_trainer.save_pretrained(this_results_dir)        
+    wandb.finish()
 
 print(f"({worker_index}) Done!")
