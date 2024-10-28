@@ -141,7 +141,7 @@ if getattr(vlm, "language_model", None):
     lm = vlm.language_model
 else:
     lm = vlm
-lm = PeftModelForCausalLM(vlm.language_model, peft_config)
+lm = PeftModelForCausalLM(lm, peft_config)
 lm = AutoModelForCausalLMWithValueHead.from_pretrained(lm)
 tokenizer = vlm_processor.tokenizer
 tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -251,12 +251,14 @@ ppo_config = PPOConfig(
 )
 ppo_trainer = PPOTrainer(
     model=lm,
-    ref_model=vlm.language_model, # TODO: don't think this makes sense
+    ref_model=vlm.language_model, # TODO: don't think this makes sense - need a separate model
     config=ppo_config,
     dataset=dataset,
     tokenizer=vlm_processor.tokenizer,
     data_collator=collator
 )
+
+
 
 
 print(f"({worker_index}) Beginning iterative VQA training...")

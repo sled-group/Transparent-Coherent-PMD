@@ -30,7 +30,7 @@ en_core_web_md = {url = "https://github.com/explosion/spacy-models/releases/down
 en_core_web_lg = {url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1.tar.gz"}
 scikit-learn = "^1.4.0"
 dataclasses-json = "^0.6.3"
-trl = "0.9.4"
+trl = "0.11.0"
 datasets = "2.20.0"
 protobuf = "^4.21"
 wandb = "0.17.2"

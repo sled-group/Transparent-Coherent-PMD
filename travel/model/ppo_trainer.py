@@ -380,6 +380,7 @@ class PerTokenPPOTrainer(PPOTrainer):
         scores: torch.FloatTensor,
         score_indices: List[torch.LongTensor],
         response_masks: Optional[List[torch.LongTensor]] = None,
+        ref_responses: List[torch.LongTensor] = None,
     ):
         """
         Run a PPO optimisation step given a list of queries, model responses, and rewards.
@@ -399,8 +400,8 @@ class PerTokenPPOTrainer(PPOTrainer):
         Returns:
             `dict[str, Any]`: A summary of the training statistics
         """
-        if self.ref_model is None:
-            raise NotImplementedError("PerTokenPPOTrainer requires a ref_model to be passed, as when the base model is a PEFT model, the PPOTrainer class inadvertently updates the underlying model during training.")
+        if self.ref_model is None and ref_responses is None:
+            raise NotImplementedError("PerTokenPPOTrainer requires a ref_model or ref_responses to be passed, as when the base model is a PEFT model, the PPOTrainer class inadvertently updates the underlying model during training.")
 
         bs = self.config.batch_size
 

@@ -6213,30 +6213,36 @@ tutorials = ["matplotlib", "pandas", "tabulate", "torch"]
 
 [[package]]
 name = "trl"
-version = "0.9.4"
+version = "0.11.0"
 description = "Train transformer language models with reinforcement learning."
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "trl-0.9.4-py3-none-any.whl", hash = "sha256:a7322f73d818e4ff73441520ae2494ce46ce4c8052058fff7cb80d323ff87e28"},
+    {file = "trl-0.11.0-py3-none-any.whl", hash = "sha256:3835aa3889331b05b3c7fcb5672d5fe354b425baada8dc17ae2d95f4f7723555"},
+    {file = "trl-0.11.0.tar.gz", hash = "sha256:708809503a331f978eceab6bc1488755b4e58057e82894ff73c5e8147d96ed71"},
 ]
 
 [package.dependencies]
 accelerate = "*"
 datasets = "*"
-numpy = ">=1.18.2"
+numpy = [
+    {version = ">=1.18.2", markers = "platform_system != \"Windows\""},
+    {version = "<2", markers = "platform_system == \"Windows\""},
+]
 torch = ">=1.4.0"
-transformers = ">=4.31.0"
+transformers = ">=4.40.0"
 tyro = ">=0.5.11"
 
 [package.extras]
 benchmark = ["deepspeed", "ghapi", "openrlbenchmark (==0.2.1a5)", "requests", "wandb"]
-deepspeed = ["deepspeed (>=0.9.5)"]
-dev = ["accelerate", "bitsandbytes (<=0.41.1)", "deepspeed", "deepspeed (>=0.9.5)", "diffusers (>=0.18.0)", "ghapi", "openrlbenchmark (==0.2.1a5)", "parameterized", "peft (>=0.4.0)", "pytest", "pytest-cov", "pytest-xdist", "requests", "scikit-learn", "wandb"]
+deepspeed = ["deepspeed (>=0.14.4)"]
+dev = ["Pillow", "bitsandbytes (<=0.41.1)", "deepspeed", "deepspeed (>=0.14.4)", "diffusers (>=0.18.0)", "ghapi", "huggingface-hub (>=0.22.2)", "liger-kernel (>=0.2.1)", "llm-blender (>=0.0.2)", "openai (>=1.23.2)", "openrlbenchmark (==0.2.1a5)", "parameterized", "peft (>=0.8.0)", "pytest", "pytest-cov", "pytest-rerunfailures", "pytest-xdist", "requests", "scikit-learn", "wandb"]
 diffusers = ["diffusers (>=0.18.0)"]
-peft = ["peft (>=0.4.0)"]
+liger = ["liger-kernel (>=0.2.1)"]
+llm-judge = ["huggingface-hub (>=0.22.2)", "llm-blender (>=0.0.2)", "openai (>=1.23.2)"]
+peft = ["peft (>=0.8.0)"]
 quantization = ["bitsandbytes (<=0.41.1)"]
-test = ["accelerate", "parameterized", "pytest", "pytest-cov", "pytest-xdist", "scikit-learn"]
+test = ["Pillow", "llm-blender (>=0.0.2)", "parameterized", "peft (>=0.8.0)", "pytest", "pytest-cov", "pytest-rerunfailures", "pytest-xdist", "scikit-learn"]
 
 [[package]]
 name = "typer"
@@ -6831,4 +6837,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.9"
-content-hash = "75020a563f8f5428b11d1e8368d2f3adc719d1b386ab59ab5b3be3afc17b58e5"
+content-hash = "43e41dcfbce51adfd1ae3bbda297b13bc133cc7a81b2c27997e5368a62da19ba"
