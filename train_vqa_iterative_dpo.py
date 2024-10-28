@@ -26,23 +26,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--train_data_path", type=str, help="Path to `outputs_<partition>.json` file which will be used to train LM.")
 parser.add_argument("--val_data_path", type=str, help="Path to `outputs_<partition>.json` file which will be used to validate LM.")
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["Salesforce/instructblip-vicuna-7b", "llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
-parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
 parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
 parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parameter for training.")
 parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
 parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha (weight update scaling coefficient).")
-parser.add_argument("--max_iterations", type=int, default=10, help="Maximum number of questions to generate before making a final mistake detection decision.")
-parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)), help="Number of beams in beam search.")
-parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
-parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
 parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
 parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
 parser.add_argument("--resume_dir", type=str, help="Path to output directory from previous run to resume from (starts from last checkpoint).")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
-parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
-parser.add_argument("--verbose", action="store_true", help="Pass this argument to display prompts and generations on every batch.")
 parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
 args = parser.parse_args()
 
@@ -66,10 +59,7 @@ print("Devices:", torch.cuda.device_count())
 # Set up results directory
 if args.resume_dir is None:
     vlm_name = args.vlm_name.split('/')[-1]
-    task_name = args.task
-    if args.debug:
-        task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
-    this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
+    this_results_dir = os.path.join("DPO", vlm_name, f"DPO_IterativeVQA")
     this_results_dir += f"_{vlm_name}"
     this_results_dir += f"_beam{args.num_beams}-{args.num_return_sequences}"
     if args.visual_filter_mode is not None:
@@ -82,7 +72,7 @@ else:
     this_results_dir = args.resume_dir
 
 this_run_id = args.run_id if args.resume_dir is None else args.resume_dir.split("_")[-1]
-wandb_run_name = f"IterativeVQA_PPO_{this_run_id}"
+wandb_run_name = f"DPO_IterativeVQA_{this_run_id}"
 
 
 # Set up models
@@ -183,6 +173,15 @@ for p, data_path in [("train", args.train_data_path), "val", args.val_data_path]
             dataset = load_from_disk(processed_data_path)
             break
     datasets[p] = dataset
+
+# Debug mode configuration
+if args.debug:
+    args.n_epochs = 1
+
+    # If just doing a quick debug run, select a few examples
+    for p in datasets:
+        random.shuffle(datasets[p])
+        datasets[p] = datasets[p][:10]
 
 
 # Set up DPO trainer
