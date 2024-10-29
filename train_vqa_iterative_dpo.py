@@ -5,7 +5,7 @@ import argparse
 from datasets import Dataset, load_from_disk
 import json
 import os
-from peft import PeftModelForCausalLM, LoraConfig
+from peft import LoraConfig
 from pprint import pprint
 import random
 import shutil
@@ -13,11 +13,10 @@ import torch
 import torch.distributed as dist
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig           
-from trl import AutoModelForCausalLMWithValueHead, DPOConfig, DPOTrainer
+from trl import DPOConfig, DPOTrainer
 import wandb
 
 from travel.constants import RESULTS_DIR, CONFIG_PATH, RANDOM_SEED
-from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE
 
 
@@ -26,12 +25,12 @@ parser.add_argument("--train_data_path", type=str, help="Path to `outputs_<parti
 parser.add_argument("--val_data_path", type=str, help="Path to `outputs_<partition>.json` file which will be used to validate LM.")
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["Salesforce/instructblip-vicuna-7b", "llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training.")
-parser.add_argument("--n_epochs", type=int, default=10, help="Number of training epochs.")
+parser.add_argument("--n_epochs", type=int, default=5, help="Number of training epochs.")
 parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parameter for training.")
 parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
-parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha (weight update scaling coefficient).")
-parser.add_argument("--train_batch_size", type=int, default=8, help="Batch size for training.")
-parser.add_argument("--eval_batch_size", type=int, default=24, help="Batch size for evaluation.")
+parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha (weight update scaling coefficient).")
+parser.add_argument("--train_batch_size", type=int, default=5, help="Batch size for training.")
+parser.add_argument("--eval_batch_size", type=int, default=32, help="Batch size for evaluation.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
 parser.add_argument("--resume_dir", type=str, help="Path to output directory from previous run to resume from (starts from last checkpoint).")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -93,7 +92,7 @@ peft_config = LoraConfig(task_type="CAUSAL_LM",  # configured for causal LM
 
 # Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
 try:
-    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)   # TODO: do we even need the whole VLM?
+    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)
 except Exception as e:
     print("Encountered exception when trying to load model with AutoModelForVision2Seq:")
     pprint(e)
@@ -182,7 +181,7 @@ if args.debug:
     # If just doing a quick debug run, select a few examples
     for p in datasets:
         datasets[p].shuffle(seed=RANDOM_SEED)
-        datasets[p].select(range(10))
+        datasets[p] = datasets[p].select(range(10))
 
 
 # Set up DPO trainer
@@ -195,7 +194,7 @@ training_args = config_class(output_dir=this_results_dir,
                              # optim='paged_adamw_8bit', # TODO: actually set an optimizer, but figure out how to do it right
                              bf16=True,
                              num_train_epochs=args.n_epochs,
-                             gradient_accumulation_steps=1,
+                             gradient_accumulation_steps=4,
                              save_strategy=args.save_strategy,
                              save_total_limit=3,
                              save_only_model=False,
