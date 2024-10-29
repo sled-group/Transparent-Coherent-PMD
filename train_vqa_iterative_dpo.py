@@ -6,7 +6,6 @@ from datasets import Dataset, load_from_disk
 import json
 import os
 from peft import PeftModelForCausalLM, LoraConfig
-from PIL import Image
 from pprint import pprint
 import random
 import shutil
@@ -14,12 +13,12 @@ import torch
 import torch.distributed as dist
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig           
-from trl import AutoModelForCausalLMWithValueHead, DPOTrainer, DPOConfig
+from trl import AutoModelForCausalLMWithValueHead, DPOConfig, DPOTrainer
 import wandb
 
-from travel.constants import RESULTS_DIR, CONFIG_PATH
+from travel.constants import RESULTS_DIR, CONFIG_PATH, RANDOM_SEED
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.data.vqa import get_vqa_response_token_ids, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE
+from travel.data.vqa import USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE
 
 
 parser = argparse.ArgumentParser()
@@ -31,8 +30,8 @@ parser.add_argument("--n_epochs", type=int, default=10, help="Number of training
 parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parameter for training.")
 parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
 parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha (weight update scaling coefficient).")
-parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training.")
-parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for evaluation.")
+parser.add_argument("--train_batch_size", type=int, default=8, help="Batch size for training.")
+parser.add_argument("--eval_batch_size", type=int, default=24, help="Batch size for evaluation.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
 parser.add_argument("--resume_dir", type=str, help="Path to output directory from previous run to resume from (starts from last checkpoint).")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -61,11 +60,8 @@ if args.resume_dir is None:
     vlm_name = args.vlm_name.split('/')[-1]
     this_results_dir = os.path.join("DPO", vlm_name, f"DPO_IterativeVQA")
     this_results_dir += f"_{vlm_name}"
-    this_results_dir += f"_beam{args.num_beams}-{args.num_return_sequences}"
-    if args.visual_filter_mode is not None:
-        this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{args.run_id}"
-    this_results_dir = os.path.join(RESULTS_DIR, "vqg_training_dpo", this_results_dir)
+    this_results_dir = os.path.join(RESULTS_DIR, "vqg_training", this_results_dir)
     if worker_index == 0 and not os.path.exists(this_results_dir):
         os.makedirs(this_results_dir)
 else:
@@ -105,15 +101,14 @@ except Exception as e:
     vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)
 vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True)
 vlm_processor.tokenizer.padding_side = "left"
-response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
 # We'll use VLM's LM directly to generate questions
 if getattr(vlm, "language_model", None):
     lm = vlm.language_model
 else:
     lm = vlm
-lm = PeftModelForCausalLM(lm, peft_config)
-lm = AutoModelForCausalLMWithValueHead.from_pretrained(lm)
+pprint(lm.__dict__)
+print("!!!!!", type(lm), "!!!!!")
 tokenizer = vlm_processor.tokenizer
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -123,7 +118,7 @@ print(f"({worker_index}) Loading DPO training and validation data...")
 if args.val_data_path is None:
     args.val_data_path = args.training_data_path
 datasets = {}
-for p, data_path in [("train", args.train_data_path), "val", args.val_data_path]:
+for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path)]:
     processed_data_path = data_path.replace(".json", "_processed_dpo")
     while True:
         if not os.path.exists(processed_data_path):
@@ -148,14 +143,20 @@ for p, data_path in [("train", args.train_data_path), "val", args.val_data_path]
                         # Generate an instance from the top question choice and one of the worst ones (picked from the bottom half of scores)
                         candidate_questions_sorted = sorted(list(range(len(candidate_questions))), key=lambda qi: candidate_questions_scores[qi])
                         good_question = candidate_questions[candidate_questions_sorted[-1]]
-                        worst_candidate_questions = [candidate_questions[qi] for qi in candidate_questions_sorted[:len(candidate_questions_sorted) // 2]]                     
-                        bad_question = random.choice(worst_candidate_questions)
+                        if len(candidate_questions_sorted) > 2:
+                            worst_candidate_questions = [candidate_questions[qi] for qi in candidate_questions_sorted[:len(candidate_questions_sorted) // 2]]                     
+                            bad_question = random.choice(worst_candidate_questions)
+                        elif len(candidate_questions_sorted) == 2:
+                            bad_question = candidate_questions[candidate_questions_sorted[0]]
+                        else:
+                            # There was only one candidate question, so we don't have a rejected
+                            continue
+                            
                         instance_info |= {
                             "chosen": " " + good_question + USER_END_TOKENS[args.vlm_name],
                             "rejected": " " + bad_question + USER_END_TOKENS[args.vlm_name],
                         }
-                        instance_info_tokenized = DPOTrainer.tokenize_row(instance_info, add_special_tokens=False)
-                        dataset.append(instance_info | instance_info_tokenized)
+                        dataset.append(instance_info)
 
                         # Prepare prompt for next iteration by adding the question and answer we actually got at inference time
                         chosen_question = output['questions'][turn_idx]
@@ -180,8 +181,8 @@ if args.debug:
 
     # If just doing a quick debug run, select a few examples
     for p in datasets:
-        random.shuffle(datasets[p])
-        datasets[p] = datasets[p][:10]
+        datasets[p].shuffle(seed=RANDOM_SEED)
+        datasets[p].select(range(10))
 
 
 # Set up DPO trainer
@@ -205,38 +206,34 @@ training_args = config_class(output_dir=this_results_dir,
                              logging_steps=1 if args.debug else 10,
                              run_name=wandb_run_name,
                              ddp_backend="gloo",
-                             ddp_find_unused_parameters=False)
+                             ddp_find_unused_parameters=False,
+                            #  max_prompt_length=max_prompt_length,
+                            #  max_length=max_total_length,
+)
 
-max_prompt_length = max([len(row['prompt_input_ids']) for row in datasets['train'] + datasets['val']])
-max_total_length = max([len(row['prompt_input_ids']) + len(row['chosen_input_ids']) for row in datasets['train'] + datasets['val']] + [len(row['prompt_input_ids']) + len(row['rejected_input_ids']) for row in datasets['train'] + datasets['val']])
 trainer = DPOTrainer(
-    lm,
+    model=lm,
     args=training_args,
     beta=args.dpo_beta,
-    max_prompt_length=max_prompt_length,
-    max_length=max_total_length,
     train_dataset=datasets["train"],
     eval_dataset=datasets["val"],
     tokenizer=tokenizer,
     peft_config=peft_config,
-)
-
-# Log hyperparams to wandb
-if worker_index == 0:
-    wandb.log({
-        "hyperparameters/visual_filter_strength": args.visual_filter_strength if args.visual_filter_mode is not None else 0.0,
-        "hyperparameters/batch_size": args.train_batch_size,
-        "hyperparameters/learning_rate": args.learning_rate,
-        "hyperparameters/n_demonstrations": args.n_demonstrations,
-        "hyperparameters/dpo_beta": args.dpo_beta,
-        "hyperparameters/lora_r": args.lora_r,
-        "hyperparameters/lora_alpha": args.lora_alpha,
-    })
-
+) 
 
 print(f"({worker_index}) Starting model training...")
 trainer.train(resume_from_checkpoint=args.resume_dir is not None)
 # TODO: think about adding custom data collator to group similar-length dialogs together? can also implement a curriculum-style collating
+
+# Log hyperparams to wandb
+if worker_index == 0:
+    wandb.log({
+        "hyperparameters/batch_size": args.train_batch_size,
+        "hyperparameters/learning_rate": args.learning_rate,
+        "hyperparameters/dpo_beta": args.dpo_beta,
+        "hyperparameters/lora_r": args.lora_r,
+        "hyperparameters/lora_alpha": args.lora_alpha,
+    })
 
 if worker_index == 0:
     print(f"({worker_index}) Saving best model...")
