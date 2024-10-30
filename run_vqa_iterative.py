@@ -31,7 +31,8 @@ from travel.model.vqg import cleanup_generated_question
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["Salesforce/instructblip-vicuna-7b", "llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vqg_adapter_path", type=str, help="Name or path to adapter of VLM's LM to be used for VQG. This is for fine-tuned VQG models. Adapter base model should match the model used by the VLM specified in `vlm_name`.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
 parser.add_argument("--max_iterations", type=int, default=10, help="Maximum number of questions to generate before making a final mistake detection decision.")
@@ -92,6 +93,8 @@ if args.resume_dir is None:
         this_results_dir += "_nohistory"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
+    if args.vqg_adapter_path is not None:
+        this_results_dir += "_dpo"
     this_results_dir += f"_{args.run_id}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     if worker_index == 0 and not os.path.exists(this_results_dir):
@@ -130,6 +133,13 @@ else:
     lm = vlm
 tokenizer = vlm_processor.tokenizer
 tokenizer.pad_token_id = tokenizer.eos_token_id
+
+# Load adapter for VQG if there is one
+if args.vqg_adapter_path is not None:
+    assert not args.condition_questions_with_frames, "VQG adapters are only supported for image-free VQG."
+    lm.load_adapter(args.vqg_adapter_path, adapter_name="vqg")
+    print("Loaded VQG adapter at", args.vqg_adapter_path)
+    print(lm.active_adapters())
 
 # Set up visual filter if needed
 visual_filter = None
@@ -276,6 +286,10 @@ if not is_complete:
         # Iteratively generate questions
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
 
+            # If we have an adapter available for VQG, enable it (this should only be used for the dialog-based VQG, not in-context learning)
+            if args.vqg_adapter_path is not None:
+                lm.enable_adapters()
+
             # Generate a question (with beam search so we have several candidates)
             prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[args.vlm_name] if question_idx != 0 else USER_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q:" for prompt in prompts]
             if not args.condition_questions_with_frames:
@@ -296,6 +310,9 @@ if not is_complete:
                                                               generation_kwargs=generation_kwargs)
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
             new_questions_sources = [["vlm"] * len(beam_search_questions) for beam_search_questions in new_questions]
+
+            if args.vqg_adapter_path is not None:
+                lm.disable_adapters()
 
             # Optionally inject more candidates from original VQG ICL code
             if args.n_icl_demonstrations > 0:
