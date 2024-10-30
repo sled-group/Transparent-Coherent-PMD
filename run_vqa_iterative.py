@@ -19,7 +19,7 @@ from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
+from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, DIALOG_START_TOKENS, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_encoder_decoder, compute_completion_log_likelihoods_vlm
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
@@ -267,7 +267,7 @@ if not is_complete:
         this_batch_size = len(batch_examples)
 
         prompts = [
-            f'{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}{IVQA_PREAMBLE.format(procedure=procedure)}' 
+            f'{DIALOG_START_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}{IVQA_PREAMBLE.format(procedure=procedure)}' 
             for procedure in batch_procedures
         ]
         if args.print_prompts:

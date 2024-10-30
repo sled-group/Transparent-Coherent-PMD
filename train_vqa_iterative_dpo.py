@@ -17,7 +17,7 @@ from trl import DPOConfig, DPOTrainer
 import wandb
 
 from travel.constants import RESULTS_DIR, CONFIG_PATH, RANDOM_SEED
-from travel.data.vqa import USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE
+from travel.data.vqa import DIALOG_START_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE
 
 
 parser = argparse.ArgumentParser()
@@ -107,7 +107,6 @@ if getattr(vlm, "language_model", None):
 else:
     lm = vlm
 pprint(lm.__dict__)
-print("!!!!!", type(lm), "!!!!!")
 tokenizer = vlm_processor.tokenizer
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -129,7 +128,7 @@ for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path
                     procedure = output['procedure']
                     n_turns = output['final_turn'] + 1
                     
-                    prompt = f'{USER_START_TOKENS[args.vlm_name]}{IVQA_PREAMBLE.format(procedure=procedure)}{USER_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q:'
+                    prompt = f'{DIALOG_START_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}{IVQA_PREAMBLE.format(procedure=procedure)}{USER_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q:'
 
                     # Generate an instance from each turn before algorithm termination
                     for turn_idx in range(n_turns):
