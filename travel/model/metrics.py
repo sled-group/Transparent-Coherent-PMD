@@ -408,6 +408,28 @@ def rephrase_question_answer(questions: list[str], answers: list[str], tokenizer
     rephrased_texts = [text.strip() for text in rephrased_texts]
     return rephrased_texts
 
+def rephrase_procedure_success(procedures: list[str], tokenizer, lm, generation_batch_size: int=20):
+    examples = [
+        "Procedure: Soak the sponge in a soapy water with your hands.\nStatement: The sponge has been successfully soaked in soapy water with someone's hands.",
+        "Procedure: Turn on a torch light.\nStatement: The torch light has been successfully turned on.",
+        "Procedure: Fold the right edge of the wrapper.\nStatement: The right edge of the wrapper has been successfully folded.",
+        "Procedure: Pour the water into the blue container.\nStatement: The water has been successfully poured into the blue container.",
+        "Procedure: Spread the black peas on the salad with the spoon in your hand.\nStatement: The black peas have been successfully spread on the salad with the spoon in someone's hand.",
+        "Procedure: Pick the scrubber from the sink.\nStatement: The scrubber has been successfully picked from the sink.",
+        "Procedure: Peel the onion.\nStatement: The onion has been successfully peeled.",
+        "Procedure: Put the dirt in the dust bin.\nStatement: The dirt has been successfully put in the dust bin.",
+        "Procedure: Cut dough in two.\nStatement: The dough has been successfully cut in two.",
+        "Procedure: Close the fridge.\nStatement: The fridge has been successfully closed.",
+    ]
+    prompts = ["\n\n".join(examples) + f"\n\Procedure: {procedure}\nStatement: " for procedure in procedures]
+    rephrased_texts = simple_lm_prompt(lm, tokenizer, prompts, max_new_tokens=20, batch_size=generation_batch_size, generation_kwargs={"pad_token_id": tokenizer.eos_token_id})
+    rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
+    rephrased_texts = [text.strip() for text in rephrased_texts]
+    print(procedures)
+    print(rephrased_texts)
+    print("===================")
+    return rephrased_texts
+
 def entropy(binary_prob):
     if binary_prob == 0.0 or binary_prob == 1.0:
         return 0.0
@@ -428,7 +450,8 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
                                    previous_questions: Optional[list[list[str]]]=None, 
                                    previous_answers: Optional[list[list[str]]]=None, 
                                    mistake_labels: Optional[list[bool]]=None, 
-                                   rephrase_batch_size=20):
+                                   rephrase_batch_size=20,
+                                   rephrase_success=False):
     """
     Calculates coherence metrics for candidate questions about procedures in iterative VQA.
     """
@@ -439,7 +462,15 @@ def question_coherence_metrics_nli(nli_tokenizer, nli_model, lm_tokenizer, lm_mo
     
     metrics = {}
     
-    hypothesis_procedure = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedures]
+    if not rephrase_success:
+        hypothesis_procedure = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedures]
+    else:
+        hypothesis_procedure = rephrase_procedure_success(
+            procedures,
+            lm_tokenizer,
+            lm_model,
+            generation_batch_size=rephrase_batch_size,
+        )
     # Rephrase question with a yes and no answer as statements to compare their entailment probability of success
     rephrased_yes = rephrase_question_answer(
         questions, 
@@ -687,7 +718,6 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
     }
 
     return accuracy_metrics_by_threshold, coherence_metrics
-
 
 # NOTE: below consistency and verifiability metrics are from legacy results and not in use/maintained
 def effectiveness(is_mistake: bool, mistake_probs: Union[list[float], list[list[float]]]):

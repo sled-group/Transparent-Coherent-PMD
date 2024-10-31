@@ -4,6 +4,7 @@ import json
 import os
 from pprint import pprint
 from PIL import Image
+import random
 from typing import Optional, Any, Union, Iterable, Generator
 
 from travel.data.utils import split_list_into_partitions
@@ -107,7 +108,7 @@ class MistakeDetectionExample:
             cutoff_time = get_cutoff_time_by_proportion(self.frame_times, proportion)
             self.frames = [f for f, t in zip(self.frames, self.frame_times) if t >= cutoff_time]
             self.frame_times = [t for t in self.frame_times if t >= cutoff_time]
-            # print(f"{self.example_id}: cut off from {original_length} to {new_length} frames (proportion={proportion}, cutoff time={cutoff_time}, time range={min_time}-{max_time})")
+            # print(f"{self.example_id}: cut off from {original_length} to {new_length} frames (proportion={proportion}, cutoff time={cutoff_time}, time range={min_time}-{max_time})")        
 
 class MistakeDetectionDataset:
     """Superclass for loading and storing a mistake detection dataset."""
@@ -122,6 +123,7 @@ class MistakeDetectionDataset:
         self.example_dirs: list[str] = []
         self.n_examples: int = 0
         self.data_generated: bool = False
+        self.balanced: bool = False
 
         if not os.path.exists(self.cache_dir):
             # Loading dataset for the first time
@@ -238,19 +240,20 @@ class MistakeDetectionDataset:
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
         json.dump(self.__dict__,
-                  open(os.path.join(self.cache_dir, "dataset.json"), "w"),
+                  open(os.path.join(self.cache_dir, "dataset.json" if not self.balanced else "dataset_balanced.json"), "w"),
                   indent=4)
         
-    def load_dataset_metadata(self):
+    def load_dataset_metadata(self, balanced=False):
         """
         Loads cached dataset metadata, including the example directories and count.
         """
-        if os.path.exists(os.path.join(self.cache_dir, "dataset.json")):
+        if os.path.exists(os.path.join(self.cache_dir, "dataset.json" if not balanced else "dataset_balanced.json")):
             data = json.load(open(os.path.join(self.cache_dir, "dataset.json"), "r"))
             self.cache_dir = data["cache_dir"]
             self.example_dirs = data["example_dirs"]
             self.n_examples = data["n_examples"]
             self.data_generated = data["data_generated"]
+            self.balanced = balanced
 
     def get_all_procedures(self) -> Generator[None, list[tuple[int, str]], None]:
         """
@@ -262,3 +265,22 @@ class MistakeDetectionDataset:
             if example.procedure_id not in already_seen:
                 yield (example.procedure_id, example.procedure_description)
                 already_seen.append(example.procedure_id) 
+
+    def balance_classes(self):
+        """
+        Balances positive and negative mistake examples in dataset.
+        """
+        # NOTE: this is not guaranteed to work for all subclasses of MistakeDetectionDataset,
+        # since it relies on an assumption that positive (i.e., no mistake) examples have "pos"
+        # in their example ID. This is faster because we don't have to load each example in 
+        # the dataset. Later we can make this more general, and override the method for
+        # subclasses where this assumption is actually true.
+        positive_examples = [ex_dir for ex_dir in self.example_dirs if "_pos" in ex_dir]
+        negative_examples = [ex_dir for ex_dir in self.example_dirs if "_pos" not in ex_dir]
+        if len(positive_examples) < len(negative_examples):
+            print(f"Upsampling {len(negative_examples) - len(positive_examples)} more positive examples.")
+            self.example_dirs += random.sample(positive_examples, len(negative_examples) - len(positive_examples))
+        elif len(positive_examples) > len(negative_examples):
+            print(f"Upsampling {len(positive_examples) - len(negative_examples)} more negative examples.")
+            self.example_dirs += random.sample(negative_examples, len(positive_examples) - len(negative_examples))
+        self.balanced = True

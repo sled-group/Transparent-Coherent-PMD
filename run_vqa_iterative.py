@@ -15,11 +15,11 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
 
-from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
+from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, HF_TOKEN
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
+from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, DIALOG_START_TOKENS, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_encoder_decoder, compute_completion_log_likelihoods_vlm
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
@@ -31,10 +31,11 @@ from travel.model.vqg import cleanup_generated_question
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["Salesforce/instructblip-vicuna-7b", "llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vqg_adapter_path", type=str, help="Name or path to adapter of VLM's LM to be used for VQG. This is for fine-tuned VQG models. Adapter base model should match the model used by the VLM specified in `vlm_name`.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
-parser.add_argument("--eval_partition", type=str, default="val", choices=["val", "test"])
-parser.add_argument("--max_iterations", type=int, default=8, help="Maximum number of questions to generate before making a final mistake detection decision.")
+parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
+parser.add_argument("--max_iterations", type=int, default=10, help="Maximum number of questions to generate before making a final mistake detection decision.")
 parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)), help="Number of beams in beam search.")
 parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
@@ -92,6 +93,8 @@ if args.resume_dir is None:
         this_results_dir += "_nohistory"
     if args.visual_filter_mode is not None:
         this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
+    if args.vqg_adapter_path is not None:
+        this_results_dir += "_dpo"
     this_results_dir += f"_{args.run_id}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     if worker_index == 0 and not os.path.exists(this_results_dir):
@@ -113,13 +116,13 @@ bnb_config = BitsAndBytesConfig(
 
 # Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
 try:
-    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)   
+    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)   
 except Exception as e:
     print("Encountered exception when trying to load model with AutoModelForVision2Seq:")
     pprint(e)
     
-    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)
-vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True)
+    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)
+vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True, token=HF_TOKEN)
 vlm_processor.tokenizer.padding_side = "left"
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
@@ -130,6 +133,13 @@ else:
     lm = vlm
 tokenizer = vlm_processor.tokenizer
 tokenizer.pad_token_id = tokenizer.eos_token_id
+
+# Load adapter for VQG if there is one
+if args.vqg_adapter_path is not None:
+    assert not args.condition_questions_with_frames, "VQG adapters are only supported for image-free VQG."
+    lm.load_adapter(args.vqg_adapter_path, adapter_name="vqg")
+    print("Loaded VQG adapter at", args.vqg_adapter_path)
+    print(lm.active_adapters())
 
 # Set up visual filter if needed
 visual_filter = None
@@ -257,7 +267,7 @@ if not is_complete:
         this_batch_size = len(batch_examples)
 
         prompts = [
-            f'{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}{IVQA_PREAMBLE.format(procedure=procedure)}' 
+            f'{DIALOG_START_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}{IMAGE_TOKENS[args.vlm_name]}{IVQA_PREAMBLE.format(procedure=procedure)}' 
             for procedure in batch_procedures
         ]
         if args.print_prompts:
@@ -275,6 +285,10 @@ if not is_complete:
 
         # Iteratively generate questions
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
+
+            # If we have an adapter available for VQG, enable it (this should only be used for the dialog-based VQG, not in-context learning)
+            if args.vqg_adapter_path is not None:
+                lm.enable_adapters()
 
             # Generate a question (with beam search so we have several candidates)
             prompts_q = [prompt + f"{ASSISTANT_END_TOKENS[args.vlm_name] if question_idx != 0 else USER_END_TOKENS[args.vlm_name]}{USER_START_TOKENS[args.vlm_name]}Q:" for prompt in prompts]
@@ -296,6 +310,9 @@ if not is_complete:
                                                               generation_kwargs=generation_kwargs)
             new_questions = [[cleanup_generated_question(question) for question in beam_search_questions] for beam_search_questions in new_questions]                                
             new_questions_sources = [["vlm"] * len(beam_search_questions) for beam_search_questions in new_questions]
+
+            if args.vqg_adapter_path is not None:
+                lm.disable_adapters()
 
             # Optionally inject more candidates from original VQG ICL code
             if args.n_icl_demonstrations > 0:

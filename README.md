@@ -153,3 +153,4 @@ There are several analysis scripts and notebooks which must be manually configur
 1. `graph_classification_curves.py` graphs DET and ROC curves.
 2. `analyze_IterativeVQA.py` runs several kinds of analysis on the iterative VQA results.
 3. `notebooks/generate_overview_graphs.ipynb` can be used to generate 3D graphs of error and coherence metrics.
+4. `notebooks/visualize_results_IterativeVQA.ipynb` can be used to extract sample mistake detection outputs from the iterative VQA.
