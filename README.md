@@ -35,8 +35,6 @@ poetry env use ~/.conda/envs/python310/bin/python
 Then set up the virtual environment:
 
 ```
-pip install flash-attn --no-build-isolation # manually install flash-attn since it's required for Phi, but doesn't work with Poetry
-
 export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 poetry install
 poetry shell
