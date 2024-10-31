@@ -4455,6 +4455,26 @@ packaging = "*"
 test = ["pytest (>=6,!=7.0.0,!=7.0.1)", "pytest-cov (>=3.0.0)", "pytest-qt"]
 
 [[package]]
+name = "qwen-vl-utils"
+version = "0.0.8"
+description = "Qwen Vision Language Model Utils - PyTorch"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "qwen_vl_utils-0.0.8-py3-none-any.whl", hash = "sha256:2988aa08256f3d7ee6f08d7b27b004e840608b61ed36d0b32d1775be56a1639d"},
+    {file = "qwen_vl_utils-0.0.8.tar.gz", hash = "sha256:3dfce951226b0a3c9cb13e6d0ad92d86d6fb3d8946af3bcf5c4b0121a1fa717a"},
+]
+
+[package.dependencies]
+av = "*"
+packaging = "*"
+pillow = "*"
+requests = "*"
+
+[package.extras]
+decord = ["decord"]
+
+[[package]]
 name = "referencing"
 version = "0.35.1"
 description = "JSON Referencing + Python"
@@ -6825,4 +6845,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.9"
-content-hash = "beb131679354b5e41beee0d452e57333ecc28bebe599e017b60a1aec9a6a36d1"
+content-hash = "b467bca895677d495cc6859f3f603f45101848918386065b2ebca73b730ac71d"
