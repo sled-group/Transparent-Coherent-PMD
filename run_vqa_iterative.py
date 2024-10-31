@@ -15,7 +15,7 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
 
-from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE
+from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, HF_TOKEN
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
@@ -116,13 +116,13 @@ bnb_config = BitsAndBytesConfig(
 
 # Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
 try:
-    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)   
+    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)   
 except Exception as e:
     print("Encountered exception when trying to load model with AutoModelForVision2Seq:")
     pprint(e)
     
-    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True)
-vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True)
+    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)
+vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True, token=HF_TOKEN)
 vlm_processor.tokenizer.padding_side = "left"
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
