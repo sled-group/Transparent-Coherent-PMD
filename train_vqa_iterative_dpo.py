@@ -71,7 +71,6 @@ wandb_run_name = f"DPO_IterativeVQA_{this_run_id}"
 
 
 # Set up models
-# TODO: incorporate unsloth
 print(f"({worker_index}) Setting up models...")
 
 bnb_config = BitsAndBytesConfig(

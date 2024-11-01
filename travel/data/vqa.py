@@ -47,6 +47,7 @@ DIALOG_START_TOKENS = {
     "microsoft/Phi-3.5-vision-instruct": "",
     "microsoft/kosmos-2-patch14-224": "",
     "meta-llama/Llama-3.2-11B-Vision-Instruct": "<|begin_of_text|><|begin_of_text|>",
+    "Qwen/Qwen2-VL-7B-Instruct": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n",
 }
 IMAGE_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": "",
@@ -58,6 +59,7 @@ IMAGE_TOKENS = {
     "microsoft/Phi-3.5-vision-instruct": "<|image_1|>\n",
     "microsoft/kosmos-2-patch14-224": "<grounding>",
     "meta-llama/Llama-3.2-11B-Vision-Instruct": "<|image|>",
+    "Qwen/Qwen2-VL-7B-Instruct": "<|vision_start|><|image_pad|><|vision_end|>",
 }
 USER_START_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": " ",
@@ -69,6 +71,7 @@ USER_START_TOKENS = {
     "microsoft/Phi-3.5-vision-instruct": "<|user|>\n",
     "microsoft/kosmos-2-patch14-224": " ",
     "meta-llama/Llama-3.2-11B-Vision-Instruct": "<|start_header_id|>user<|end_header_id|>\n\n",
+    "Qwen/Qwen2-VL-7B-Instruct": "<|im_start|>user\n",
 }
 USER_END_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": " ",
@@ -80,6 +83,7 @@ USER_END_TOKENS = {
     "microsoft/Phi-3.5-vision-instruct": "<|end|>\n",
     "microsoft/kosmos-2-patch14-224": " ",
     "meta-llama/Llama-3.2-11B-Vision-Instruct": "<|eot_id|>",
+    "Qwen/Qwen2-VL-7B-Instruct": "<|im_end|>",
 }
 ASSISTANT_START_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": " ",
@@ -91,6 +95,7 @@ ASSISTANT_START_TOKENS = {
     "microsoft/Phi-3.5-vision-instruct": "<|assistant|>\n",
     "microsoft/kosmos-2-patch14-224": " ",
     "meta-llama/Llama-3.2-11B-Vision-Instruct": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+    "Qwen/Qwen2-VL-7B-Instruct": "<|im_start|>assistant\n",
 }
 ASSISTANT_END_TOKENS = {
     "Salesforce/instructblip-flan-t5-xl": " ",
@@ -102,6 +107,7 @@ ASSISTANT_END_TOKENS = {
     "microsoft/Phi-3.5-vision-instruct": "<|end|>\n",
     "microsoft/kosmos-2-patch14-224": " ",
     "meta-llama/Llama-3.2-11B-Vision-Instruct": "<|eot_id|>",
+    "Qwen/Qwen2-VL-7B-Instruct": "<|im_end|>",
 }
 
 IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to gather information about the scene, then use it to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
