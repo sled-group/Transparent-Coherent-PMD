@@ -34,18 +34,21 @@ for results_fnames, results_names, results_colors, analysis_subdir in [
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_rerun_icl2/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_20240906180450/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_20240816225456/outputs_val.json",
             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_rerun_icl2/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20240906195210/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_dpo/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20241029163615/outputs_val.json"
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_dpo/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20241029163615/outputs_val.json",
+            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_dpo/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_dpo_20241030223725/outputs_val.json"
         ],
         [
             "Likelihood Ranking",
             "Likelihood Ranking + ICL",
             "Coherence Ranking",
             "Coherence Ranking + ICL",
-            "Likelihood + DPO, Val. Overfit",
+            "Likelihood Ranking + DPO",
+            "Coherence Ranking + DPO",
         ],
-        ['#C10000', '#C100C1', '#0000C1', '#00C1C1', "#00C100"],
+        ['#C10000', '#C100C1', '#0000C1', '#00C1C1', "#FF7777", "#FF77FF"],
         "llava_dpo"
     ),
+]:
 #     (
 #         [
 #             "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug1000/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug1000_instructblip-vicuna-7b_beam8-4_likelihood_nohistory_20240824151243/outputs_test.json",

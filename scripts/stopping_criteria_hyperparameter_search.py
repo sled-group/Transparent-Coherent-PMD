@@ -2,42 +2,34 @@ from travel import init_travel
 init_travel()
 
 import argparse
-from collections import defaultdict, Counter
-from copy import deepcopy
 from itertools import product
 import json
 import numpy as np
 import os
-import pickle
-from PIL import Image
 from pprint import pprint
-import spacy
-import time
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
 
-from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, HF_TOKEN
-from travel.data.captaincook4d import CaptainCook4DDataset
-from travel.data.ego4d import Ego4DMistakeDetectionDataset
-from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, DIALOG_START_TOKENS, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
-from travel.data.vqg import generate_vqg_prompt_icl
-from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_encoder_decoder, compute_completion_log_likelihoods_vlm
-from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
-from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves, entropy, compile_accuracy_and_coherence_metrics
+from travel.constants import HF_TOKEN
+from travel.data.vqa import get_vqa_response_token_ids
+from travel.model.metrics import question_coherence_metrics_nli, generate_det_curve, generate_tiered_metric_curves, compile_accuracy_and_coherence_metrics
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
-from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
-from travel.model.vqa import run_vqa_with_visual_filter
-from travel.model.vqg import cleanup_generated_question
+from travel.model.nli import NLI_MODEL_PATH
 
-# CONFIGURE THESE VARS ############################################################################################
-VLM_NAME = "llava-hf/llava-1.5-7b-hf"
-this_results_dir = "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240815204213"
-###################################################################################################################
+parser = argparse.ArgumentParser()
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--this_results_dir", type=str, help="Path to results directory for approach to re-tune.")
+args = parser.parse_args()
+
+VLM_NAME = args.vlm_name
+this_results_dir = args.this_results_dir
 
 with open(os.path.join(this_results_dir, "outputs_val.json"), "r") as f:
     all_results_dicts = json.load(f)
+
+this_results_dir = os.path.join(this_results_dir, "stopping_criteria_tuning")
+os.makedirs(this_results_dir)
 
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -77,15 +69,17 @@ cand_early_stop_delta = [0.05, 0.1, 0.2, 0.4]
 cand_confident_delta = [0.025, 0.05, 0.1, 0.2]
 cand_criteria = product(cand_max_iterations, cand_early_stop_delta, cand_confident_delta)
 
-best_accuracy = None
+best_performance = None
 
 all_coherence_metrics = None
 
-for mi, esd, cd in cand_criteria:
+performance_by_criteria = {}
+
+for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
     all_probs = []
     all_labels = []
     all_procedures = []
-    for example_id, output in all_results_dicts.items():
+    for example_id, output in tqdm(all_results_dicts.items(), desc="outputs"):
         final_success_prob = None
         success_probs = output['success_probs']
         for success_prob_idx, success_prob in enumerate(success_probs[:mi]): 
@@ -146,15 +140,24 @@ for mi, esd, cd in cand_criteria:
     accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, readjusted_all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, 0.1)
     coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
     
-    this_accuracy = accuracy_metrics_by_threshold['best_metrics']['accuracy']
-    if best_accuracy is None or this_accuracy > best_accuracy:
-        best_accuracy = this_accuracy
+    performance_by_criteria[str((mi, esd, cd))] = {
+        "accuracy": accuracy_metrics_by_threshold['best_metrics']['accuracy'],
+        "consistency": coherence_metrics_by_threshold[accuracy_metrics_by_threshold['best_threshold']]['consistency'],
+        "verifiability": coherence_metrics_by_threshold[accuracy_metrics_by_threshold['best_threshold']]['verifiability']
+    }
+    this_performance = performance_by_criteria[str((mi, esd, cd))]["verifiability"]
+    if best_performance is None or this_performance > best_performance:
+        best_performance = this_performance
         best_metrics = (accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_threshold)
         best_criteria = (mi, esd, cd)
 
+    json.dump(all_results_dicts, 
+            open(os.path.join(this_results_dir, f"tuned_outputs_val_{mi}_{esd}_{cd}.json"), "w"),
+            indent=4)    
+
 accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold = best_metrics
 
-# Save accuracy and coherence metrics
+# Save accuracy and coherence metrics and other outputs
 json.dump(accuracy_metrics_by_threshold, 
         open(os.path.join(this_results_dir, f"tuned_metrics_accuracy_val.json"), "w"),
         indent=4)
@@ -164,7 +167,7 @@ json.dump(coherence_metrics,
         indent=4)
 
 json.dump(readjusted_all_coherence_metrics, 
-        open(os.path.join(this_results_dir, f"tuned_metrics_coherence_raw_nli_val_tuned.json"), "w"),
+        open(os.path.join(this_results_dir, f"tuned_metrics_coherence_raw_nli_val.json"), "w"),
         indent=4)            
 
 mi, esd, cd = best_criteria
@@ -172,6 +175,8 @@ json.dump({"max_iterations": mi, "early_stop_delta": esd, "confident_delta": cd}
           open(os.path.join(this_results_dir, "tuned_stopping_criteria.json"), "w"),
           indent=4,
 )
+
+json.dump(performance_by_criteria, open(os.path.join(this_results_dir, "performance_by_criteria.json"), "w"), indent=4)
 
 # Generate DET curves for accuracy
 generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"tuned_det_accuracy_val.pdf"))
