@@ -9,6 +9,7 @@ from peft import LoraConfig
 from pprint import pprint
 import random
 import shutil
+import time
 import torch
 import torch.distributed as dist
 from tqdm import tqdm
@@ -29,8 +30,8 @@ parser.add_argument("--n_epochs", type=int, default=5, help="Number of training 
 parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parameter for training.")
 parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
 parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha (weight update scaling coefficient).")
-parser.add_argument("--train_batch_size", type=int, default=5, help="Batch size for training.")
-parser.add_argument("--eval_batch_size", type=int, default=32, help="Batch size for evaluation.")
+parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
+parser.add_argument("--eval_batch_size", type=int, default=24, help="Batch size for evaluation.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
 parser.add_argument("--resume_dir", type=str, help="Path to output directory from previous run to resume from (starts from last checkpoint).")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -115,8 +116,10 @@ print(f"({worker_index}) Loading DPO training and validation data...")
 if args.val_data_path is None:
     args.val_data_path = args.training_data_path
 datasets = {}
+
 for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path)]:
     processed_data_path = data_path.replace(".json", "_processed_dpo")
+    n_loading_failures = 0
     while True:
         if not os.path.exists(processed_data_path):
             if worker_index == 0:
@@ -168,8 +171,20 @@ for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path
             else:
                 continue
         else:
-            dataset = load_from_disk(processed_data_path)
-            break
+            try:
+                dataset = load_from_disk(processed_data_path)
+                break
+            except Exception as e:
+                print(f"{worker_index} Encountered error while loading data. Retrying.")
+                print(e)
+                if n_loading_failures < 5:
+                    n_loading_failures += 1
+                    time.sleep(10)
+                    continue
+                else:
+                    raise e
+
+
     datasets[p] = dataset
 
 # Debug mode configuration

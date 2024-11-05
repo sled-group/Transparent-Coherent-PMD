@@ -29,7 +29,8 @@ with open(os.path.join(this_results_dir, "outputs_val.json"), "r") as f:
     all_results_dicts = json.load(f)
 
 this_results_dir = os.path.join(this_results_dir, "stopping_criteria_tuning")
-os.makedirs(this_results_dir)
+if not os.path.exists(this_results_dir):
+    os.makedirs(this_results_dir)
 
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -143,7 +144,10 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
     performance_by_criteria[str((mi, esd, cd))] = {
         "accuracy": accuracy_metrics_by_threshold['best_metrics']['accuracy'],
         "consistency": coherence_metrics_by_threshold[accuracy_metrics_by_threshold['best_threshold']]['consistency'],
-        "verifiability": coherence_metrics_by_threshold[accuracy_metrics_by_threshold['best_threshold']]['verifiability']
+        "verifiability": coherence_metrics_by_threshold[accuracy_metrics_by_threshold['best_threshold']]['verifiability'],
+        "relevance_marginal": coherence_metrics['relevance_marginal'],
+        "informativeness_marginal": coherence_metrics['informativeness_marginal'],
+        "informativeness_marginal_ref": coherence_metrics['informativeness_marginal_ref'],
     }
     this_performance = performance_by_criteria[str((mi, esd, cd))]["verifiability"]
     if best_performance is None or this_performance > best_performance:
@@ -151,13 +155,29 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
         best_metrics = (accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_threshold)
         best_criteria = (mi, esd, cd)
 
+    # Save info for this combo
+    subdir_path = f"{mi}_{esd}_{cd}"
+    if not os.path.exists(subdir_path):
+        os.makedirs(subdir_path)
     json.dump(all_results_dicts, 
-            open(os.path.join(this_results_dir, f"tuned_outputs_val_{mi}_{esd}_{cd}.json"), "w"),
+            open(os.path.join(this_results_dir, f"{subdir_path}/tuned_outputs_val.json"), "w"),
             indent=4)    
+    
+    json.dump(accuracy_metrics_by_threshold, 
+            open(os.path.join(this_results_dir, f"{subdir_path}/tuned_metrics_accuracy_val.json"), "w"),
+            indent=4)
+
+    json.dump(coherence_metrics, 
+            open(os.path.join(this_results_dir, f"{subdir_path}/tuned_metrics_coherence_nli_val.json"), "w"),
+            indent=4)
+
+    json.dump(readjusted_all_coherence_metrics, 
+            open(os.path.join(this_results_dir, f"{subdir_path}/tuned_metrics_coherence_raw_nli_val.json"), "w"),
+            indent=4)            
 
 accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold = best_metrics
 
-# Save accuracy and coherence metrics and other outputs
+# Save accuracy and coherence metrics and other outputs for best combo
 json.dump(accuracy_metrics_by_threshold, 
         open(os.path.join(this_results_dir, f"tuned_metrics_accuracy_val.json"), "w"),
         indent=4)
