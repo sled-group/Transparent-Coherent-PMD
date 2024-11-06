@@ -129,7 +129,12 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
         parallel_idx = 0
         this_metrics = []
         for results_dict in all_results_dicts.values():
-            for question_idx in range(results_dict['final_turn'] + 1):
+            for question_idx in range(10):
+
+                # Skip over the turns we don't want for this set of criteria
+                if question_idx > results_dict['final_turn']:
+                    continue
+
                 if type(k) != str:
                     this_metrics.append(max(round(float(all_coherence_metrics[k][parallel_idx]), 6), 0.0)) # If negative, just round up to 0.0 for aggregated metrics
                 else:
