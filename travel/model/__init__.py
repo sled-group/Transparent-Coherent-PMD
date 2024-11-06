@@ -16,12 +16,7 @@ def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batc
     else:
         num_seq = 1
 
-    all_outputs = []
-    all_scores = []
-    for i in tqdm(range(0, len(prompts), batch_size), desc=f"running generation ({str(lm.device)})"):
-        # Prepare the batch
-        batch_prompts = prompts[i:i+batch_size]
-
+    def generate_batch(batch_prompts, generation_kwargs):
         inputs = tokenizer(text=batch_prompts, padding=True, return_tensors="pt")
         inputs = inputs.to(lm.device)
 
@@ -29,12 +24,35 @@ def simple_lm_prompt_beam_search(lm, tokenizer, prompts, max_new_tokens=20, batc
             outputs = lm.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True, output_scores=True, **generation_kwargs)
 
         scores = lm.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False).cpu().numpy()
-        all_scores += [round(float(np.mean(s)), 6) for s in scores] # Save sequence probability
 
         outputs = outputs.sequences[:, inputs['input_ids'].shape[-1]:]
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
-        all_outputs += outputs
+        return outputs, scores
+
+    all_outputs = []
+    all_scores = []
+    for i in tqdm(range(0, len(prompts), batch_size), desc=f"running generation ({str(lm.device)})"):
+        # Prepare the batch
+        batch_prompts = prompts[i:i+batch_size]
+
+        try:
+            outputs, scores = generate_batch(batch_prompts, generation_kwargs)
+            all_outputs += outputs
+            all_scores += [round(float(np.mean(s)), 6) for s in scores] # Save sequence probability
+        except Exception as e:
+            pprint(e)
+            print("\tWarning: Constrained beam search threw an error. Re-running batch elements one by one.")
+            for prompt in batch_prompts:
+                try:
+                    outputs, scores = generate_batch([prompt], generation_kwargs)
+                except Exception as e:
+                    pprint(e)
+                    print("\t\tWarning: Failed again at generating for a batch. Relaxing generation constraints.")
+                    relaxed_kwargs = {k: v for k, v in generation_kwargs.items() if k not in ["constraints", "begin_suppress_tokens", "bad_words_ids"]}
+                    outputs, scores = generate_batch([prompt], relaxed_kwargs)
+                all_outputs += outputs
+                all_scores += [round(float(np.mean(s)), 6) for s in scores] # Save sequence probability
 
     # Collate generated texts and scores from beam search
     all_outputs_collated = []

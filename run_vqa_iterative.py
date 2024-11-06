@@ -9,13 +9,14 @@ import os
 import pickle
 from PIL import Image
 from pprint import pprint
+import shutil
 import spacy
 import time
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
 
-from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, HF_TOKEN
+from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, HF_TOKEN, CONFIG_PATH
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
@@ -861,4 +862,8 @@ if worker_index == 0:
                                   [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
                                   [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
     
+    # Save args and config
+    shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
+    json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
+
     print(f"({worker_index}) Done!")
