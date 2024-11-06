@@ -156,23 +156,23 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
         best_criteria = (mi, esd, cd)
 
     # Save info for this combo
-    subdir_path = f"{mi}_{esd}_{cd}"
+    subdir_path = os.path.join(this_results_dir, f"{mi}_{esd}_{cd}")
     if not os.path.exists(subdir_path):
         os.makedirs(subdir_path)
     json.dump(all_results_dicts, 
-            open(os.path.join(this_results_dir, f"{subdir_path}/tuned_outputs_val.json"), "w"),
+            open(os.path.join(subdir_path, "tuned_outputs_val.json"), "w"),
             indent=4)    
     
     json.dump(accuracy_metrics_by_threshold, 
-            open(os.path.join(this_results_dir, f"{subdir_path}/tuned_metrics_accuracy_val.json"), "w"),
+            open(os.path.join(subdir_path, "tuned_metrics_accuracy_val.json"), "w"),
             indent=4)
 
     json.dump(coherence_metrics, 
-            open(os.path.join(this_results_dir, f"{subdir_path}/tuned_metrics_coherence_nli_val.json"), "w"),
+            open(os.path.join(subdir_path, "tuned_metrics_coherence_nli_val.json"), "w"),
             indent=4)
 
     json.dump(readjusted_all_coherence_metrics, 
-            open(os.path.join(this_results_dir, f"{subdir_path}/tuned_metrics_coherence_raw_nli_val.json"), "w"),
+            open(os.path.join(subdir_path, "tuned_metrics_coherence_raw_nli_val.json"), "w"),
             indent=4)            
 
 accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold = best_metrics
