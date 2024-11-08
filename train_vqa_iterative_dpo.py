@@ -220,6 +220,7 @@ training_args = config_class(output_dir=this_results_dir,
                              run_name=wandb_run_name,
                              ddp_backend="gloo",
                              ddp_find_unused_parameters=False,
+                             warmup_ratio=0.05,
                             #  max_prompt_length=max_prompt_length,
                             #  max_length=max_total_length,
 )
