@@ -68,7 +68,7 @@ else:
     this_results_dir = args.resume_dir
 
 this_run_id = args.run_id if args.resume_dir is None else args.resume_dir.split("_")[-1]
-wandb_run_name = f"DPO_IterativeVQA_{this_run_id}"
+wandb_run_name = f"DPO_IterativeVQA_{args.vlm_name.split('/')[-1]}_{this_run_id}"
 
 
 # Set up models
@@ -235,7 +235,6 @@ trainer = DPOTrainer(
 
 print(f"({worker_index}) Starting model training...")
 trainer.train(resume_from_checkpoint=args.resume_dir is not None)
-# TODO: think about adding custom data collator to group similar-length dialogs together? can also implement a curriculum-style collating
 
 # Log hyperparams to wandb
 if worker_index == 0:

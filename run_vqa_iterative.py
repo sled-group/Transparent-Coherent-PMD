@@ -45,6 +45,7 @@ parser.add_argument("--question_selection_strategy", type=str, default="likeliho
 parser.add_argument("--exclude_history_from_vqa", action="store_true", help="Pass this argument to exclude the dialog history from VQA, and instead directly ask only questions.")
 parser.add_argument("--coherence_evaluation_strategy", type=str, default="nli", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
 parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
+parser.add_argument("--confident_range", type=int, default=0.05, help="If success probability is within this from 0.0 or 1.0, stop early due to high confidence.")
 parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
@@ -736,8 +737,8 @@ if worker_index == 0:
             if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
                 if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
                     break
-            # OR if success score is within early_stop_delta / 2 of 0.0 or 1.0, stop
-            if success_prob < args.early_stop_delta / 2 or 1.0 - success_prob < args.early_stop_delta / 2:
+            # OR if success score is within confident_delta of 0.0 or 1.0 (i.e., highly confident), stop
+            if success_prob < args.confident_range or 1.0 - success_prob < args.confident_range:
                 break           
         all_probs.append(round(final_success_prob, 6))   
 
