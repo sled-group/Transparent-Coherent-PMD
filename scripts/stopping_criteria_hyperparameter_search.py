@@ -2,6 +2,7 @@ from travel import init_travel
 init_travel()
 
 import argparse
+from copy import deepcopy
 from itertools import product
 import json
 import numpy as np
@@ -133,13 +134,15 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
 
                 # Skip over the turns we don't want for this set of criteria
                 if question_idx > results_dict['final_turn']:
+                    parallel_idx += 1
                     continue
-
-                if type(k) != str:
-                    this_metrics.append(max(round(float(all_coherence_metrics[k][parallel_idx]), 6), 0.0)) # If negative, just round up to 0.0 for aggregated metrics
                 else:
-                    this_metrics.append(all_coherence_metrics[k][parallel_idx])
-                parallel_idx += 1
+                    if type(k) != str:
+                        this_metrics.append(max(round(float(all_coherence_metrics[k][parallel_idx]), 6), 0.0)) # If negative, just round up to 0.0 for aggregated metrics
+                    else:
+                        this_metrics.append(all_coherence_metrics[k][parallel_idx])
+                    parallel_idx += 1
+                
         readjusted_all_coherence_metrics[k] = this_metrics
     
     # Compile accuracy and coherence metrics
@@ -157,7 +160,7 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
     this_performance = performance_by_criteria[str((mi, esd, cd))]["verifiability"]
     if best_performance is None or this_performance > best_performance:
         best_performance = this_performance
-        best_metrics = (accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_threshold)
+        best_metrics = (accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_threshold, deepcopy(all_results_dicts))
         best_criteria = (mi, esd, cd)
 
     # Save info for this combo
@@ -165,34 +168,38 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
     if not os.path.exists(subdir_path):
         os.makedirs(subdir_path)
     json.dump(all_results_dicts, 
-            open(os.path.join(subdir_path, "tuned_outputs_val.json"), "w"),
+            open(os.path.join(subdir_path, "outputs_val.json"), "w"),
             indent=4)    
     
     json.dump(accuracy_metrics_by_threshold, 
-            open(os.path.join(subdir_path, "tuned_metrics_accuracy_val.json"), "w"),
+            open(os.path.join(subdir_path, "metrics_accuracy_val.json"), "w"),
             indent=4)
 
     json.dump(coherence_metrics, 
-            open(os.path.join(subdir_path, "tuned_metrics_coherence_nli_val.json"), "w"),
+            open(os.path.join(subdir_path, "metrics_coherence_nli_val.json"), "w"),
             indent=4)
 
     json.dump(readjusted_all_coherence_metrics, 
-            open(os.path.join(subdir_path, "tuned_metrics_coherence_raw_nli_val.json"), "w"),
+            open(os.path.join(subdir_path, "metrics_coherence_raw_nli_val.json"), "w"),
             indent=4)            
 
-accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold = best_metrics
+accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold, all_results_dicts = best_metrics
 
 # Save accuracy and coherence metrics and other outputs for best combo
+json.dump(all_results_dicts, 
+        open(os.path.join(this_results_dir, f"outputs_val.json"), "w"),
+        indent=4)
+
 json.dump(accuracy_metrics_by_threshold, 
-        open(os.path.join(this_results_dir, f"tuned_metrics_accuracy_val.json"), "w"),
+        open(os.path.join(this_results_dir, f"metrics_accuracy_val.json"), "w"),
         indent=4)
 
 json.dump(coherence_metrics, 
-        open(os.path.join(this_results_dir, f"tuned_metrics_coherence_nli_val.json"), "w"),
+        open(os.path.join(this_results_dir, f"metrics_coherence_nli_val.json"), "w"),
         indent=4)
 
 json.dump(readjusted_all_coherence_metrics, 
-        open(os.path.join(this_results_dir, f"tuned_metrics_coherence_raw_nli_val.json"), "w"),
+        open(os.path.join(this_results_dir, f"metrics_coherence_raw_nli_val.json"), "w"),
         indent=4)            
 
 mi, esd, cd = best_criteria
@@ -204,11 +211,11 @@ json.dump({"max_iterations": mi, "early_stop_delta": esd, "confident_delta": cd}
 json.dump(performance_by_criteria, open(os.path.join(this_results_dir, "performance_by_criteria.json"), "w"), indent=4)
 
 # Generate DET curves for accuracy
-generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"tuned_det_accuracy_val.pdf"))
+generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_val.pdf"))
 
 # Generate curves for all metrics by threshold
 generate_tiered_metric_curves(MISTAKE_DETECTION_THRESHOLDS, 
                               [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
                               [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
                               [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                              [os.path.join(this_results_dir, f"tuned_graph_tiered_metrics_nli_val.pdf")])
+                              [os.path.join(this_results_dir, f"graph_tiered_metrics_nli_val.pdf")])
