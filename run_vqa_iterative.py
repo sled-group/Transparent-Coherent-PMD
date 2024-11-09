@@ -190,9 +190,9 @@ yes_no_q_tokens = [
 ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
 bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]], 
-                 vlm_processor.tokenize("successfully", add_special_tokens=False).input_ids, 
-                 vlm_processor.tokenize("executed", add_special_tokens=False).input_ids,
-                 vlm_processor.tokenize("procedure", add_special_tokens=False).input_ids]
+                 vlm_processor.tokenizer("successfully", add_special_tokens=False).input_ids, 
+                 vlm_processor.tokenizer("executed", add_special_tokens=False).input_ids,
+                 vlm_processor.tokenizer("procedure", add_special_tokens=False).input_ids]
 
 generation_kwargs = {
     "do_sample": False,
