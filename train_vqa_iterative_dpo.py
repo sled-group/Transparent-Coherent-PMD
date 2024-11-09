@@ -31,6 +31,7 @@ parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parame
 parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
 parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha (weight update scaling coefficient).")
 parser.add_argument("--lora_dropout", type=float, default=0.1, help="LoRA dropout regularization probability.")
+parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
 parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
 parser.add_argument("--eval_batch_size", type=int, default=24, help="Batch size for evaluation.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
@@ -120,6 +121,9 @@ datasets = {}
 
 for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path)]:
     processed_data_path = data_path.replace(".json", "_processed_dpo")
+    if args.unsure_range > 0.0:
+        processed_data_path += f"_ur{args.unsure_range}"
+        
     n_loading_failures = 0
     while True:
         if not os.path.exists(processed_data_path):
@@ -135,6 +139,11 @@ for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path
 
                     # Generate an instance from each turn before algorithm termination
                     for turn_idx in range(n_turns):
+
+                        # If the VLM wasn't very sure about the answer to the selected question, omit it from training
+                        if args.unsure_range > 0.0 and max(output['answer_probs'][turn_idx]) - 0.5 < args.unsure_range:
+                            continue
+
                         candidate_questions = output['candidate_questions'][turn_idx]
                         candidate_questions_scores = output['candidate_questions_scores'][turn_idx]
                         candidate_questions_scores = [cqs['informativeness_marginal_x_relevance_marginal'] for cqs in candidate_questions_scores]
@@ -246,6 +255,7 @@ if worker_index == 0:
         "hyperparameters/lora_r": args.lora_r,
         "hyperparameters/lora_alpha": args.lora_alpha,
         "hyperparameters/lora_dropout": args.lora_dropout,
+        "hyperparameters/unsure_range": args.unsure_range,
     })
 
 if worker_index == 0:
