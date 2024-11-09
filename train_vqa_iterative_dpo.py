@@ -30,7 +30,7 @@ parser.add_argument("--n_epochs", type=int, default=5, help="Number of training 
 parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parameter for training.")
 parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
 parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha (weight update scaling coefficient).")
-parser.add_argument("--lora_dropout", type=float, default=0.0, help="LoRA dropout regularization probability.")
+parser.add_argument("--lora_dropout", type=float, default=0.1, help="LoRA dropout regularization probability.")
 parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
 parser.add_argument("--eval_batch_size", type=int, default=24, help="Batch size for evaluation.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
