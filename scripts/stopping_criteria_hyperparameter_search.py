@@ -68,8 +68,8 @@ nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
 cand_max_iterations = [2, 4, 6, 8, 10]
 cand_early_stop_delta = [0.05, 0.1, 0.2, 0.4]
-cand_confident_delta = [0.025, 0.05, 0.1, 0.2]
-cand_criteria = product(cand_max_iterations, cand_early_stop_delta, cand_confident_delta)
+cand_confident_range = [0.025, 0.05, 0.1, 0.2]
+cand_criteria = product(cand_max_iterations, cand_early_stop_delta, cand_confident_range)
 
 best_performance = None
 
@@ -203,7 +203,7 @@ json.dump(readjusted_all_coherence_metrics,
         indent=4)            
 
 mi, esd, cd = best_criteria
-json.dump({"max_iterations": mi, "early_stop_delta": esd, "confident_delta": cd},
+json.dump({"max_iterations": mi, "early_stop_delta": esd, "confident_range": cd},
           open(os.path.join(this_results_dir, "tuned_stopping_criteria.json"), "w"),
           indent=4,
 )

@@ -30,7 +30,7 @@ timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 # Template for the Slurm script
 slurm_script_template = """#!/bin/bash
 #SBATCH --partition=spgpu
-#SBATCH --time=72:00:00
+#SBATCH --time=24:00:00
 #SBATCH --job-name=vqg_training_sft_dpo
 #SBATCH --account=chaijy2
 #SBATCH --ntasks=4
