@@ -6,6 +6,7 @@ import argparse
 
 # Set up argument parser
 parser = argparse.ArgumentParser(description="Submit Slurm jobs for fine-tuning a language model with different --dpo_beta and --learning_rate combinations.")
+parser.add_argument("--account_name", type=str, help="Slurm billing account name.", default="chaijy2")
 parser.add_argument("--train_data_path", type=str, help="Path to `outputs_<partition>.json` file which will be used to train LM.")
 parser.add_argument("--val_data_path", type=str, help="Path to `outputs_<partition>.json` file which will be used to validate LM.")
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["Salesforce/instructblip-vicuna-7b", "llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
@@ -32,7 +33,7 @@ slurm_script_template = """#!/bin/bash
 #SBATCH --partition=spgpu
 #SBATCH --time=24:00:00
 #SBATCH --job-name=vqg_training_sft_dpo
-#SBATCH --account=chaijy2
+#SBATCH --account={account_name}
 #SBATCH --ntasks=4
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=4
@@ -62,7 +63,8 @@ for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
     run_id = f"{timestamp}_beta{dpo_beta}_lr{learning_rate}"
     
     # Fill in the template with specific values for this job
-    slurm_script = slurm_script_template.format(run_id=run_id, 
+    slurm_script = slurm_script_template.format(account_name=args.account_name,
+                                                run_id=run_id, 
                                                 dpo_beta=dpo_beta, 
                                                 learning_rate=learning_rate, 
                                                 train_data_path=args.train_data_path,
