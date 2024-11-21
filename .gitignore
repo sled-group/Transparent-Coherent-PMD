@@ -22,3 +22,5 @@ TRAVEl_cache_dir/
 *.out
 temp*
 AGLA
+dpo_slurm_scripts
+*.out

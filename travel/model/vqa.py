@@ -48,7 +48,7 @@ def run_vqa(vlm: PreTrainedModel,
         if getattr(vlm, "vocab_size", None):
             vocab_size = vlm.vocab_size
         else:
-            vocab_size = max(processor.tokenizer.vocab_size, max([k + 1 for k in processor.tokenizer.added_tokens_decoder.keys()]))
+            vocab_size = max(processor.tokenizer.vocab_size, max([k for k in processor.tokenizer.added_tokens_decoder.keys()]))
     else:
         vocab_size = 32128 # This is a hack to handle InstructBLIP based on FlanT5
 

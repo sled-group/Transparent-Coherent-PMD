@@ -110,7 +110,7 @@ ASSISTANT_END_TOKENS = {
     "Qwen/Qwen2-VL-7B-Instruct": "<|im_end|>",
 }
 
-IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to gather information about the scene, then use it to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
+IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to gather information about the state of the scene, then use it to determine whether the person has successfully executed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions. I will try to ask short and simple questions about physical states and locations that are possibly to observe from the photo.'
 IVQA_PREAMBLE_TOPDOWN = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to determine whether the person has successfully executed the procedure, then explain why based on information about the scene. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
 
 IVQA_SUCCESS_QUESTION = 'Based on the image and above information, has the procedure "{procedure}" been successfully executed?'

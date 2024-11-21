@@ -44,9 +44,9 @@ parser.add_argument("--condition_questions_with_frames", action="store_true", he
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "relevance", "informativeness", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
 parser.add_argument("--exclude_history_from_vqa", action="store_true", help="Pass this argument to exclude the dialog history from VQA, and instead directly ask only questions.")
 parser.add_argument("--coherence_evaluation_strategy", type=str, default="nli", choices=["vlm", "nli"], help="Strategy to use to perform final coherence evaluation of dialog.")
-parser.add_argument("--early_stop_delta", type=int, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
-parser.add_argument("--confident_range", type=int, default=0.05, help="If success probability is within this from 0.0 or 1.0, stop early due to high confidence.")
-parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
+parser.add_argument("--early_stop_delta", type=float, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
+parser.add_argument("--confident_range", type=float, default=0.05, help="If success probability is within this from 0.0 or 1.0, stop early due to high confidence.")
+parser.add_argument("--unsure_range", type=float, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
 parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch size for question generation with LM.")
@@ -189,7 +189,11 @@ yes_no_q_tokens = [
     vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
 ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
-bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]]]
+bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]], 
+                 vlm_processor.tokenizer("successful", add_special_tokens=False).input_ids, 
+                 vlm_processor.tokenizer("successfully", add_special_tokens=False).input_ids, 
+                 vlm_processor.tokenizer("executed", add_special_tokens=False).input_ids,
+                 vlm_processor.tokenizer("procedure", add_special_tokens=False).input_ids]
 
 generation_kwargs = {
     "do_sample": False,
