@@ -40,7 +40,6 @@ parser.add_argument("--debug", action="store_true", help="Pass this argument to 
 parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
 args = parser.parse_args()
 
-
 # Initialize DDP
 dist.init_process_group(backend='gloo')
 
@@ -55,6 +54,20 @@ print("Host port:", os.environ['MASTER_PORT'] if 'MASTER_PORT' in os.environ els
 print("Local rank:", local_rank)
 print("Global rank:", worker_index)
 print("Devices:", torch.cuda.device_count())
+
+
+if worker_index == 0:
+    hparam_dict = {
+        "hyperparameters/batch_size": args.train_batch_size,
+        "hyperparameters/learning_rate": args.learning_rate,
+        "hyperparameters/dpo_beta": args.dpo_beta,
+        "hyperparameters/lora_r": args.lora_r,
+        "hyperparameters/lora_alpha": args.lora_alpha,
+        "hyperparameters/lora_dropout": args.lora_dropout,
+        "hyperparameters/unsure_range": args.unsure_range,
+    }
+    print("HYPERPARAMETERS FOR THIS RUN:")
+    pprint(hparam_dict)
 
 
 # Set up results directory
@@ -249,15 +262,7 @@ trainer.train(resume_from_checkpoint=args.resume_dir is not None)
 
 # Log hyperparams to wandb
 if worker_index == 0:
-    wandb.log({
-        "hyperparameters/batch_size": args.train_batch_size,
-        "hyperparameters/learning_rate": args.learning_rate,
-        "hyperparameters/dpo_beta": args.dpo_beta,
-        "hyperparameters/lora_r": args.lora_r,
-        "hyperparameters/lora_alpha": args.lora_alpha,
-        "hyperparameters/lora_dropout": args.lora_dropout,
-        "hyperparameters/unsure_range": args.unsure_range,
-    })
+    wandb.log(hparam_dict)
 
 if worker_index == 0:
     print(f"({worker_index}) Saving best model...")
