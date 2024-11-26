@@ -15,7 +15,7 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks, MistakeDetectionExample
 from travel.data.vqa import VQAResponse, SUCCESSVQA_QUESTION_TEMPLATE
 from travel.model.mistake_detection import MISTAKE_DETECTION_STRATEGIES, generate_det_curve, compile_mistake_detection_preds, NLI_RERUN_ON_RELEVANT_EVIDENCE
-from travel.model.api  import GPT
+from scripts.old_unused.old_api  import GPT
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")

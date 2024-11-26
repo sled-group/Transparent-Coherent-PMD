@@ -15,17 +15,9 @@ from travel.model.mistake_detection import DETECTION_FRAMES_PROPORTION
 from travel.constants import CACHE_FREQUENCY
 
 class GPT:
-    def __init__(self, api_key, endpoint, model_name) -> None:
+    def __init__(self, api_key, endpoint) -> None:
         self.api_key = api_key
         self.endpoint = endpoint
-        self.model_name = model_name
-    
-    def get_vqa_response_token_ids(self):
-        if self.model_name[:6] == 'gpt-4o':
-            responses = {VQAResponse.No: 3160, VQAResponse.Yes: 13022}
-        else:
-            responses = {VQAResponse.No: 2822, VQAResponse.Yes: 9642}
-        return responses
     
     def _encode_image(self, frame: Image.Image) -> str:
         """
@@ -122,7 +114,8 @@ class GPT:
     def prompt_gpt(self,
                     prompt_text: str,
                     image: Image=None,
-                    temperature: float=0.0,
+                    temperature: float=1,
+                    top_p: float=1,
                     max_tokens: int=128,
                     logprobs: bool=False,
                     top_logprobs: int=0):
@@ -147,7 +140,7 @@ class GPT:
             if not logprobs:
                 top_logprobs = None
             response = client.chat.completions.create(
-                model=self.model_name,
+                model="sstorks-gpt4",
                 messages=[
                     {
                     "role": "user",
@@ -166,6 +159,7 @@ class GPT:
                 ],
                 max_tokens=max_tokens,
                 temperature=temperature,
+                top_p=top_p,
                 logprobs=logprobs,
                 top_logprobs=top_logprobs
             )
@@ -173,7 +167,7 @@ class GPT:
             if not logprobs:
                 top_logprobs = None
             response = client.chat.completions.create(
-                model=self.model_name,
+                model="sstorks-gpt4",
                 messages=[
                     {
                     "role": "user",
@@ -186,6 +180,7 @@ class GPT:
                 ],
                 max_tokens=max_tokens,
                 temperature=temperature,
+                top_p=top_p,
                 logprobs=logprobs,
                 top_logprobs=top_logprobs
             )
@@ -315,23 +310,3 @@ class GPT:
         # Save progress one last time after completion
         save_vqg_outputs(vqg_outputs, save_path)
         return vqg_outputs
-    
-    def generate_questions(self,
-                           prompts: list[str],
-                           max_tokens: int=20,
-                           temperature: float=0.0):
-        """
-        Generates questions with the given prompts using GPT. 
-        """
-        all_questions = []
-        for prompt in prompts:
-            api_response = self.prompt_gpt(prompt_text=prompt,
-                                           temperature=temperature,
-                                           max_tokens=max_tokens)
-            question = api_response.choices[0].message.content
-            all_questions.append(question)
-        return all_questions
-
-
-
-        
