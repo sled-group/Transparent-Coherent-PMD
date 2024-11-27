@@ -15,40 +15,42 @@ from sklearn.calibration import calibration_curve
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss
 from tqdm import tqdm
+import yaml
 
 from travel.constants import RESULTS_DIR
 from travel.model.metrics import generate_risk_coverage_plot, calculate_abstention_metrics, plot_abstention_metrics, generate_det_curves, entropy, mistake_detection_metrics
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.utils import expected_calibration_error
 
-# Configure results to graph here
+# Start setting up output directories
 TASK = "ego4d_single"
 timestamp = datetime.datetime.now()
 run_folder_name = f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}"
 parent_output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name)
 
-for results_fnames, results_names, results_colors, analysis_subdir in [
-    (
-        [
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20240815204213/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_rerun_icl2/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_20240906180450/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_20240816225456/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_rerun_icl2/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20240906195210/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_dpo/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20241029163615/outputs_val.json",
-            "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_dpo/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_dpo_20241030223725/outputs_val.json"
-        ],
-        [
-            "Likelihood Ranking",
-            "Likelihood Ranking + ICL",
-            "Coherence Ranking",
-            "Coherence Ranking + ICL",
-            "Likelihood Ranking + DPO",
-            "Coherence Ranking + DPO",
-        ],
-        ['#C10000', '#C100C1', '#0000C1', '#00C1C1', "#FF7777", "#FF77FF"],
-        "llava_dpo"
-    ),
-]:
+# Load analysis configs from analysis_config.yml
+analysis_config_path = "analysis_config.yml"
+
+all_results_fnames = []
+all_results_names = []
+all_results_colors = []
+all_analysis_subdirs = []
+
+with open(analysis_config_path, 'r') as file:
+    analysis_config = yaml.safe_load(file) 
+
+for config_name in analysis_config:
+    all_analysis_subdirs.append(config_name)
+    all_results_fnames.append(analysis_config[config_name]['outputs_fnames'])
+    all_results_names.append(analysis_config[config_name]['result_names'])
+    all_results_colors.append(analysis_config[config_name]['colors'])
+
+for results_fnames, results_names, results_colors, analysis_subdir in zip(
+    all_results_fnames,
+    all_results_names,
+    all_results_colors,
+    all_analysis_subdirs,
+):
 
     if "_val.json" in results_fnames[0]:
         eval_partition = "val"
