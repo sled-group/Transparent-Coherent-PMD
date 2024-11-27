@@ -454,17 +454,14 @@ if args.coherence_evaluation_strategy == "nli":
     all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
     all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
-    all_coherence_metrics = question_coherence_metrics_nli(nli_tokenizer,
-                                            nli_model,
-                                            tokenizer,
-                                            lm,                                         
-                                            [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
-                                            all_chosen_questions,
-                                            answers=all_predicted_answers,
-                                            previous_questions=all_previous_questions,
-                                            previous_answers=all_previous_answers,
-                                            mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)],
-                                            rephrase_batch_size=args.generation_batch_size)
+    all_coherence_metrics = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
+                                                                  nli_model,                                       
+                                                                  [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
+                                                                  all_chosen_questions,
+                                                                  answers=all_predicted_answers,
+                                                                  previous_questions=all_previous_questions,
+                                                                  previous_answers=all_previous_answers,
+                                                                  mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)])
 
     if args.run_allturns_metrics:
         # Calculate alternative metrics based on all iterations
