@@ -1,22 +1,13 @@
-import os
 from io import BytesIO
 from PIL import Image
-from tqdm import tqdm
-from typing import Callable, Optional
+from typing import Optional
 import base64
-import pickle
 import torch
 import numpy as np
-from openai import AzureOpenAI, OpenAI
+from openai import AzureOpenAI
 
-from travel.data.mistake_detection import MistakeDetectionDataset, MistakeDetectionExample
-from travel.data.vqa import VQAOutputs, VQAResponse
-from travel.data.vqg import VQGInputs, VQGOutputs, parse_vqg_outputs, save_vqg_outputs
-from travel.model.grounding import VisualFilterTypes, AdaptiveVisualFilter
-from travel.data.utils.image import resize_with_aspect, CACHED_FRAME_DIMENSION
-from travel.model.mistake_detection import DETECTION_FRAMES_PROPORTION
-from travel.constants import CACHE_FREQUENCY
-from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE
+from travel.data.vqa import VQAResponse
+from travel.model.nli import run_nli, NLI_HYPOTHESIS_TEMPLATE
 from travel.model.metrics import entropy_tensor
 
 class GPT:
@@ -44,18 +35,6 @@ class GPT:
         encoded_string = base64.b64encode(buffered.getvalue()).decode("utf-8")
         return encoded_string
     
-    def _example_in_outputs(self, example_id: str, vqa_outputs: list[VQAOutputs]) -> bool:
-        """
-        Helper function to check if an example_id appears in any of the vqa_outputs.
-
-        :param example_id: The example_id to look for.
-        :param vqa_outputs: List of VQAOutputs to check.
-
-        """
-        for output in vqa_outputs:
-            if output[0][0].example_id == example_id:
-                return True
-        return False
     
     def _is_yes(self, token: str) -> bool:
         """
@@ -141,11 +120,10 @@ class GPT:
         :param logprobs: Boolean indicating if to include the log probabilities of every output token.
         :param top_logprobs: The number of top probabilities to return for every output token, in [0,20]. logprobs has to be True for this option.
         """
-
         client = AzureOpenAI(
-            api_key=self.api_key,  
-            api_version="2024-03-01-preview",
-            azure_endpoint=self.endpoint,
+             api_key=self.api_key,  
+             api_version="2024-03-01-preview",
+             azure_endpoint=self.endpoint
         )
         if image is not None:
             encoded_image = self._encode_image(image)
@@ -197,130 +175,6 @@ class GPT:
         return response
     
 
-    def run_vqa(self,
-                eval_dataset: MistakeDetectionDataset,
-                generate_prompts: Callable[[MistakeDetectionExample], tuple[list[str], list[str], list[VQAResponse], list[Image.Image]]],
-                cache_dir: str,
-                cache_frequency: int=CACHE_FREQUENCY,
-                temperature: float=0,
-                ) -> list[list[list[VQAOutputs]]]:
-        """
-        Method to run VQA on a MistakeDetectionDataset using calls to the GPT-4 API.
-        
-        :param eval_dataset: MistakeDetectionDataset to run inference on.
-        :param generate_prompts: A method that generates a list of prompts from a single MistakeDetectionExample.
-        :param cache_dir: Directory to cache outputs in.
-        :param cache_frequency: Determines how frequent VQAOutputs are cached.
-        :param temprature: Sampling temperature used for the GPT model.
-        """
-        vqa_outputs = []
-
-        # Check and load if there are cached outputs 
-        cache_fname = os.path.join(cache_dir, "cached_outputs.pkl")
-        if os.path.exists(cache_fname):
-            with open(cache_fname, 'rb') as f:
-                vqa_outputs = pickle.load(f)
-
-        last_save = len(vqa_outputs)
-        # Iterate through dataset, skip over loaded cached output
-        for ex in tqdm(eval_dataset.get_batches(batch_size=1),
-                            desc=f"VQA using GPT API", 
-                            total=len(eval_dataset)):
-            example = ex
-            # Skip if the outputs for this example were already loaded from the cache
-            if self._example_in_outputs(example.example_id, vqa_outputs):
-                continue
-            
-            example.cutoff_to_last_frames(DETECTION_FRAMES_PROPORTION)
-            # Prompts for this example
-            questions, prompts, answers, frames = generate_prompts(example)
-            assert len(questions) == len(prompts) == len(answers) == len(frames), "Passed `generate_prompts` method must return same number of questions, prompts, answers, and frames!"
-            
-            # Send API Requests for every prompt
-            example_outputs = []
-            for idx, prompt in enumerate(prompts):
-                response = self.prompt_gpt(prompt_text=prompt,
-                                        image=frames[idx],
-                                        temperature=temperature,
-                                        logprobs=True,
-                                        top_logprobs=20)
-                answer_probs = self._get_probs(response)
-                example_outputs.append(
-                    [VQAOutputs(
-                        example.task_name,
-                        example.example_id,
-                        example.procedure_id,
-                        frames[idx],
-                        prompt, 
-                        answers[idx],
-                        {},
-                        None,
-                        questions[idx],
-                        answer_probs=answer_probs
-                    )]
-                )
-            vqa_outputs.append(example_outputs)
-            # Cache based on frequency
-            if len(vqa_outputs) - last_save >= cache_frequency:
-                with open(cache_fname, 'wb') as f:
-                    pickle.dump(vqa_outputs, f)
-                last_save = len(vqa_outputs)
-        return vqa_outputs 
-    
-
-    def run_vqg(self,
-                inputs: list[VQGInputs],
-                input_ids: list[str],
-                temperature: float=1,
-                top_p: float=1,
-                save_path: Optional[str]=None,
-                vqg_outputs: dict[str, VQGOutputs]={},
-                omit_failed_instances: bool=True) -> dict[str, Optional[VQGOutputs]]:
-        """
-        Runs VQG with a given LM text generation pipeline and list of VQG inputs.
-
-        :param inputs: List of VQG inputs, including procedures, prompts, etc.
-        :param input_ids: Unique string identifiers for inputs. These may characterize a specific prompt or run of a prompt (e.g., at a different temperature).
-        :param temprature: Sampling temperature used for the GPT model.
-        :param save_path: Optional path to save VQG outputs during and after running. Must either be a json filename or path to a directory.
-        :param vqg_outputs: Partly filled dictionary of VQG outputs to start from; only pass this if starting from a partially completed run of VQG, and make sure complete/incomplete prompts are managed appropriately outside of this method.
-        :return: Completed dictionary of VQGOutputs.
-        """
-        assert len(inputs) == len(input_ids), "run_vqg expected the same number of inputs and input IDs!"
-        prompt_idx = 0
-        for input, input_id in tqdm(zip(inputs, input_ids),
-                                    desc="running VQG (GPT)",
-                                    total=len(inputs)):
-            
-            procedure_id = int(input.procedure_id)
-            step = input.procedure_description
-            response = self.prompt_gpt(prompt_text=input.prompt,
-                                    temperature=temperature,
-                                    top_p=top_p)
-            text = response.choices[0].message.content
-            # Parse reported target object and questions and answers
-            try:
-                output = parse_vqg_outputs(text, procedure_id, step)
-            except:
-                print("Warning: failed to parse a VQG output.")
-                print(text)
-
-                if not omit_failed_instances:
-                    vqg_outputs[input_id] = None
-
-                continue
-
-            vqg_outputs[input_id] = output
-            if prompt_idx % CACHE_FREQUENCY == 0 and save_path is not None:
-                print("Saving progress...")
-                save_vqg_outputs(vqg_outputs, save_path)
-
-            prompt_idx += 1
-
-        # Save progress one last time after completion
-        save_vqg_outputs(vqg_outputs, save_path)
-        return vqg_outputs
-    
     def generate_questions(self,
                            prompts: list[str],
                            max_tokens: int=20,
@@ -366,62 +220,6 @@ class GPT:
             all_probs.append(answer_probs)
         return all_probs
 
-
-    
-    def run_GPT_vqa_with_visual_filter(self, batch_examples, batch_frames, prompts_a, new_questions, question_idx, batch_size, visual_filter=None, nlp=None, visual_filter_mode=None, frame_cache_dir=None, is_encoder_decoder=False):
-        """
-        VQA and visual filter wrapper method for iterative VQA experiments.
-
-        :param vlm_processor: VLM processor.
-        :param vlm: VLM.
-        :param batch_examples: Batch of MistakeDetectionExample.
-        :param batch_frames: Batch of frames (PIL images).
-        :param prompts_a: Full string prompts to get a yes/no answer.
-        :param new_questions: Last generated questions to use with text-conditioned visual filters.
-        :param question_idx: Index or identifier of the current question. This is only used to save modified frames from the visual filter.
-        :param batch_size: Batch size for VQA.
-        :param visual_filter: Optional training free visual filter to modify images and possibly run VQA twice.
-        :param nlp: spaCy NLP pipeline.
-        :param visual_filter_mode: Type of visual filter.
-        :param frame_cache_dir: Directory to cache visual filter modified frames for later inspection. If not passed, will not save any frames.
-        :return: Logits from VQA.
-        """
-        # Apply visual filter to frames for VQA
-        if visual_filter:
-            if visual_filter_mode == VisualFilterTypes.Contrastive_Region:
-                batch_frames_filtered = visual_filter(nlp, batch_frames, new_questions)
-            elif visual_filter_mode == VisualFilterTypes.Visual_Contrastive:
-                batch_frames_filtered = visual_filter(batch_frames)
-            elif visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]:
-                batch_frames_filtered, _ = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
-            elif visual_filter_mode == VisualFilterTypes.Spatial:
-                batch_frames_filtered, new_questions = visual_filter(nlp, batch_frames, new_questions, return_visible_target_objects=False)
-            elif visual_filter_mode == VisualFilterTypes.AGLA:
-                batch_frames_filtered = visual_filter(batch_frames, new_questions)
-
-        # Cache paths to frames (if using a visual filter, save filtered frames and cache paths to them)
-        if not(visual_filter is None or frame_cache_dir is None):
-            for batch_sub_idx, (frame, example) in enumerate(zip(batch_frames_filtered, batch_examples)):
-                this_frame_cache_dir = os.path.join(frame_cache_dir, f"vqa_frames/{example.example_id}")
-                if not os.path.exists(this_frame_cache_dir):
-                    os.makedirs(this_frame_cache_dir)
-                frame_path = os.path.join(this_frame_cache_dir, f"frame_q{question_idx}.jpg")
-                resized_frame = resize_with_aspect(frame, CACHED_FRAME_DIMENSION)
-                resized_frame.save(frame_path)
-
-        # Run VQA on base image (yes/no)
-        if not (visual_filter and visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]):
-            new_answers_logits = self.run_GPT_vqa(prompts_a, batch_frames)
-        else:
-            # Spatial filter doesn't need original image logits, so don't get them for efficiency
-            new_answers_logits = None
-
-        # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
-        if visual_filter:
-            new_answers_logits_filtered = self.run_GPT_vqa(prompts_a, batch_frames_filtered)
-            # new_answers_logits = visual_filter.combine_logits(new_answers_logits, new_answers_logits_filtered)
-
-        return new_answers_logits
 
     def rephrase_question_answer_GPT(self, questions: list[str], answers: list[str], temperature: float=0, max_tokens: int=20):
         # return f"{question} {answer.name}."
@@ -503,7 +301,11 @@ class GPT:
 
         # Rephrase question with a yes and no answer as statements to compare their entailment probability of success
         rephrased_yes = self.rephrase_question_answer_GPT(questions, ["Yes"] * len(questions), temperature, max_tokens)
-        rephrased_no = self.rephrase_question_answer_GPT(questions, ["No"] * len(questions), temperature, max_tokens)    
+        rephrased_no = self.rephrase_question_answer_GPT(questions, ["No"] * len(questions), temperature, max_tokens)
+        # TODO: Remove
+        print(f"questions: {questions}")
+        print(f"rephrased_yes: {rephrased_yes}") 
+        print(f"rephrased_no: {rephrased_no}") 
         metrics['rephrased_questions_yes'] = rephrased_yes
         metrics['rephrased_questions_no'] = rephrased_no
         premise_yes = rephrased_yes

@@ -2,7 +2,6 @@ from travel import init_travel
 init_travel()
 
 import argparse
-from collections import defaultdict, Counter
 import json
 import numpy as np
 import os
@@ -10,28 +9,25 @@ import pickle
 from PIL import Image
 from pprint import pprint
 import shutil
-import spacy
 import time
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
+from transformers import BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer           
 
-from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, HF_TOKEN, CONFIG_PATH
+from travel.constants import RESULTS_DIR, CONFIG_PATH, IMAGES_CHUNK_SIZE
 from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, DIALOG_START_TOKENS, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
-from travel.data.vqg import generate_vqg_prompt_icl
-from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_encoder_decoder, compute_completion_log_likelihoods_vlm
-from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
-from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves, entropy, compile_accuracy_and_coherence_metrics
+from travel.data.vqa import VQAResponse, VQAOutputs, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
+from travel.model.metrics import question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves, compile_accuracy_and_coherence_metrics
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
-from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
-from travel.model.vqa import run_vqa_with_visual_filter
+from travel.model.nli import NLI_MODEL_PATH
 from travel.model.vqg import cleanup_generated_question
 from travel.model.api import GPT
 
 parser = argparse.ArgumentParser()
+
+# python run_vqa_iterative_GPT.py --run_id "$timestamp" --api_key api_key --endpoint endpoint --exclude_history_from_vqa --print_prompts
 
 parser.add_argument("--vlm_name", type=str, default="gpt-4o-mini", help="Name for GPT model to use.")
 parser.add_argument("--api_key", type=str, required=True, help="API key to send a request to GPT.")
@@ -44,28 +40,20 @@ parser.add_argument("--coherence_evaluation_strategy", type=str, default="nli", 
 parser.add_argument("--early_stop_delta", type=float, default=0.1, help="If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--confident_range", type=float, default=0.05, help="If success probability is within this from 0.0 or 1.0, stop early due to high confidence.")
 parser.add_argument("--unsure_range", type=float, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
-parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
-parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
-parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch size for question generation with LM.")
-parser.add_argument("--vqa_batch_size", type=int, default=10, help="Batch size for VQA with VLM.")
-parser.add_argument("--nli_batch_size", type=int, default=NLI_BATCH_SIZE, help="Batch size for scoring candidate questions with NLI model.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 parser.add_argument("--get_negated_success_probs", action="store_true", help="Pass this argument to calculate success probabilities for negated answers to questions.")
 parser.add_argument("--run_allturns_metrics", action="store_true", help="Pass this argument run an additional set of metrics without early stopping.")
-parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
 parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
 args = parser.parse_args()
 
-if args.cache_vqa_frames and args.visual_filter_mode is None:
-    print("Warning: --cache_vqa_frames only applies to frames modified by visual filters (configured through --visual_filter_mode and --visual_filter_strength).")
 if args.run_allturns_metrics and args.coherence_evaluation_strategy != "nli":
     print("Warning: --run_allturns_metrics only works with NLI-based coherence evaluation. Will not run all-turns metrics.")
 
 if not args.endpoint or not args.api_key:
-    raise ValueError("For GPT usage, you need to pass your endpoint URL and API key.")
+     raise ValueError("For GPT usage, you need to pass your endpoint URL and API key.")
 
 lm = GPT(api_key=args.api_key,
           endpoint=args.endpoint,
@@ -81,8 +69,6 @@ if args.resume_dir is None:
     this_results_dir += f"_{vlm_name}" 
     if args.exclude_history_from_vqa:
         this_results_dir += "_nohistory"
-    if args.visual_filter_mode is not None:
-        this_results_dir += f"_{args.visual_filter_mode}{args.visual_filter_strength}"
     this_results_dir += f"_{args.run_id}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
     if not os.path.exists(this_results_dir):
@@ -100,31 +86,6 @@ bnb_config = BitsAndBytesConfig(
 )
 
 response_token_ids = lm.get_vqa_response_token_ids()
-
-# Set up visual filter if needed
-visual_filter = None
-nlp = None
-if args.visual_filter_mode is not None:
-    if VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_NoRephrase:
-        visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=f"cuda:0")
-        nlp = spacy.load('en_core_web_lg')
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial_Blur:
-        visual_filter = SpatialVisualFilter(rephrase_questions=False, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Blur, device=f"cuda:0")
-        nlp = spacy.load('en_core_web_lg')            
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Spatial:
-        visual_filter = SpatialVisualFilter(rephrase_questions=True, mask_strength=args.visual_filter_strength, mask_type=ImageMaskTypes.Darkness, device=f"cuda:0")
-        nlp = spacy.load('en_core_web_lg')            
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Contrastive_Region:
-        visual_filter = ContrastiveRegionFilter(mask_strength=args.visual_filter_strength, device=f"cuda:0")
-        nlp = spacy.load('en_core_web_lg')
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
-        visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
-        nlp = spacy.load('en_core_web_lg')            
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.AGLA:
-        visual_filter = AGLAFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
-        nlp = None
-    else:
-        raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with iterative VQA!")
 
 # NLI model to score consistency and verifiability
 nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
@@ -171,13 +132,14 @@ if os.path.exists(cache_path):
     is_complete, last_batch_idx, all_questions, all_answers, all_answer_probs, all_success_probs, all_success_probs_negated, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
 
 batch_idx = None
+nl = '\n'
 if not is_complete:
     for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK_SIZE, 
                                                                         n_workers=1, 
                                                                         worker_index=0,
                                                                         load_frames=False)), 
                                                     desc="running iterative VQA inference"):
-
+        
         # If already in cache, skip this batch
         if batch_idx <= last_batch_idx:
             continue    
@@ -205,9 +167,8 @@ if not is_complete:
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
 
             # Generate questions
-            prompts_q = [prompt + f"{"\nQ:" if question_idx != 0 else " Q:"}" for prompt in prompts]
+            prompts_q = [prompt + f"{nl if question_idx != 0 else ' '}Q:" for prompt in prompts]
             new_questions = lm.generate_questions(prompts_q, max_tokens=20, temperature=0)
-
             new_questions = [cleanup_generated_question(question) for question in new_questions]
 
             # Save generated questions
@@ -223,7 +184,7 @@ if not is_complete:
             if not args.exclude_history_from_vqa:
                 use_prompts_a = prompts_a
             else:
-                use_prompts_a = [f'Q: {question}\nA:' for question in new_questions]
+                use_prompts_a = [f'Q: {question}{nl}A:' for question in new_questions]
             
             new_answer_probs = lm.run_GPT_vqa(prompts=use_prompts_a,
                                               frames=batch_frames,
@@ -239,13 +200,14 @@ if not is_complete:
                     prompt=prompt,
                     expected_answer=None,
                     response_token_ids=response_token_ids,
+                    logits=torch.tensor([]),
                     question=question,
                     answer_probs=probs,
                     predicted_answer=VQAResponse.Yes if probs[VQAResponse.Yes] > 0.5 else VQAResponse.No
                 ) for probs, example, prompt, question in zip(new_answer_probs, batch_examples, prompts_a, new_questions)
             ]
-            new_answers_str = [output.predicted_answer.name if np.abs(output.answer_probs[VQAResponse.Yes] - 0.5) >= args.unsure_range else "Unsure" for output in new_answers]
 
+            new_answers_str = [output.predicted_answer.name if np.abs(output.answer_probs[VQAResponse.Yes] - 0.5) >= args.unsure_range else "Unsure" for output in new_answers]
             # Save answers and their probabilities
             for batch_sub_idx in range(this_batch_size):
                 answer_probs[batch_sub_idx].append([round(float(new_answers[batch_sub_idx].answer_probs[VQAResponse(answer_idx)]), 6) for answer_idx in range(2)])
@@ -255,9 +217,8 @@ if not is_complete:
             if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
                 # Save negated version of new prompt if we're using VLM-based coherence evaluation
                 new_answers_str_negated = [VQAResponse(1 - output.predicted_answer.value).name if np.abs(output.answer_probs[VQAResponse.Yes] - 0.5) >= args.unsure_range else "Unsure" for output in new_answers]
-                prompts_negated = [prompt + ' ' + output for prompt, output in zip(prompts_a, new_answers_str_negated)] 
-            
-            
+                prompts_negated = [prompt + ' ' + output for prompt, output in zip(prompts_a, new_answers_str_negated)]
+                     
             prompts = [prompt + " " + output for prompt, output in zip(prompts_a, new_answers_str)]
 
             # Ask VLM probability of success
@@ -266,7 +227,7 @@ if not is_complete:
                 for procedure in batch_procedures
             ]
             prompts_success = [
-                prompt + f'\nQ: {question}\nA: '
+                prompt + f'{nl}Q: {question}{nl}A: '
                 for prompt, question in zip(prompts, questions_success)
             ]
             if args.print_prompts:
@@ -285,6 +246,7 @@ if not is_complete:
                     prompt=prompt,
                     expected_answer=None,
                     response_token_ids=response_token_ids,
+                    logits=torch.tensor([]),
                     question=question,
                     answer_probs=probs,
                     predicted_answer=VQAResponse.Yes if probs[VQAResponse.Yes] > 0.5 else VQAResponse.No
@@ -304,7 +266,7 @@ if not is_complete:
             # If using VLM-based coherence evaluation, also need to get success probability for negated answers
             if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
                 prompts_success_negated = [
-                    prompt + f'\nQ: {question}\nA:'
+                    prompt + f'{nl}Q: {question}{nl}A:'
                     for prompt, question in zip(prompts_negated, questions_success)
                 ]
                 success_vqa_probs_negated = lm.run_GPT_vqa(prompts=prompts_success_negated,
@@ -320,6 +282,7 @@ if not is_complete:
                         prompt=prompt,
                         expected_answer=None,
                         response_token_ids=response_token_ids,
+                        logits=torch.tensor([]),
                         question=question,
                         answer_probs=probs,
                         predicted_answer=VQAResponse.Yes if probs[VQAResponse.Yes] > 0.5 else VQAResponse.No
@@ -427,7 +390,7 @@ for questions, answers, answer_probs, success_probs, success_probs_negated, exam
         "mistake": True if label is not None else False,
         "mistake_type": label,
         "questions": questions,
-        "frame_dir": os.path.join(this_results_dir, f"vqa_frames/{example_id}") if args.cache_vqa_frames else dataset.get_example_dir(example_id),
+        "frame_dir": dataset.get_example_dir(example_id),
         "answers": answers,
         "answer_probs": answer_probs,
         "success_probs": success_probs,
