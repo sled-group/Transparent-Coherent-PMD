@@ -27,7 +27,7 @@ from travel.model.api import GPT
 
 parser = argparse.ArgumentParser()
 
-# python run_vqa_iterative_GPT.py --run_id "$timestamp" --api_key api_key --endpoint endpoint --exclude_history_from_vqa --print_prompts
+# python run_vqa_iterative_GPT.py --run_id "$timestamp" --api_key "api_key" --endpoint "endpoint" --exclude_history_from_vqa
 
 parser.add_argument("--vlm_name", type=str, default="gpt-4o-mini", help="Name for GPT model to use.")
 parser.add_argument("--api_key", type=str, required=True, help="API key to send a request to GPT.")
@@ -176,7 +176,8 @@ if not is_complete:
                 questions[batch_sub_idx].append(new_questions[batch_sub_idx])
 
             # Run VQA with generated questions (and optional spatial filter)
-            prompts_a = [prompt.replace(' Generate an appropriate yes/no question.', "") + f' {question}\nA:' for prompt, question in zip(prompts_q, new_questions)]
+            prompts_a = [prompt.replace(' Generate an appropriate yes/no question.', "") + f' {question} (yes/no){nl}A:' for prompt, question in zip(prompts_q, new_questions)]
+
             if args.print_prompts:
                 pprint(prompts_a[0])
 
@@ -184,7 +185,7 @@ if not is_complete:
             if not args.exclude_history_from_vqa:
                 use_prompts_a = prompts_a
             else:
-                use_prompts_a = [f'Q: {question}{nl}A:' for question in new_questions]
+                use_prompts_a = [f'Q: {question} (yes/no){nl}A:' for question in new_questions]
             
             new_answer_probs = lm.run_GPT_vqa(prompts=use_prompts_a,
                                               frames=batch_frames,
@@ -227,7 +228,7 @@ if not is_complete:
                 for procedure in batch_procedures
             ]
             prompts_success = [
-                prompt + f'{nl}Q: {question}{nl}A: '
+                prompt + f'{nl}Q: {question} (yes/no){nl}A: '
                 for prompt, question in zip(prompts, questions_success)
             ]
             if args.print_prompts:
@@ -266,7 +267,7 @@ if not is_complete:
             # If using VLM-based coherence evaluation, also need to get success probability for negated answers
             if args.coherence_evaluation_strategy == "vlm" or args.get_negated_success_probs:
                 prompts_success_negated = [
-                    prompt + f'{nl}Q: {question}{nl}A:'
+                    prompt + f'{nl}Q: {question} (yes/no){nl}A:'
                     for prompt, question in zip(prompts_negated, questions_success)
                 ]
                 success_vqa_probs_negated = lm.run_GPT_vqa(prompts=prompts_success_negated,

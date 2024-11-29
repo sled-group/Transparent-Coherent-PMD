@@ -196,16 +196,7 @@ class GPT:
                     frames: list[Image.Image],
                     temperature: float=0.0) -> list:
         """
-        Runs VQA for given prompts and frames in batches with a given VLM and its processor.
-
-        :param vlm: VLM for conditional generation from `transformers`.
-        :param process: VLM processor from `transformers`, including tokenizer and image processor.
-        :param prompts: List of prompts including visual questions.
-        :param frames: List of images to ask visual questions about.
-        :param batch_size: Batch size for running inference.
-        :param cache_path: .pt file to cache incomplete logits in.
-        :param return_attention: Whether to return attentions for passed prompts in addition to logits.
-        :return: Full tensor of logits output from each question. The process of mapping this into VQAOutputs instances requires task/process-specific information, so it should be done outside of this method.
+        Runs VQA for given prompts and frames with GPT.
         """
         assert len(prompts) == len(frames), "Need same number of prompts and frames to run VQA!"
 
@@ -222,7 +213,6 @@ class GPT:
 
 
     def rephrase_question_answer_GPT(self, questions: list[str], answers: list[str], temperature: float=0, max_tokens: int=20):
-        # return f"{question} {answer.name}."
         assert all(a == "Yes" or a == "No" for a in answers), "Expected all answers to be 'Yes' or 'No', but got " + str(answers)
         examples = [
             "Question: Is there a bowl on the table?\nAnswer: Yes\nStatement: There is a bowl on the table.",
@@ -286,6 +276,7 @@ class GPT:
                                     rephrase_success=False):
         """
         Calculates coherence metrics for candidate questions about procedures in iterative VQA.
+        Uses GPT as LM for rephrasing.
         """
         if answers is not None:
             assert all(a in ["Yes", "No"] for a in answers)
@@ -302,10 +293,6 @@ class GPT:
         # Rephrase question with a yes and no answer as statements to compare their entailment probability of success
         rephrased_yes = self.rephrase_question_answer_GPT(questions, ["Yes"] * len(questions), temperature, max_tokens)
         rephrased_no = self.rephrase_question_answer_GPT(questions, ["No"] * len(questions), temperature, max_tokens)
-        # TODO: Remove
-        print(f"questions: {questions}")
-        print(f"rephrased_yes: {rephrased_yes}") 
-        print(f"rephrased_no: {rephrased_no}") 
         metrics['rephrased_questions_yes'] = rephrased_yes
         metrics['rephrased_questions_no'] = rephrased_no
         premise_yes = rephrased_yes
