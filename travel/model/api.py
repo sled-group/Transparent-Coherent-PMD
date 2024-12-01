@@ -194,7 +194,8 @@ class GPT:
     def run_GPT_vqa(self,
                     prompts: list[str],
                     frames: list[Image.Image],
-                    temperature: float=0.0) -> list:
+                    temperature: float=0.0,
+                    max_tokens: int=20) -> list:
         """
         Runs VQA for given prompts and frames with GPT.
         """

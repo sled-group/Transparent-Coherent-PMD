@@ -189,7 +189,8 @@ if not is_complete:
             
             new_answer_probs = lm.run_GPT_vqa(prompts=use_prompts_a,
                                               frames=batch_frames,
-                                              temperature=0)
+                                              temperature=0,
+                                              max_tokens=20)
 
             # Gather up VQA outputs
             new_answers = [
@@ -236,7 +237,8 @@ if not is_complete:
     
             success_vqa_probs = lm.run_GPT_vqa(prompts=prompts_success,
                                                frames=batch_frames,
-                                               temperature=0)
+                                               temperature=0,
+                                               max_tokens=20)
 
             success_vqa_outputs = [
                 VQAOutputs(
@@ -272,7 +274,8 @@ if not is_complete:
                 ]
                 success_vqa_probs_negated = lm.run_GPT_vqa(prompts=prompts_success_negated,
                                                            frames=batch_frames,
-                                                           temperature=0)
+                                                           temperature=0,
+                                                           max_tokens=20)
 
                 success_vqa_outputs_negated = [
                     VQAOutputs(
