@@ -207,7 +207,8 @@ class GPT:
                                        image=frame,
                                        temperature=temperature,
                                        logprobs=True,
-                                       top_logprobs=20)
+                                       top_logprobs=20,
+                                       max_tokens=max_tokens)
             answer_probs = self._get_probs(response)
             all_probs.append(answer_probs)
         return all_probs
