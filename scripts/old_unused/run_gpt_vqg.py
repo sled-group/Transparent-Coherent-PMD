@@ -17,7 +17,7 @@ from travel.data.captaincook4d.constants import RECIPE_STEPS
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.model.mistake_detection import NLI_MODEL_PATH
 from travel.model.vqg import correct_vqg_outputs_with_nli
-from travel.model.api import GPT
+from scripts.old_unused.old_api import GPT
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, default="ego4d", choices=[task.value for task in MistakeDetectionTasks]) # TODO: support running for Ego4D's evaluation sets
