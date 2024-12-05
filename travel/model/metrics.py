@@ -121,11 +121,11 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
         y = false_negative_rates
 
         # Plot DET curve with thicker lines and dots
-        plt.plot(x, y, marker='o', linestyle='-', color=colors[i], label=name, linewidth=2, markersize=6)
+        plt.plot(x, y, marker='o', linestyle='-', color=colors[i], label=name, linewidth=3, markersize=7)
 
     # Label axes with normal deviate scale, bold font, and slightly larger size
-    plt.xlabel('False Positive Rate', fontsize=14, fontweight='bold')
-    plt.ylabel('False Negative Rate', fontsize=14, fontweight='bold')
+    plt.xlabel('False Positive Rate', fontsize=22, fontweight='bold')
+    plt.ylabel('False Negative Rate', fontsize=22, fontweight='bold')
 
     # Set grid and title
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
@@ -134,14 +134,14 @@ def generate_det_curves(metrics: list[dict[Union[float, str], dict[str, float]]]
     tick_vals = np.linspace(0.00, 1.0, 11)
     ticks = tick_vals
     tick_labels = [f"{round(val, 2)}" for val in tick_vals]
-    plt.xticks(ticks, tick_labels, fontsize=12)
-    plt.yticks(ticks, tick_labels, fontsize=12)
+    plt.xticks(ticks, tick_labels, fontsize=16)
+    plt.yticks(ticks, tick_labels, fontsize=16)
 
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.0])
 
     # Add legend with a slightly larger font size
-    plt.legend(fontsize=14)
+    plt.legend(fontsize=18)
 
     # Remove extra space around the plot
     plt.tight_layout()
