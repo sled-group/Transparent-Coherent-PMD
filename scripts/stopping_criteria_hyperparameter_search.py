@@ -21,6 +21,7 @@ from travel.model.nli import NLI_MODEL_PATH
 parser = argparse.ArgumentParser()
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--this_results_dir", type=str, help="Path to results directory for approach to re-tune.")
+parser.add_argument("--load_coherence_metrics", action="store_true", help="Whether to just directly use saved coherence metrics in --this_results_dir. This option should be used when running GPT results (which cache coherence metrics for all iterations).")
 args = parser.parse_args()
 
 VLM_NAME = args.vlm_name
@@ -43,28 +44,29 @@ bnb_config = BitsAndBytesConfig(
 )
 
 # Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
-try:
-    vlm = AutoModelForVision2Seq.from_pretrained(VLM_NAME, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)   
-except Exception as e:
-    print("Encountered exception when trying to load model with AutoModelForVision2Seq:")
-    pprint(e)
-    
-    vlm = AutoModelForCausalLM.from_pretrained(VLM_NAME, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)
-vlm_processor = AutoProcessor.from_pretrained(VLM_NAME, trust_remote_code=True, token=HF_TOKEN)
-vlm_processor.tokenizer.padding_side = "left"
-response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
+if not args.load_coherence_metrics:
+    try:
+        vlm = AutoModelForVision2Seq.from_pretrained(VLM_NAME, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)   
+    except Exception as e:
+        print("Encountered exception when trying to load model with AutoModelForVision2Seq:")
+        pprint(e)
+        
+        vlm = AutoModelForCausalLM.from_pretrained(VLM_NAME, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)
+    vlm_processor = AutoProcessor.from_pretrained(VLM_NAME, trust_remote_code=True, token=HF_TOKEN)
+    vlm_processor.tokenizer.padding_side = "left"
+    response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
-# We'll use VLM's LM directly to generate questions
-if getattr(vlm, "language_model", None):
-    lm = vlm.language_model
-else:
-    lm = vlm
-tokenizer = vlm_processor.tokenizer
-tokenizer.pad_token_id = tokenizer.eos_token_id
+    # We'll use VLM's LM directly to generate questions
+    if getattr(vlm, "language_model", None):
+        lm = vlm.language_model
+    else:
+        lm = vlm
+    tokenizer = vlm_processor.tokenizer
+    tokenizer.pad_token_id = tokenizer.eos_token_id
 
-# NLI model to score consistency and verifiability
-nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
-nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
+    # NLI model to score consistency and verifiability
+    nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
+    nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
 cand_max_iterations = [2, 4, 6, 8, 10]
 cand_early_stop_delta = [0.05, 0.1, 0.2, 0.4]
@@ -74,6 +76,8 @@ cand_criteria = product(cand_max_iterations, cand_early_stop_delta, cand_confide
 best_performance = None
 
 all_coherence_metrics = None
+if args.load_coherence_metrics:
+    all_coherence_metrics = json.load(open(os.path.join(args.this_results_dir, f"metrics_coherence_raw_nli_val.json"), "r"))
 
 performance_by_criteria = {}
 

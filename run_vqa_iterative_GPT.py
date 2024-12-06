@@ -29,7 +29,7 @@ parser = argparse.ArgumentParser()
 
 # python run_vqa_iterative_GPT.py --run_id "$timestamp" --api_key "api_key" --endpoint "endpoint" --exclude_history_from_vqa
 
-parser.add_argument("--vlm_name", type=str, default="gpt-4o", help="Name for GPT model to use.")
+parser.add_argument("--vlm_name", type=str, default="sstorks-gpt-4o", help="Name for GPT model to use.")
 parser.add_argument("--api_key", type=str, required=True, help="API key to send a request to GPT.")
 parser.add_argument("--endpoint", type=str, required=False, help="Endpoint URL to send a request to OpenAI.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
