@@ -47,6 +47,8 @@ parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure
 parser.add_argument("--get_negated_success_probs", action="store_true", help="Pass this argument to calculate success probabilities for negated answers to questions.")
 parser.add_argument("--run_allturns_metrics", action="store_true", help="Pass this argument run an additional set of metrics without early stopping.")
 parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
+parser.add_argument("--no_early_stopping", action="store_true", help="Remove the stopping criteria and run the evaluation as if the model always takes max iterations")
+
 args = parser.parse_args()
 
 if args.run_allturns_metrics and args.coherence_evaluation_strategy != "nli":
@@ -376,17 +378,21 @@ for questions, answers, answer_probs, success_probs, success_probs_negated, exam
                 all_procedures,
                 all_labels), desc="compiling results"): 
     final_success_prob = None
-    for success_prob_idx, success_prob in enumerate(success_probs):
-        # Early stopping mechanism: 
-        # if success score doesn't change enough over 3 turns, stop incorporating questions
-        # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
-        final_success_prob = success_prob
-        if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
-            if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
+    if not args.no_early_stopping:
+        for success_prob_idx, success_prob in enumerate(success_probs):
+            # Early stopping mechanism: 
+            # if success score doesn't change enough over 3 turns, stop incorporating questions
+            # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
+            final_success_prob = success_prob
+            if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
+                if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
+                    break
+            # OR if success score is within confident_delta of 0.0 or 1.0 (i.e., highly confident), stop
+            if success_prob < args.confident_range or 1.0 - success_prob < args.confident_range:
                 break
-        # OR if success score is within confident_delta of 0.0 or 1.0 (i.e., highly confident), stop
-        if success_prob < args.confident_range or 1.0 - success_prob < args.confident_range:
-            break           
+    else:
+        success_prob_idx = 9
+        final_success_prob = success_probs[-1]  
     all_probs.append(round(final_success_prob, 6))   
 
     results_dict = {
