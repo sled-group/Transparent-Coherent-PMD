@@ -154,10 +154,9 @@ if not is_complete:
         this_batch_size = len(batch_examples)
 
         prompts = [
-            f'{IVQA_PREAMBLE.format(procedure=procedure).replace("execute", "complete")} Generate an appropriate yes/no question.'  
+            f'{IVQA_PREAMBLE.format(procedure=procedure).replace("execute", "complete")} Generate an appropriate yes/no question.' # NOTE: remove the word execute to avoid triggering content filter  
             for procedure in batch_procedures
         ]
-        # NOTE: "executed" in prompt is replaced with "completed" due to triggering a content filter
         if args.print_prompts:
             pprint(prompts[0])
         questions = [[] for _ in range(this_batch_size)]
@@ -229,10 +228,9 @@ if not is_complete:
 
             # Ask VLM probability of success
             questions_success = [
-                IVQA_SUCCESS_QUESTION.format(procedure=procedure).replace("execute", "complete")
+                IVQA_SUCCESS_QUESTION.format(procedure=procedure).replace("execute", "complete") # NOTE: remove the word execute to avoid triggering content filter  
                 for procedure in batch_procedures
             ]
-            # NOTE: "executed" in prompt is replaced with "completed" due to triggering a content filter
             prompts_success = [
                 prompt + f'{nl}Q: {question} (yes/no){nl}A: '
                 for prompt, question in zip(prompts, questions_success)
