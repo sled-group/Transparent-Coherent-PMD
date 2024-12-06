@@ -149,7 +149,7 @@ if not is_complete:
         # Take first frame (expect there to only be one frame)
         batch_procedures = [example.procedure_description for example in batch_examples]
         batch_frames = [Image.open(example.frames[0]) for example in batch_examples]
-        batch_frames = [frame.resize((336, 336 * (frame.height / frame.width))) for frame in batch_frames] # Make images approximately the same size LLaVA sees
+        batch_frames = [frame.resize((336, int(336 * (frame.height / frame.width)))) for frame in batch_frames] # Make images approximately the same size LLaVA sees
 
         this_batch_size = len(batch_examples)
 
