@@ -29,7 +29,7 @@ parser = argparse.ArgumentParser()
 
 # python run_vqa_iterative_GPT.py --run_id "$timestamp" --api_key "api_key" --endpoint "endpoint" --exclude_history_from_vqa
 
-parser.add_argument("--vlm_name", type=str, default="gpt-4o-mini", help="Name for GPT model to use.")
+parser.add_argument("--vlm_name", type=str, default="sstorks-gpt-4o", help="Name for GPT model to use.")
 parser.add_argument("--api_key", type=str, required=True, help="API key to send a request to GPT.")
 parser.add_argument("--endpoint", type=str, required=False, help="Endpoint URL to send a request to OpenAI.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
@@ -149,11 +149,12 @@ if not is_complete:
         # Take first frame (expect there to only be one frame)
         batch_procedures = [example.procedure_description for example in batch_examples]
         batch_frames = [Image.open(example.frames[0]) for example in batch_examples]
+        batch_frames = [frame.resize((336, int(336 * (frame.height / frame.width)))) for frame in batch_frames] # Make images approximately the same size LLaVA sees
 
         this_batch_size = len(batch_examples)
 
         prompts = [
-            f'{IVQA_PREAMBLE.format(procedure=procedure)} Generate an appropriate yes/no question.'  
+            f'{IVQA_PREAMBLE.format(procedure=procedure).replace("execute", "complete")} Generate an appropriate yes/no question.' # NOTE: remove the word execute to avoid triggering content filter  
             for procedure in batch_procedures
         ]
         if args.print_prompts:
@@ -191,7 +192,7 @@ if not is_complete:
             
             new_answer_probs = lm.run_GPT_vqa(prompts=use_prompts_a,
                                               frames=batch_frames,
-                                              temperature=0,
+                                              temperature=0.0,
                                               max_tokens=20)
 
             # Gather up VQA outputs
@@ -227,7 +228,7 @@ if not is_complete:
 
             # Ask VLM probability of success
             questions_success = [
-                IVQA_SUCCESS_QUESTION.format(procedure=procedure)
+                IVQA_SUCCESS_QUESTION.format(procedure=procedure).replace("execute", "complete") # NOTE: remove the word execute to avoid triggering content filter  
                 for procedure in batch_procedures
             ]
             prompts_success = [
