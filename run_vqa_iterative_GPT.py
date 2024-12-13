@@ -469,8 +469,12 @@ for questions, answers, answer_probs, success_probs, success_probs_negated, exam
         all_labels_eval.append(label)
         all_probs_eval.append(final_success_prob) 
 
-json.dump(all_results_dicts, 
+json.dump(all_results_dicts_eval, 
         open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
+        indent=4)
+
+json.dump(all_results_dicts, 
+        open(os.path.join(this_results_dir, f"outputs_all_{args.eval_partition}.json"), "w"),
         indent=4)
 
 
