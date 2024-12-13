@@ -120,6 +120,7 @@ class GPT:
         :param logprobs: Boolean indicating if to include the log probabilities of every output token.
         :param top_logprobs: The number of top probabilities to return for every output token, in [0,20]. logprobs has to be True for this option.
         """
+        filtered_out = False
         client = AzureOpenAI(
              api_key=self.api_key,  
              api_version="2024-03-01-preview",
@@ -129,50 +130,60 @@ class GPT:
             encoded_image = self._encode_image(image)
             if not logprobs:
                 top_logprobs = None
-            response = client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {
-                    "role": "user",
-                    "content": [
+            try:
+                response = client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
                         {
-                            "type": "text", "text": prompt_text
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{encoded_image}"
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text", "text": prompt_text
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{encoded_image}"
+                                }
                             }
+                        ]
                         }
-                    ]
-                    }
-                ],
-                max_tokens=max_tokens,
-                temperature=temperature,
-                logprobs=logprobs,
-                top_logprobs=top_logprobs
-            )
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    logprobs=logprobs,
+                    top_logprobs=top_logprobs
+                )
+            except:
+                filtered_out = True
+                response = None
+
         else:
             if not logprobs:
                 top_logprobs = None
-            response = client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {
-                    "role": "user",
-                    "content": [
+            try:
+                response = client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
                         {
-                            "type": "text", "text": prompt_text
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text", "text": prompt_text
+                            }
+                        ],
                         }
                     ],
-                    }
-                ],
-                max_tokens=max_tokens,
-                temperature=temperature,
-                logprobs=logprobs,
-                top_logprobs=top_logprobs
-            )
-        return response
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    logprobs=logprobs,
+                    top_logprobs=top_logprobs
+                )
+            except:
+                filtered_out = True
+                response = None
+        
+        return filtered_out, response
     
 
     def generate_questions(self,
@@ -183,13 +194,15 @@ class GPT:
         Generates questions with the given prompts using GPT. 
         """
         all_questions = []
+        all_filtered_out = []
         for prompt in prompts:
-            api_response = self.prompt_gpt(prompt_text=prompt,
+            filtered_out, api_response = self.prompt_gpt(prompt_text=prompt,
                                            temperature=temperature,
                                            max_tokens=max_tokens)
-            question = api_response.choices[0].message.content
+            question = api_response.choices[0].message.content if not filtered_out else None
             all_questions.append(question)
-        return all_questions
+            all_filtered_out.append(filtered_out)
+        return all_filtered_out, all_questions
     
     def run_GPT_vqa(self,
                     prompts: list[str],
@@ -202,16 +215,18 @@ class GPT:
         assert len(prompts) == len(frames), "Need same number of prompts and frames to run VQA!"
 
         all_probs = []
+        all_filtered_out = []
         for prompt, frame in zip(prompts, frames):
-            response = self.prompt_gpt(prompt_text=prompt,
+            filtered_out, response = self.prompt_gpt(prompt_text=prompt,
                                        image=frame,
                                        temperature=temperature,
                                        logprobs=True,
                                        top_logprobs=20,
                                        max_tokens=max_tokens)
-            answer_probs = self._get_probs(response)
+            answer_probs = self._get_probs(response) if not filtered_out else None
             all_probs.append(answer_probs)
-        return all_probs
+            all_filtered_out.append(filtered_out)
+        return all_filtered_out, all_probs
 
 
     def rephrase_question_answer_GPT(self, questions: list[str], answers: list[str], temperature: float=0, max_tokens: int=20):
@@ -230,15 +245,19 @@ class GPT:
         ]
         prompts = ["\n\n".join(examples) + f"\n\nQuestion: {question}\nAnswer: {answer}\nStatement: " for question, answer in zip(questions, answers)]
         rephrased_texts = []
-        for prompt in prompts:
-            api_response = self.prompt_gpt(prompt_text=prompt,
+        filtered_out_prompts = []
+        for idx, prompt in enumerate(prompts):
+            filtered_out, api_response = self.prompt_gpt(prompt_text=prompt,
                                         temperature=temperature,
                                         max_tokens=max_tokens)
-            text = api_response.choices[0].message.content
-            rephrased_texts.append(text) 
+            backup_text = questions[idx] + " " + answers[idx] + "."
+            text = api_response.choices[0].message.content if not filtered_out else backup_text
+            rephrased_texts.append(text)
+            if filtered_out:
+                filtered_out_prompts.append(prompt)
         rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
         rephrased_texts = [text.strip() for text in rephrased_texts]
-        return rephrased_texts
+        return filtered_out_prompts, rephrased_texts
 
     def rephrase_procedure_success_GPT(self, procedures: list[str], temperature: float=0, max_tokens: int=20):
         examples = [
@@ -255,18 +274,22 @@ class GPT:
         ]
         prompts = ["\n\n".join(examples) + f"\n\Procedure: {procedure}\nStatement: " for procedure in procedures]
         rephrased_texts = []
-        for prompt in prompts:
-            api_response = self.prompt_gpt(prompt_text=prompt,
+        filtered_out_prompts = []
+        for idx, prompt in prompts:
+            filtered_out, api_response = self.prompt_gpt(prompt_text=prompt,
                                         temperature=temperature,
                                         max_tokens=max_tokens)
-            text = api_response.choices[0].message.content
-            rephrased_texts.append(text) 
+            backup_text = procedures[idx] + " successfully."
+            text = api_response.choices[0].message.content if not filtered_out else backup_text
+            rephrased_texts.append(text)
+            if filtered_out:
+                filtered_out_prompts.append(prompt)
         rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
         rephrased_texts = [text.strip() for text in rephrased_texts]
         print(procedures)
         print(rephrased_texts)
         print("===================")
-        return rephrased_texts
+        return filtered_out_prompts, rephrased_texts
 
     def question_coherence_metrics_nli_GPT(self, nli_tokenizer, nli_model, procedures: list[str], questions: list[str], 
                                     answers: Optional[list[str]]=None, 
@@ -286,15 +309,19 @@ class GPT:
             assert all(a in ["Yes", "No"] for aa in previous_answers for a in aa)
         
         metrics = {}
+        all_filtered_out_prompts = []
         
         if not rephrase_success:
             hypothesis_procedure = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedures]
         else:
-            hypothesis_procedure = self.rephrase_procedure_success_GPT(procedures, temperature, max_tokens)
+            filtered_out_prompts, hypothesis_procedure = self.rephrase_procedure_success_GPT(procedures, temperature, max_tokens)
+            all_filtered_out_prompts += filtered_out_prompts
 
         # Rephrase question with a yes and no answer as statements to compare their entailment probability of success
-        rephrased_yes = self.rephrase_question_answer_GPT(questions, ["Yes"] * len(questions), temperature, max_tokens)
-        rephrased_no = self.rephrase_question_answer_GPT(questions, ["No"] * len(questions), temperature, max_tokens)
+        filtered_out_prompts, rephrased_yes = self.rephrase_question_answer_GPT(questions, ["Yes"] * len(questions), temperature, max_tokens)
+        all_filtered_out_prompts += filtered_out_prompts
+        filtered_out_prompts, rephrased_no = self.rephrase_question_answer_GPT(questions, ["No"] * len(questions), temperature, max_tokens)
+        all_filtered_out_prompts += filtered_out_prompts
         metrics['rephrased_questions_yes'] = rephrased_yes
         metrics['rephrased_questions_no'] = rephrased_no
         premise_yes = rephrased_yes
@@ -321,12 +348,13 @@ class GPT:
             assert len(previous_questions) == len(previous_answers), "Expected same number of questions and answers!"
 
             # Flatten and rephrase past questions and answers into statements, then un-flatten
-            rephrased_past = self.rephrase_question_answer_GPT(
+            filtered_out_prompts, rephrased_past = self.rephrase_question_answer_GPT(
                 [question for p_questions in previous_questions for question in p_questions],
                 [answer for p_answers in previous_answers for answer in p_answers],
                 temperature,
                 max_tokens
             )
+            all_filtered_out_prompts += filtered_out_prompts
             parallel_idx = 0
             new_rephrased_past = []
             for p_questions in previous_questions:
@@ -384,7 +412,7 @@ class GPT:
             k: [round(float(val), 6) for val in v] if type(v[0]) != str else v
             for k, v in metrics.items()
         }
-        return metrics
+        return all_filtered_out_prompts, metrics
 
 
 

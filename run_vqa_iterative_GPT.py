@@ -126,17 +126,19 @@ all_success_probs_negated = []
 all_example_ids = []
 all_procedures = []
 all_labels = []
+all_filtered = []
+all_trigger_prompts = []
 
 cache_path = os.path.join(this_results_dir, f"cached_outputs.pkl")
 is_complete = False
 last_batch_idx = -1
 if os.path.exists(cache_path):
-    is_complete, last_batch_idx, all_questions, all_answers, all_answer_probs, all_success_probs, all_success_probs_negated, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
+    is_complete, last_batch_idx, all_questions, all_answers, all_answer_probs, all_success_probs, all_success_probs_negated, all_example_ids, all_procedures, all_labels, all_filtered, all_trigger_prompts = pickle.load(open(cache_path, "rb"))
 
 batch_idx = None
 nl = '\n'
 if not is_complete:
-    for batch_idx, batch_examples in tqdm(enumerate(dataset.get_batches(IMAGES_CHUNK_SIZE, 
+    for batch_idx, batch_example in tqdm(enumerate(dataset.get_batches(1, 
                                                                         n_workers=1, 
                                                                         worker_index=0,
                                                                         load_frames=False)), 
@@ -144,8 +146,10 @@ if not is_complete:
         
         # If already in cache, skip this batch
         if batch_idx <= last_batch_idx:
-            continue    
-
+            continue
+        
+        batch_examples = [batch_example]
+        
         # Take first frame (expect there to only be one frame)
         batch_procedures = [example.procedure_description for example in batch_examples]
         batch_frames = [Image.open(example.frames[0]) for example in batch_examples]
@@ -165,13 +169,21 @@ if not is_complete:
         answers = [[] for _ in range(this_batch_size)]
         success_probs = [[] for _ in range(this_batch_size)]
         success_probs_negated = [[] for _ in range(this_batch_size)]
+        trigger_prompt = None
 
+        filtered = False
         # Iteratively generate questions
         for question_idx in tqdm(range(args.max_iterations), desc="running iterative QA"):
 
             # Generate questions
             prompts_q = [prompt + f"{nl if question_idx != 0 else ' '}Q:" for prompt in prompts]
-            new_questions = lm.generate_questions(prompts_q, max_tokens=20, temperature=0)
+            filtered_out, new_questions = lm.generate_questions(prompts_q, max_tokens=20, temperature=0)
+            # Assume we only had 1 prompt (as our batch size is 1)
+            if filtered_out[0]:
+                filtered = True
+                trigger_prompt = prompts_q[0]
+                break
+
             new_questions = [cleanup_generated_question(question) for question in new_questions]
 
             # Save generated questions
@@ -190,10 +202,15 @@ if not is_complete:
             else:
                 use_prompts_a = [f'Q: {question} (yes/no){nl}A:' for question in new_questions]
             
-            new_answer_probs = lm.run_GPT_vqa(prompts=use_prompts_a,
-                                              frames=batch_frames,
-                                              temperature=0.0,
-                                              max_tokens=20)
+            filtered_out, new_answer_probs = lm.run_GPT_vqa(prompts=use_prompts_a,
+                                                            frames=batch_frames,
+                                                            temperature=0.0,
+                                                            max_tokens=20)
+            
+            if filtered_out[0]:
+                filtered = True
+                trigger_prompt = use_prompts_a[0]
+                break
 
             # Gather up VQA outputs
             new_answers = [
@@ -238,10 +255,15 @@ if not is_complete:
             if args.print_prompts:
                 pprint(prompts_success[0])
     
-            success_vqa_probs = lm.run_GPT_vqa(prompts=prompts_success,
+            filtered_out, success_vqa_probs = lm.run_GPT_vqa(prompts=prompts_success,
                                                frames=batch_frames,
                                                temperature=0,
                                                max_tokens=20)
+            
+            if filtered_out[0]:
+                filtered = True
+                trigger_prompt = prompts_success[0]
+                break
 
             success_vqa_outputs = [
                 VQAOutputs(
@@ -275,10 +297,15 @@ if not is_complete:
                     prompt + f'{nl}Q: {question} (yes/no){nl}A:'
                     for prompt, question in zip(prompts_negated, questions_success)
                 ]
-                success_vqa_probs_negated = lm.run_GPT_vqa(prompts=prompts_success_negated,
+                filtered_out, success_vqa_probs_negated = lm.run_GPT_vqa(prompts=prompts_success_negated,
                                                            frames=batch_frames,
                                                            temperature=0,
                                                            max_tokens=20)
+                
+                if filtered_out[0]:
+                    filtered = True
+                    trigger_prompt = prompts_success_negated[0]
+                    break
 
                 success_vqa_outputs_negated = [
                     VQAOutputs(
@@ -315,6 +342,8 @@ if not is_complete:
         all_example_ids += [example.example_id for example in batch_examples]
         all_procedures += [example.procedure_description for example in batch_examples]
         all_labels += [example.mistake_type for example in batch_examples]
+        all_filtered +=  [filtered]
+        all_trigger_prompts += [trigger_prompt]
 
         for frame in batch_frames:
             frame.close()
@@ -332,6 +361,8 @@ if not is_complete:
             all_example_ids,
             all_procedures,
             all_labels,
+            all_filtered,
+            all_trigger_prompts
         ), open(cache_path, "wb"))
 
 # Verify we got correct number of outputs
@@ -344,6 +375,8 @@ all_results = [
     all_example_ids,
     all_procedures,
     all_labels,
+    all_filtered,
+    all_trigger_prompts
 ]
 assert all(len(l) == len(all_results[0]) for l in all_results), f"Expected to get same number of all outputs! ({', '.join([str(len(l)) for l in all_results])})"
 
@@ -360,6 +393,8 @@ if batch_idx is not None:
         all_example_ids,
         all_procedures,
         all_labels,
+        all_filtered,
+        all_trigger_prompts
     ), open(cache_path, "wb"))
 
 print(f"Done running iterative VQA inference!")
@@ -369,7 +404,14 @@ print(f"Done running iterative VQA inference!")
 # Collect key information from results rollouts and final success probabilities
 all_results_dicts = {}
 all_probs = []
-for questions, answers, answer_probs, success_probs, success_probs_negated, example_id, procedure, label \
+# make a copy that doesn't contain filtered results for all the needed dicts/lists for evaluation
+all_results_dicts_eval = {}
+all_success_probs_eval = []
+all_success_probs_negated_eval = []
+all_procedures_eval = []
+all_labels_eval = []
+all_probs_eval = []
+for questions, answers, answer_probs, success_probs, success_probs_negated, example_id, procedure, label, filtered, trigger_prompt \
     in tqdm(zip(all_questions,
                 all_answers,
                 all_answer_probs,
@@ -377,24 +419,29 @@ for questions, answers, answer_probs, success_probs, success_probs_negated, exam
                 all_success_probs_negated,
                 all_example_ids,
                 all_procedures,
-                all_labels), desc="compiling results"): 
+                all_labels,
+                all_filtered,
+                all_trigger_prompts), desc="compiling results"): 
     final_success_prob = None
-    if not args.no_early_stopping:
-        for success_prob_idx, success_prob in enumerate(success_probs):
-            # Early stopping mechanism: 
-            # if success score doesn't change enough over 3 turns, stop incorporating questions
-            # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
-            final_success_prob = success_prob
-            if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
-                if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
+    if not filtered:
+        if not args.no_early_stopping:
+            for success_prob_idx, success_prob in enumerate(success_probs):
+                # Early stopping mechanism: 
+                # if success score doesn't change enough over 3 turns, stop incorporating questions
+                # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
+                final_success_prob = success_prob
+                if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
+                    if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
+                        break
+                # OR if success score is within confident_delta of 0.0 or 1.0 (i.e., highly confident), stop
+                if success_prob < args.confident_range or 1.0 - success_prob < args.confident_range:
                     break
-            # OR if success score is within confident_delta of 0.0 or 1.0 (i.e., highly confident), stop
-            if success_prob < args.confident_range or 1.0 - success_prob < args.confident_range:
-                break
+        else:
+            success_prob_idx = 9
+            final_success_prob = success_probs[-1]  
+        all_probs.append(round(final_success_prob, 6))
     else:
-        success_prob_idx = 9
-        final_success_prob = success_probs[-1]  
-    all_probs.append(round(final_success_prob, 6))   
+        all_probs.append(None)  
 
     results_dict = {
         "procedure": procedure,
@@ -406,10 +453,21 @@ for questions, answers, answer_probs, success_probs, success_probs_negated, exam
         "answer_probs": answer_probs,
         "success_probs": success_probs,
         "success_probs_negated": success_probs_negated,
-        "final_turn": success_prob_idx,
-        "final_success_prob": final_success_prob
+        "final_turn": success_prob_idx if not filtered else None,
+        "final_success_prob": final_success_prob,
+        "filtered": filtered,
+        "trigger_prompt": trigger_prompt
     }
     all_results_dicts[example_id] = results_dict
+
+    # Add to non-filtered lists/dicts if appropriate 
+    if not filtered:
+        all_results_dicts_eval[example_id] = results_dict
+        all_success_probs_eval.append(success_probs)
+        all_success_probs_negated_eval.append(success_probs_negated)
+        all_procedures_eval.append(procedure)
+        all_labels_eval.append(label)
+        all_probs_eval.append(final_success_prob) 
 
 json.dump(all_results_dicts, 
         open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
@@ -420,48 +478,53 @@ print(f"Evaluating outputs...")
 metrics = {}
 
 if args.coherence_evaluation_strategy == "nli":
+    all_filtered_out_rephrase = []
     # Calculate coherence metrics of final rollouts
-    all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
-    all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+    all_chosen_questions = [question for results_dict in all_results_dicts_eval.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
+    all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
     label_answer_mapping = {0: "No", 1: "Yes"}
-    all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
-    all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(results_dict['final_turn'] + 1)]
+    all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts_eval.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
+    all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
-    all_coherence_metrics = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
+    filtered_out, all_coherence_metrics = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
                                                                   nli_model,                                       
-                                                                  [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(results_dict['final_turn'] + 1)],
+                                                                  [procedure for results_dict, procedure in zip(all_results_dicts_eval.values(), all_procedures_eval) for _ in range(results_dict['final_turn'] + 1)],
                                                                   all_chosen_questions,
                                                                   answers=all_predicted_answers,
                                                                   previous_questions=all_previous_questions,
                                                                   previous_answers=all_previous_answers,
-                                                                  mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)])
-
+                                                                  mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts_eval.values() for _ in range(results_dict['final_turn'] + 1)])
+    all_filtered_out_rephrase += filtered_out
     if args.run_allturns_metrics:
         # Calculate alternative metrics based on all iterations
-        all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in range(len(results_dict['questions']))]
-        all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(len(results_dict['questions']))]
+        all_chosen_questions = [question for results_dict in all_results_dicts_eval.values() for question in range(len(results_dict['questions']))]
+        all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(len(results_dict['questions']))]
 
         label_answer_mapping = {0: "No", 1: "Yes"}
-        all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in range(len(results_dict['answer_probs']))]
-        all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(len(results_dict['answers']))]
+        all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts_eval.values() for answer_probs in range(len(results_dict['answer_probs']))]
+        all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(len(results_dict['answers']))]
 
-        all_coherence_metrics_allturns = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
+        filtered_out, all_coherence_metrics_allturns = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
                                                                                nli_model,
-                                                                               [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(args.max_iterations)],
+                                                                               [procedure for results_dict, procedure in zip(all_results_dicts_eval.values(), all_procedures_eval) for _ in range(args.max_iterations)],
                                                                                all_chosen_questions,
                                                                                answers=all_predicted_answers,
                                                                                previous_questions=all_previous_questions,
                                                                                previous_answers=all_previous_answers,
-                                                                               mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(args.max_iterations)])
+                                                                               mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts_eval.values() for _ in range(args.max_iterations)])
+        all_filtered_out_rephrase += filtered_out
 
+    if len(all_filtered_out_rephrase) > 0:
+        print(f"{len(all_filtered_out_rephrase)} questions were not rephrased by GPT due to filters")
+        print("Prompts that triggered the filter:", all_filtered_out_rephrase)
 elif args.coherence_evaluation_strategy == "vlm":
-    all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs, all_success_probs_negated)
+    all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs_eval, all_success_probs_negated_eval)
 else:
     raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
 
 # Get accuracy and coherence metrics
-accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
+accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels_eval, all_probs_eval, all_coherence_metrics, all_results_dicts_eval, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
 coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
 
 # Save accuracy and coherence metrics
@@ -482,8 +545,8 @@ generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir,
 
 # Get all-turns form of metrics and save them
 if args.coherence_evaluation_strategy == 'nli' and args.run_allturns_metrics:
-    all_probs_allturns = [results_dict['success_probs'][-1] for results_dict in all_results_dicts.values()]
-    accuracy_metrics_by_threshold_allturns, coherence_metrics_allturns = compile_accuracy_and_coherence_metrics(all_labels, all_probs_allturns, all_coherence_metrics_allturns, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
+    all_probs_allturns = [results_dict['success_probs'][-1] for results_dict in all_results_dicts_eval.values()]
+    accuracy_metrics_by_threshold_allturns, coherence_metrics_allturns = compile_accuracy_and_coherence_metrics(all_labels_eval, all_probs_allturns, all_coherence_metrics_allturns, all_results_dicts_eval, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
 
     allturns_results_dir = os.path.join(this_results_dir, "allturns")
     if not os.path.exists(allturns_results_dir):
@@ -496,7 +559,7 @@ if args.coherence_evaluation_strategy == 'nli' and args.run_allturns_metrics:
             open(os.path.join(allturns_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
             indent=4)
     
-    json.dump({k: v | {"final_turn": args.max_iterations - 1} for k, v in all_results_dicts.items()}, 
+    json.dump({k: v | {"final_turn": args.max_iterations - 1} for k, v in all_results_dicts_eval.items()}, 
             open(os.path.join(allturns_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
             indent=4)
 
