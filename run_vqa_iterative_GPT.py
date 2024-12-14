@@ -51,11 +51,21 @@ parser.add_argument("--no_early_stopping", action="store_true", help="Remove the
 
 args = parser.parse_args()
 
+assert torch.cuda.device_count() == 1, "Iterative GPT VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
 if args.run_allturns_metrics and args.coherence_evaluation_strategy != "nli":
     print("Warning: --run_allturns_metrics only works with NLI-based coherence evaluation. Will not run all-turns metrics.")
 
 if not args.endpoint or not args.api_key:
      raise ValueError("For GPT usage, you need to pass your endpoint URL and API key.")
+
+# Get parallelization details from srun if any
+if "SLURM_PROCID" in os.environ and "SLURM_NPROCS" in os.environ:
+    worker_index = int(os.environ["SLURM_PROCID"])
+    n_workers = int(os.environ["SLURM_NPROCS"])
+else:
+    worker_index = 0
+    n_workers = 1
+# NOTE: if resuming from a previous run, must have the same number of GPUs as original run
 
 lm = GPT(api_key=args.api_key,
           endpoint=args.endpoint,
@@ -73,7 +83,7 @@ if args.resume_dir is None:
         this_results_dir += "_nohistory"
     this_results_dir += f"_{args.run_id}"
     this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
-    if not os.path.exists(this_results_dir):
+    if worker_index == 0 and not os.path.exists(this_results_dir):
         os.makedirs(this_results_dir)
 else:
     this_results_dir = args.resume_dir
@@ -96,7 +106,7 @@ nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 # Load approopriate evaluation dataset
 dataset = None
 for retry in range(5):
-    print(f"Loading evaluation dataset (try {retry})...")
+    print(f"({worker_index}) Loading evaluation dataset (try {retry})...")
     try:
         if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
             dataset = CaptainCook4DDataset(data_split=args.eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
@@ -116,7 +126,7 @@ if dataset is None:
     raise ValueError("Could not load dataset after retrying!")
 
 
-print(f"Beginning iterative VQA inference...")
+print(f"({worker_index}) Beginning iterative VQA inference...")
 all_questions = []
 all_answers = []
 all_answer_probs = []
@@ -129,7 +139,7 @@ all_labels = []
 all_filtered = []
 all_trigger_prompts = []
 
-cache_path = os.path.join(this_results_dir, f"cached_outputs.pkl")
+cache_path = os.path.join(this_results_dir, f"cached_outputs{worker_index}.pkl")
 is_complete = False
 last_batch_idx = -1
 if os.path.exists(cache_path):
@@ -139,8 +149,8 @@ batch_idx = None
 nl = '\n'
 if not is_complete:
     for batch_idx, batch_example in tqdm(enumerate(dataset.get_batches(1, 
-                                                                        n_workers=1, 
-                                                                        worker_index=0,
+                                                                        n_workers=n_workers, 
+                                                                        worker_index=worker_index,
                                                                         load_frames=False)), 
                                                     desc="running iterative VQA inference"):
         
@@ -397,186 +407,230 @@ if batch_idx is not None:
         all_trigger_prompts
     ), open(cache_path, "wb"))
 
-print(f"Done running iterative VQA inference!")
+print(f"({worker_index}) Done running iterative VQA inference!")
 
 
-# Evaluate
-# Collect key information from results rollouts and final success probabilities
-all_results_dicts = {}
-all_probs = []
-# make a copy that doesn't contain filtered results for all the needed dicts/lists for evaluation
-all_results_dicts_eval = {}
-all_success_probs_eval = []
-all_success_probs_negated_eval = []
-all_procedures_eval = []
-all_labels_eval = []
-all_probs_eval = []
-for questions, answers, answer_probs, success_probs, success_probs_negated, example_id, procedure, label, filtered, trigger_prompt \
-    in tqdm(zip(all_questions,
-                all_answers,
-                all_answer_probs,
-                all_success_probs,
-                all_success_probs_negated,
-                all_example_ids,
-                all_procedures,
-                all_labels,
-                all_filtered,
-                all_trigger_prompts), desc="compiling results"): 
-    final_success_prob = None
-    if not filtered:
-        if not args.no_early_stopping:
-            for success_prob_idx, success_prob in enumerate(success_probs):
-                # Early stopping mechanism: 
-                # if success score doesn't change enough over 3 turns, stop incorporating questions
-                # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
-                final_success_prob = success_prob
-                if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
-                    if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
-                        break
-                # OR if success score is within confident_delta of 0.0 or 1.0 (i.e., highly confident), stop
-                if success_prob < args.confident_range or 1.0 - success_prob < args.confident_range:
+# Gather up results across processes and evaluate
+if worker_index == 0:
+    print(f"({worker_index}) Gathering all results...")
+    for other_worker_index in range(1, n_workers):
+        print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
+        delay_per_try = 10
+        delay_so_far = 0
+        max_delay = 7200 if args.resume_dir is not None else 1800 # Allow a longer delay in case some processes are already finished in resumed run
+        while True:
+            other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
+            if os.path.exists(other_cache_path):
+                is_complete, \
+                _, \
+                other_questions, \
+                other_answers, \
+                other_answer_probs, \
+                other_success_probs, \
+                other_success_probs_negated, \
+                other_example_ids, \
+                other_procedures, \
+                other_labels, \
+                other_filtered, \
+                other_trigger_prompts = pickle.load(open(other_cache_path, "rb"))
+                if is_complete:
+                    # Add other process results to our results
+                    all_questions += other_questions
+                    all_answers += other_answers
+                    all_answer_probs += other_answer_probs
+                    all_success_probs += other_success_probs
+                    all_success_probs_negated += other_success_probs_negated
+                    all_example_ids += other_example_ids
+                    all_procedures += other_procedures
+                    all_labels += other_labels
+                    all_filtered += other_filtered
+                    all_trigger_prompts += other_trigger_prompts
+                    print(f"({worker_index}) Collected results from worker {other_worker_index}.")
                     break
+
+            # Decide whether to try again
+            if delay_so_far >= max_delay:
+                raise TimeoutError(f"Waited for {max_delay} seconds for results from worker {other_worker_index}. Process may have failed.")
+            print(f"({worker_index}) Still waiting for results from worker {other_worker_index} ({delay_so_far} sec.)!")
+            time.sleep(delay_per_try)
+            delay_so_far += delay_per_try
+
+    # Collect key information from results rollouts and final success probabilities
+    all_results_dicts = {}
+    all_probs = []
+    # make a copy that doesn't contain filtered results for all the needed dicts/lists for evaluation
+    all_results_dicts_eval = {}
+    all_success_probs_eval = []
+    all_success_probs_negated_eval = []
+    all_procedures_eval = []
+    all_labels_eval = []
+    all_probs_eval = []
+    for questions, answers, answer_probs, success_probs, success_probs_negated, example_id, procedure, label, filtered, trigger_prompt \
+        in tqdm(zip(all_questions,
+                    all_answers,
+                    all_answer_probs,
+                    all_success_probs,
+                    all_success_probs_negated,
+                    all_example_ids,
+                    all_procedures,
+                    all_labels,
+                    all_filtered,
+                    all_trigger_prompts), desc="compiling results"): 
+        final_success_prob = None
+        if not filtered:
+            if not args.no_early_stopping:
+                for success_prob_idx, success_prob in enumerate(success_probs):
+                    # Early stopping mechanism: 
+                    # if success score doesn't change enough over 3 turns, stop incorporating questions
+                    # (we still run inference across all questions for efficiency and simplicity, but later can make a proper demo script)
+                    final_success_prob = success_prob
+                    if success_prob_idx >= 2 and success_prob_idx < len(success_probs) - 1:
+                        if np.abs(success_probs[success_prob_idx-1] - success_probs[success_prob_idx-2]) < args.early_stop_delta and np.abs(success_probs[success_prob_idx] - success_probs[success_prob_idx-1]) < args.early_stop_delta:
+                            break
+                    # OR if success score is within confident_delta of 0.0 or 1.0 (i.e., highly confident), stop
+                    if success_prob < args.confident_range or 1.0 - success_prob < args.confident_range:
+                        break
+            else:
+                success_prob_idx = 9
+                final_success_prob = success_probs[-1]  
+            all_probs.append(round(final_success_prob, 6))
         else:
-            success_prob_idx = 9
-            final_success_prob = success_probs[-1]  
-        all_probs.append(round(final_success_prob, 6))
-    else:
-        all_probs.append(None)  
+            all_probs.append(None)  
 
-    results_dict = {
-        "procedure": procedure,
-        "mistake": True if label is not None else False,
-        "mistake_type": label,
-        "questions": questions,
-        "frame_dir": dataset.get_example_dir(example_id),
-        "answers": answers,
-        "answer_probs": answer_probs,
-        "success_probs": success_probs,
-        "success_probs_negated": success_probs_negated,
-        "final_turn": success_prob_idx if not filtered else None,
-        "final_success_prob": final_success_prob,
-        "filtered": filtered,
-        "trigger_prompt": trigger_prompt
-    }
-    all_results_dicts[example_id] = results_dict
+        results_dict = {
+            "procedure": procedure,
+            "mistake": True if label is not None else False,
+            "mistake_type": label,
+            "questions": questions,
+            "frame_dir": dataset.get_example_dir(example_id),
+            "answers": answers,
+            "answer_probs": answer_probs,
+            "success_probs": success_probs,
+            "success_probs_negated": success_probs_negated,
+            "final_turn": success_prob_idx if not filtered else None,
+            "final_success_prob": final_success_prob,
+            "filtered": filtered,
+            "trigger_prompt": trigger_prompt
+        }
+        all_results_dicts[example_id] = results_dict
 
-    # Add to non-filtered lists/dicts if appropriate 
-    if not filtered:
-        all_results_dicts_eval[example_id] = results_dict
-        all_success_probs_eval.append(success_probs)
-        all_success_probs_negated_eval.append(success_probs_negated)
-        all_procedures_eval.append(procedure)
-        all_labels_eval.append(label)
-        all_probs_eval.append(final_success_prob) 
+        # Add to non-filtered lists/dicts if appropriate 
+        if not filtered:
+            all_results_dicts_eval[example_id] = results_dict
+            all_success_probs_eval.append(success_probs)
+            all_success_probs_negated_eval.append(success_probs_negated)
+            all_procedures_eval.append(procedure)
+            all_labels_eval.append(label)
+            all_probs_eval.append(final_success_prob) 
 
-json.dump(all_results_dicts_eval, 
-        open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
-        indent=4)
+    json.dump(all_results_dicts_eval, 
+            open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
+            indent=4)
 
-json.dump(all_results_dicts, 
-        open(os.path.join(this_results_dir, f"outputs_all_{args.eval_partition}.json"), "w"),
-        indent=4)
+    json.dump(all_results_dicts, 
+            open(os.path.join(this_results_dir, f"outputs_all_{args.eval_partition}.json"), "w"),
+            indent=4)
 
 
-print(f"Evaluating outputs...")
-metrics = {}
+    print(f"({worker_index}) Evaluating outputs...")
+    metrics = {}
 
-if args.coherence_evaluation_strategy == "nli":
-    all_filtered_out_rephrase = []
-    # Calculate coherence metrics of final rollouts
-    all_chosen_questions = [question for results_dict in all_results_dicts_eval.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
-    all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(results_dict['final_turn'] + 1)]
-
-    label_answer_mapping = {0: "No", 1: "Yes"}
-    all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts_eval.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
-    all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(results_dict['final_turn'] + 1)]
-
-    filtered_out, all_coherence_metrics = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
-                                                                  nli_model,                                       
-                                                                  [procedure for results_dict, procedure in zip(all_results_dicts_eval.values(), all_procedures_eval) for _ in range(results_dict['final_turn'] + 1)],
-                                                                  all_chosen_questions,
-                                                                  answers=all_predicted_answers,
-                                                                  previous_questions=all_previous_questions,
-                                                                  previous_answers=all_previous_answers,
-                                                                  mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts_eval.values() for _ in range(results_dict['final_turn'] + 1)])
-    all_filtered_out_rephrase += filtered_out
-    if args.run_allturns_metrics:
-        # Calculate alternative metrics based on all iterations
-        all_chosen_questions = [question for results_dict in all_results_dicts_eval.values() for question in range(len(results_dict['questions']))]
-        all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(len(results_dict['questions']))]
+    if args.coherence_evaluation_strategy == "nli":
+        all_filtered_out_rephrase = []
+        # Calculate coherence metrics of final rollouts
+        all_chosen_questions = [question for results_dict in all_results_dicts_eval.values() for question in results_dict['questions'][:results_dict['final_turn'] + 1]]
+        all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
         label_answer_mapping = {0: "No", 1: "Yes"}
-        all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts_eval.values() for answer_probs in range(len(results_dict['answer_probs']))]
-        all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(len(results_dict['answers']))]
+        all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts_eval.values() for answer_probs in results_dict['answer_probs'][:results_dict['final_turn'] + 1]]
+        all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(results_dict['final_turn'] + 1)]
 
-        filtered_out, all_coherence_metrics_allturns = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
-                                                                               nli_model,
-                                                                               [procedure for results_dict, procedure in zip(all_results_dicts_eval.values(), all_procedures_eval) for _ in range(args.max_iterations)],
-                                                                               all_chosen_questions,
-                                                                               answers=all_predicted_answers,
-                                                                               previous_questions=all_previous_questions,
-                                                                               previous_answers=all_previous_answers,
-                                                                               mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts_eval.values() for _ in range(args.max_iterations)])
+        filtered_out, all_coherence_metrics = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
+                                                                    nli_model,                                       
+                                                                    [procedure for results_dict, procedure in zip(all_results_dicts_eval.values(), all_procedures_eval) for _ in range(results_dict['final_turn'] + 1)],
+                                                                    all_chosen_questions,
+                                                                    answers=all_predicted_answers,
+                                                                    previous_questions=all_previous_questions,
+                                                                    previous_answers=all_previous_answers,
+                                                                    mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts_eval.values() for _ in range(results_dict['final_turn'] + 1)])
         all_filtered_out_rephrase += filtered_out
+        if args.run_allturns_metrics:
+            # Calculate alternative metrics based on all iterations
+            all_chosen_questions = [question for results_dict in all_results_dicts_eval.values() for question in range(len(results_dict['questions']))]
+            all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(len(results_dict['questions']))]
 
-    if len(all_filtered_out_rephrase) > 0:
-        print(f"{len(all_filtered_out_rephrase)} questions were not rephrased by GPT due to filters")
-        print("Prompts that triggered the filter:", all_filtered_out_rephrase)
-elif args.coherence_evaluation_strategy == "vlm":
-    all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs_eval, all_success_probs_negated_eval)
-else:
-    raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
+            label_answer_mapping = {0: "No", 1: "Yes"}
+            all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts_eval.values() for answer_probs in range(len(results_dict['answer_probs']))]
+            all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts_eval.values() for question_idx in range(len(results_dict['answers']))]
 
-# Get accuracy and coherence metrics
-accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels_eval, all_probs_eval, all_coherence_metrics, all_results_dicts_eval, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
-coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
+            filtered_out, all_coherence_metrics_allturns = lm.question_coherence_metrics_nli_GPT(nli_tokenizer,
+                                                                                nli_model,
+                                                                                [procedure for results_dict, procedure in zip(all_results_dicts_eval.values(), all_procedures_eval) for _ in range(args.max_iterations)],
+                                                                                all_chosen_questions,
+                                                                                answers=all_predicted_answers,
+                                                                                previous_questions=all_previous_questions,
+                                                                                previous_answers=all_previous_answers,
+                                                                                mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts_eval.values() for _ in range(args.max_iterations)])
+            all_filtered_out_rephrase += filtered_out
 
-# Save accuracy and coherence metrics
-json.dump(accuracy_metrics_by_threshold, 
-        open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
-        indent=4)
+        if len(all_filtered_out_rephrase) > 0:
+            print(f"{len(all_filtered_out_rephrase)} questions were not rephrased by GPT due to filters")
+            print("Prompts that triggered the filter:", all_filtered_out_rephrase)
+    elif args.coherence_evaluation_strategy == "vlm":
+        all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs_eval, all_success_probs_negated_eval)
+    else:
+        raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
 
-json.dump(coherence_metrics, 
-        open(os.path.join(this_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
-        indent=4)
+    # Get accuracy and coherence metrics
+    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels_eval, all_probs_eval, all_coherence_metrics, all_results_dicts_eval, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
+    coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
 
-json.dump(all_coherence_metrics, 
-        open(os.path.join(this_results_dir, f"metrics_coherence_raw_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
-        indent=4)            
-
-# Generate DET curves for accuracy
-generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
-
-# Get all-turns form of metrics and save them
-if args.coherence_evaluation_strategy == 'nli' and args.run_allturns_metrics:
-    all_probs_allturns = [results_dict['success_probs'][-1] for results_dict in all_results_dicts_eval.values()]
-    accuracy_metrics_by_threshold_allturns, coherence_metrics_allturns = compile_accuracy_and_coherence_metrics(all_labels_eval, all_probs_allturns, all_coherence_metrics_allturns, all_results_dicts_eval, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
-
-    allturns_results_dir = os.path.join(this_results_dir, "allturns")
-    if not os.path.exists(allturns_results_dir):
-        os.makedirs(allturns_results_dir)
-    json.dump(accuracy_metrics_by_threshold_allturns, 
-            open(os.path.join(allturns_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
-            indent=4)
-    
-    json.dump(coherence_metrics_allturns, 
-            open(os.path.join(allturns_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
-            indent=4)
-    
-    json.dump({k: v | {"final_turn": args.max_iterations - 1} for k, v in all_results_dicts_eval.items()}, 
-            open(os.path.join(allturns_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
+    # Save accuracy and coherence metrics
+    json.dump(accuracy_metrics_by_threshold, 
+            open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
             indent=4)
 
-# Generate curves for all metrics by threshold
-generate_tiered_metric_curves(MISTAKE_DETECTION_THRESHOLDS, 
-                                [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
-                                [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
+    json.dump(coherence_metrics, 
+            open(os.path.join(this_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
+            indent=4)
 
-# Save args and config
-shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
-json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
+    json.dump(all_coherence_metrics, 
+            open(os.path.join(this_results_dir, f"metrics_coherence_raw_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
+            indent=4)            
 
-print(f"Done!")
+    # Generate DET curves for accuracy
+    generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
+
+    # Get all-turns form of metrics and save them
+    if args.coherence_evaluation_strategy == 'nli' and args.run_allturns_metrics:
+        all_probs_allturns = [results_dict['success_probs'][-1] for results_dict in all_results_dicts_eval.values()]
+        accuracy_metrics_by_threshold_allturns, coherence_metrics_allturns = compile_accuracy_and_coherence_metrics(all_labels_eval, all_probs_allturns, all_coherence_metrics_allturns, all_results_dicts_eval, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
+
+        allturns_results_dir = os.path.join(this_results_dir, "allturns")
+        if not os.path.exists(allturns_results_dir):
+            os.makedirs(allturns_results_dir)
+        json.dump(accuracy_metrics_by_threshold_allturns, 
+                open(os.path.join(allturns_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
+                indent=4)
+        
+        json.dump(coherence_metrics_allturns, 
+                open(os.path.join(allturns_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
+                indent=4)
+        
+        json.dump({k: v | {"final_turn": args.max_iterations - 1} for k, v in all_results_dicts_eval.items()}, 
+                open(os.path.join(allturns_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
+                indent=4)
+
+    # Generate curves for all metrics by threshold
+    generate_tiered_metric_curves(MISTAKE_DETECTION_THRESHOLDS, 
+                                    [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
+                                    [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
+                                    [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
+                                    [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
+
+    # Save args and config
+    shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
+    json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
+
+    print(f"({worker_index}) Done!")
 

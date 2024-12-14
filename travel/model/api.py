@@ -252,6 +252,13 @@ class GPT:
                                         max_tokens=max_tokens)
             backup_text = questions[idx] + " " + answers[idx] + "."
             text = api_response.choices[0].message.content if not filtered_out else backup_text
+            if text == None:
+                print(f"Rephrased text is None!")
+                print(f"prompt: {prompt}")
+                print(f"filtered: {filtered_out}")
+                print(f"backup_text: {backup_text}")
+                print(f"api_response: {api_response}")
+                text = backup_text
             rephrased_texts.append(text)
             if filtered_out:
                 filtered_out_prompts.append(prompt)
