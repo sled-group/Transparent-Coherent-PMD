@@ -532,7 +532,7 @@ if worker_index == 0:
             indent=4)
 
 
-    print(f"Evaluating outputs...")
+    print(f"({worker_index}) Evaluating outputs...")
     metrics = {}
 
     if args.coherence_evaluation_strategy == "nli":
@@ -632,5 +632,5 @@ if worker_index == 0:
     shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
     json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
 
-    print(f"Done!")
+    print(f"({worker_index}) Done!")
 
