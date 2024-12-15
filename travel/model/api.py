@@ -201,6 +201,21 @@ class GPT:
                                            temperature=temperature,
                                            max_tokens=max_tokens)
             question = api_response.choices[0].message.content if not filtered_out else None
+            # if content from api response is None, try again
+            if question == None and not filtered_out:
+                print(f"Question generation is None!")
+                print(f"prompt: {prompt}")
+                print(f"api_response: {api_response}")
+                filtered_out, api_response = self.prompt_gpt(prompt_text=prompt,
+                                           temperature=temperature,
+                                           max_tokens=max_tokens)
+                question = api_response.choices[0].message.content if not filtered_out else None
+                # if content is None again, treat this example as a filtered out one
+                if question == None and not filtered_out:
+                    print(f"Question generation is None again!")
+                    print(f"prompt: {prompt}")
+                    print(f"api_response: {api_response}")
+                    filtered_out = True
             all_questions.append(question)
             all_filtered_out.append(filtered_out)
         return all_filtered_out, all_questions
@@ -249,8 +264,8 @@ class GPT:
         filtered_out_prompts = []
         for idx, prompt in tqdm(enumerate(prompts), desc="rephrasing"):
             filtered_out, api_response = self.prompt_gpt(prompt_text=prompt,
-                                        temperature=temperature,
-                                        max_tokens=max_tokens)
+                                                        temperature=temperature,
+                                                        max_tokens=max_tokens)
             backup_text = questions[idx] + " " + answers[idx] + "."
             text = api_response.choices[0].message.content if not filtered_out else backup_text
             if text == None:
@@ -259,7 +274,18 @@ class GPT:
                 print(f"filtered: {filtered_out}")
                 print(f"backup_text: {backup_text}")
                 print(f"api_response: {api_response}")
-                text = backup_text
+                # try again
+                filtered_out, api_response = self.prompt_gpt(prompt_text=prompt,
+                                                            temperature=temperature,
+                                                            max_tokens=max_tokens)
+                text = api_response.choices[0].message.content if not filtered_out else backup_text
+                if text == None:
+                    print(f"Rephrased text is None again!")
+                    print(f"prompt: {prompt}")
+                    print(f"filtered: {filtered_out}")
+                    print(f"backup_text: {backup_text}")
+                    print(f"api_response: {api_response}")
+                    text = backup_text
             rephrased_texts.append(text)
             if filtered_out:
                 filtered_out_prompts.append(prompt)
