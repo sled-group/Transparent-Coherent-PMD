@@ -5,6 +5,7 @@ import base64
 import torch
 import numpy as np
 from openai import AzureOpenAI
+from tqdm import tqdm
 
 from travel.data.vqa import VQAResponse
 from travel.model.nli import run_nli, NLI_HYPOTHESIS_TEMPLATE
@@ -246,7 +247,7 @@ class GPT:
         prompts = ["\n\n".join(examples) + f"\n\nQuestion: {question}\nAnswer: {answer}\nStatement: " for question, answer in zip(questions, answers)]
         rephrased_texts = []
         filtered_out_prompts = []
-        for idx, prompt in enumerate(prompts):
+        for idx, prompt in tqdm(enumerate(prompts), desc="rephrasing"):
             filtered_out, api_response = self.prompt_gpt(prompt_text=prompt,
                                         temperature=temperature,
                                         max_tokens=max_tokens)
