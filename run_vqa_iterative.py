@@ -192,7 +192,7 @@ begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_siz
 bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]], 
                  vlm_processor.tokenizer("successful", add_special_tokens=False).input_ids, 
                  vlm_processor.tokenizer("successfully", add_special_tokens=False).input_ids, 
-                 vlm_processor.tokenizer("executed", add_special_tokens=False).input_ids,
+                 vlm_processor.tokenizer("completed", add_special_tokens=False).input_ids,
                  vlm_processor.tokenizer("procedure", add_special_tokens=False).input_ids]
 
 generation_kwargs = {
