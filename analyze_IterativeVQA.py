@@ -258,7 +258,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in zip(
             # Adding legend
             plt.legend(loc='upper right', fontsize=14)  
 
-            output_fname = f"question_source_hist_{analysis_subdir}_{results_names[i]}.pdf"
+            output_fname = f"question_source_hist_{analysis_subdir}_{results_names[i].replace(' ', '_')}.pdf"
             save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
             for save_path in save_paths:
                 plt.savefig(save_path, bbox_inches='tight')
@@ -315,35 +315,38 @@ for results_fnames, results_names, results_colors, analysis_subdir in zip(
     for path in save_paths:
         fig.savefig(path)
 
-    # Scatter plot of mistake vs success confidence
-    x = np.arange(len(results_names))  # the label locations
-    fig, ax = plt.subplots()
-    fig.set_figwidth(10)
-    fig.set_figheight(7)
-    for i in range(len(results_fnames)):
-        y_mistake = mistake_confidence[i]
-        y_success = success_confidence[i]
-        x_mistake = np.full(len(y_mistake), x[i] - 0.1)  # slight offset for visual clarity
-        x_success = np.full(len(y_success), x[i] + 0.1)  # slight offset for visual clarity
-        marker_size_mistake = mistake_error[i]
-        marker_size_success = success_error[i]
+    try:
+        # Scatter plot of mistake vs success confidence
+        x = np.arange(len(results_names))  # the label locations
+        fig, ax = plt.subplots()
+        fig.set_figwidth(10)
+        fig.set_figheight(7)
+        for i in range(len(results_fnames)):
+            y_mistake = mistake_confidence[i]
+            y_success = success_confidence[i]
+            x_mistake = np.full(len(y_mistake), x[i] - 0.1)  # slight offset for visual clarity
+            x_success = np.full(len(y_success), x[i] + 0.1)  # slight offset for visual clarity
+            marker_size_mistake = mistake_error[i]
+            marker_size_success = success_error[i]
 
-        ax.scatter(x_mistake, y_success, color='red', label='Mistake Examples' if i == 0 else "")
-        ax.scatter(x_success, y_mistake, color='green', label='Success Examples' if i == 0 else "")
+            ax.scatter(x_mistake, y_success, color='red', label='Mistake Examples' if i == 0 else "")
+            ax.scatter(x_success, y_mistake, color='green', label='Success Examples' if i == 0 else "")
 
-    # Add some text for labels, title and custom x-axis tick labels, etc.
-    ax.set_xlabel('Result')
-    ax.set_ylabel('Confidence')
-    ax.set_xticks(x)
-    ax.set_xticklabels(results_names)
-    ax.legend()
+        # Add some text for labels, title and custom x-axis tick labels, etc.
+        ax.set_xlabel('Result')
+        ax.set_ylabel('Confidence')
+        ax.set_xticks(x)
+        ax.set_xticklabels(results_names)
+        ax.legend()
 
-    fig.tight_layout()
+        fig.tight_layout()
 
-    output_fname = f"confidence_comparison2_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
-    save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
-    for path in save_paths:
-        fig.savefig(path)
+        output_fname = f"confidence_comparison2_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
+        save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
+        for path in save_paths:
+            fig.savefig(path)
+    except:
+        print("Could not generate mistake vs. success confidence scatter plot due to data being imbalanced.")
 
     for i, result_fname in enumerate(results_fnames):
         plt.clf()

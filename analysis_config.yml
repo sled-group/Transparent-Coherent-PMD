@@ -158,22 +158,22 @@
 #     - '#C100C1'
 #     - '#0000C1'
 #     - '#00C1C1'
-llava_generation_val_tuned:
-  outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20241126114403/stopping_criteria_tuning/4_0.4_0.05/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_dpo_20241126103858/stopping_criteria_tuning/4_0.4_0.05/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_dpo_20241126125321/stopping_criteria_tuning/4_0.2_0.05/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_dpo_20241126093626/stopping_criteria_tuning/4_0.05_0.05/outputs_val.json"
-  result_names:
-    - "Likelihood"
-    - "Likelihood + ICL"
-    - "Coherence"
-    - "Coherence + ICL"
-  colors:
-    - '#C10000'
-    - '#C100C1'
-    - '#0000C1'
-    - '#00C1C1'
+# llava_generation_val_tuned:
+#   outputs_fnames:
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20241126114403/stopping_criteria_tuning/4_0.4_0.05/outputs_val.json"
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_dpo_20241126103858/stopping_criteria_tuning/4_0.4_0.05/outputs_val.json"
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_dpo_20241126125321/stopping_criteria_tuning/4_0.2_0.05/outputs_val.json"
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_dpo_20241126093626/stopping_criteria_tuning/4_0.05_0.05/outputs_val.json"
+#   result_names:
+#     - "Likelihood"
+#     - "Likelihood + ICL"
+#     - "Coherence"
+#     - "Coherence + ICL"
+#   colors:
+#     - '#C10000'
+#     - '#C100C1'
+#     - '#0000C1'
+#     - '#00C1C1'
 # llava_generation_test:
 #   outputs_fnames:
 #     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug1000/llava-1.5-7b-hf/IterativeVQA_q4_ego4d_single_debug1000_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20241127072827/outputs_test.json"
@@ -206,22 +206,22 @@ llava_generation_val_tuned:
 #     - '#C100C1'
 #     - '#0000C1'
 #     - '#00C1C1'
-llava_generation_icl_val_tuned:
-  outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20241125235951_icl/stopping_criteria_tuning/8_0.1_0.05/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_dpo_20241126010543_icl/stopping_criteria_tuning/6_0.05_0.025/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_dpo_20241126015154_icl/stopping_criteria_tuning/6_0.1_0.05/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_dpo_20241125212359_icl/stopping_criteria_tuning/4_0.05_0.05/outputs_val.json"
-  result_names:
-    - "Likelihood"
-    - "Likelihood + ICL"
-    - "Coherence"
-    - "Coherence + ICL"
-  colors:
-    - '#C10000'
-    - '#C100C1'
-    - '#0000C1'
-    - '#00C1C1'    
+# llava_generation_icl_val_tuned:
+#   outputs_fnames:
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20241125235951_icl/stopping_criteria_tuning/8_0.1_0.05/outputs_val.json"
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_dpo_20241126010543_icl/stopping_criteria_tuning/6_0.05_0.025/outputs_val.json"
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_dpo_20241126015154_icl/stopping_criteria_tuning/6_0.1_0.05/outputs_val.json"
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_dpo_20241125212359_icl/stopping_criteria_tuning/4_0.05_0.05/outputs_val.json"
+#   result_names:
+#     - "Likelihood"
+#     - "Likelihood + ICL"
+#     - "Coherence"
+#     - "Coherence + ICL"
+#   colors:
+#     - '#C10000'
+#     - '#C100C1'
+#     - '#0000C1'
+#     - '#00C1C1'    
 # llava_generation_icl_test:
 #   outputs_fnames:
 #     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final/vqa_mistake_detection/ego4d_single_debug1000/llava-1.5-7b-hf/IterativeVQA_q8_ego4d_single_debug1000_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20241126222249_icl/outputs_test.json"
@@ -238,3 +238,10 @@ llava_generation_icl_val_tuned:
 #     - '#C100C1'
 #     - '#0000C1'
 #     - '#00C1C1'
+gpt4o:
+  outputs_fnames:
+    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/sstorks-gpt-4o/IterativeVQA_q10_ego4d_single_debug250_sstorks-gpt-4o_nohistory_12345/stopping_criteria_tuning/4_0.4_0.1/outputs_val.json"
+  result_names:
+    - "Likelihood"
+  colors:
+    - '#C10000'
