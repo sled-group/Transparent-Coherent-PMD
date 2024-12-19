@@ -1,3 +1,4 @@
+# NOTE: GPU parallelism in this code is a bit wasteful - only worker 0 needs a GPU, but we didn't attempt to reconfigure the parallelization with srun
 from travel import init_travel
 init_travel()
 

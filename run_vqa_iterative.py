@@ -37,6 +37,7 @@ parser.add_argument("--vqg_adapter_path", type=str, help="Name or path to adapte
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
 parser.add_argument("--max_iterations", type=int, default=10, help="Maximum number of questions to generate before making a final mistake detection decision.")
+parser.add_argument("--length_penalty", type=float, default=-1.0, help="Exponential length penalty for generation (> 0.0 promotes long sequences, < 0.0 promotes short sequences).")
 parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)), help="Number of beams in beam search.")
 parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
@@ -175,15 +176,15 @@ question_generation_constraints = [
 ]
 yes_no_q_tokens = [
     vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[0], 
-    vlm_processor.tokenizer("Was it blue?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Was it blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Are they blue?", add_special_tokens=False).input_ids[0], 
-    vlm_processor.tokenizer("Were they blue?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Were they blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Does it look blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Do they look blue?", add_special_tokens=False).input_ids[0],
-    vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
-    vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
-    vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
-    vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
 ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
 bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]], 
@@ -200,6 +201,7 @@ generation_kwargs = {
     "begin_suppress_tokens": begin_suppress_tokens,   
     "bad_words_ids": bad_words_ids, 
     "pad_token_id": tokenizer.eos_token_id,
+    "length_penalty": args.length_penalty,
 }
 
 # NLI model to score consistency and verifiability
