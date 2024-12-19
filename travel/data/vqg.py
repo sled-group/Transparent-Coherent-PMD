@@ -94,7 +94,7 @@ VQG_DEMONSTRATIONS = [
         procedure_id=107275,
         procedure_description="Take the baking tray away from the table",
         questions=[
-            "Can you see a baking tray?",
+            "Do you see a baking tray?",
             "Is the baking tray on the table?",
             "Is the baking tray picked up by someone?",
         ],
@@ -306,7 +306,7 @@ VQG_DEMONSTRATIONS = [
         questions=[
             "Is there a fridge?",
             "Is the fridge open?",
-            "Can you see inside the fridge?",
+            "Do you see inside the fridge?",
         ],
         answers_str=[
             "Yes",
