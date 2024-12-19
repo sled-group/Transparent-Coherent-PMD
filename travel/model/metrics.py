@@ -1,20 +1,18 @@
 from collections import defaultdict
+import matplotlib
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D   
 import numpy as np
 import os
 from pprint import pprint
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, auc
-import spacy
 import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
+from tqdm import tqdm
 from typing import Union, Optional, Any
 
-from travel.data.mistake_detection import MistakeDetectionExample
-from travel.data.utils import time_based_exponential_moving_average
-from travel.data.vqa import VQAResponse, VQAOutputs, generate_iterative_vqa_success_prompt
-from travel.data.vqg import VQGOutputs
-from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE
+from travel.model.nli import run_nli, NLI_HYPOTHESIS_TEMPLATE
 from travel.model import simple_lm_prompt
+from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 
 def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str, float]:
     """Accuracy metrics for mistake detection."""
@@ -635,9 +633,10 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
             for results_dict in all_results_dicts.values():
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
-                    this_metrics.append(max(round(float(all_coherence_metrics[k][parallel_idx]), 6), 0.0)) # If negative, just round up to 0.0 for aggregated metrics
+                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx]), 6)) # NOTE: these numbers can be negative
                     parallel_idx += 1
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
+
                 # In metric for full example, don't count informativeness for "unsure" answers - model failed to get new information
                 this_metrics = [this_metrics[question_idx] if np.abs(results_dict['answer_probs'][question_idx][0] - 0.5) >= unsure_range or "informativeness" not in k else 0.0 for question_idx in range(len(this_metrics))]
                 
@@ -645,41 +644,10 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
                 if k != "informativeness_marginal" and k != "informativeness_marginal_ref":
                     example_metric = round(float(np.mean(this_metrics)), 6)
                 else:
-                    this_metrics = [this_metrics[question_idx] if np.abs(results_dict['answer_probs'][question_idx][0] - 0.5) >= unsure_range or "informativeness" not in k else 0.0 for question_idx in range(len(this_metrics))]
                     example_metric = round(float(np.max(this_metrics)), 6)
 
                 coherence_metrics_by_example[k + "_by_example"].append(example_metric)
-                
-    # Reweight informativeness metrics by entropy of VLM's answer to questions
-    for k in ['informativeness', 'informativeness_marginal', 'informativeness_x_relevance_marginal', 'informativeness_marginal_x_relevance_marginal']:
-        if k in all_coherence_metrics:
-            parallel_idx = 0
-            for results_dict in all_results_dicts.values():
-                this_metrics = []
-                for question_idx in range(results_dict['final_turn'] + 1):
-                    question_info = 1.0 - entropy(results_dict['answer_probs'][question_idx][0])
-                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx] * question_info), 6))
-                    parallel_idx += 1
-                coherence_metrics_by_example[k + "_vlm_reweight_by_example"].append(round(float(np.mean(this_metrics)), 6))
-                coherence_metrics_by_turn[k + "_vlm_reweight_by_turn"].append(this_metrics)
-            
-    # Add an alternative "information gain" version of informativeness (weighted by relevance);
-    # this metric looks at how much (relevance-weighted) information our answers accrued across the dialog
-    parallel_idx = 0
-    for results_dict in all_results_dicts.values():
-        this_metrics = []
-        max_so_far = 0.0
-        total_info_gain = 0.0
-        for question_idx in range(results_dict['final_turn'] + 1):
-            info = max(all_coherence_metrics['informativeness_marginal_x_relevance_marginal_ref'][parallel_idx], 0.0)
-            info_gain = max(info - max_so_far, 0.0)
-            if info > max_so_far:
-                max_so_far = info
-            this_metrics.append(round(float(info_gain), 6))            
-            parallel_idx += 1
-        coherence_metrics_by_example["informativeness_marginal_x_relevance_marginal_ref_gain_by_example"].append(round(float(np.mean(this_metrics)), 6))
-        coherence_metrics_by_turn["informativeness_marginal_x_relevance_marginal_ref_gain_by_turn"].append(this_metrics)
-
+                            
     # Calculate accuracy metrics
     best_metrics = None
     best_threshold = None
@@ -716,4 +684,115 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
         "metrics_by_turn": coherence_metrics_by_turn,
     }
 
-    return accuracy_metrics_by_threshold, coherence_metrics
+    n_iterations = []
+    dialog_info_gain = []
+    for results_dict in all_results_dicts.values():
+        this_n_iterations = results_dict['final_turn'] + 1
+        n_iterations.append(this_n_iterations)
+
+        turn_info_gains = []
+        for turn_idx in range(this_n_iterations):
+        
+            # Get information gain for this turn
+            last_turn_success_prob = results_dict['success_probs'][turn_idx - 1] if turn_idx > 0 else None
+            this_turn_success_prob = results_dict['success_probs'][turn_idx]
+
+            last_turn_info = (1.0 - entropy(last_turn_success_prob)) if turn_idx > 0 else 0.0
+            this_turn_info = 1.0 - entropy(this_turn_success_prob)
+            turn_info_gain = this_turn_info - last_turn_info            
+
+            turn_info_gains.append(turn_info_gain)
+
+        dialog_info_gain.append(np.sum(turn_info_gains))
+            
+    other_metrics = {
+        "n_iterations": np.mean(n_iterations),
+        "dialog_info_gain": np.mean(dialog_info_gain)
+    }
+
+    return accuracy_metrics_by_threshold, coherence_metrics, other_metrics
+
+def generate_3d_overview_graph(coherence_metrics, all_results_dicts, dataset, save_path, graph_name="base"):
+    """Generates a 3D scatter plot of decision error, example-level relevance, and example-level (reference-adjusted) informativeness for each example in results."""
+    accuracy = []
+    informativeness = []
+    relevance = []
+
+    example_ids = []
+    verbs = []
+    nouns = []
+    mistake_types = []
+
+    labels = [] # These have to be filled in later if we want them
+    graph_name = "base"    
+    print("Generating 3D scatter plot...")
+    for (example_id, output), ex_informativeness, ex_relevance in tqdm(zip(all_results_dicts.items(), coherence_metrics['metrics_by_example']['informativeness_marginal_ref_by_example'], coherence_metrics['metrics_by_example']['relevance_marginal_by_example']), total=len(all_results_dicts)):
+        target_success_prob = 0.0 if output['mistake'] else 1.0
+        actual_success_prob = output['success_probs'][output['final_turn']]
+            
+        accuracy.append(np.abs(target_success_prob - actual_success_prob))
+        relevance.append(ex_relevance)
+        informativeness.append(ex_informativeness)
+        
+        example_ids.append(example_id)
+        example = dataset.get_example_by_id(example_id, load_frames=False)
+        verbs.append(example.verb_noun_pair[0].split("_")[0])
+        nouns.append(example.verb_noun_pair[1].split("_")[0])
+        mistake_types.append(output['mistake_type'])
+
+    matplotlib.use('Agg')
+
+    # Sample data
+    x = accuracy
+    y = relevance
+    z = informativeness
+
+    x_norm = x
+    y_norm = y
+    z_norm = (np.array(z) + 1.0) / 2.0
+
+    # Combine the normalized values to get the colors
+    colors = np.array([x_norm, y_norm, z_norm]).T
+
+    fig = plt.figure(figsize=(10, 10))  # Increase the figure size
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Create the scatter plot
+    ax.scatter(x, y, z, c=colors, s=150, edgecolor='k', linewidth=0.25, alpha=0.5)
+
+    # Data labels
+    if len(labels) > 0:
+        for i in range(len(x)):
+            ax.text(x[i], y[i], z[i] + 0.03, labels[i], size=8, zorder=1, color='k')
+
+    # Set custom z-axis tick labels
+    xy_ticks = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    ax.set_xticks(xy_ticks)
+    ax.set_yticks(xy_ticks)
+    ax.set_xticklabels([f'{tick:.1f}' for tick in xy_ticks], fontsize=12)
+    ax.set_yticklabels([f'{tick:.1f}' for tick in xy_ticks], fontsize=12)
+
+    z_ticks = [-1.0, -0.8, -0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    ax.set_zticks(z_ticks)
+    ax.set_zticklabels([f'{tick:.1f}' for tick in z_ticks], fontsize=12)
+            
+    # Set axis labels
+    ax.set_xlabel(f'Decision Error', labelpad=6, fontsize=20, fontweight='bold')
+    ax.set_ylabel(f'Relevance', labelpad=6, fontsize=20, fontweight='bold')
+    ax.set_zlabel(f'Informativeness', labelpad=6, fontsize=20, fontweight='bold')
+
+    ax.xaxis.label.set_color('#AA0000')
+    ax.yaxis.label.set_color('#00AA00')
+    ax.zaxis.label.set_color('#0000AA')
+
+    # Set axis limits
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_zlim(-1, 1)
+    ax.set_box_aspect(aspect=None, zoom=0.94)
+
+    plt.tight_layout()
+
+    # Display the plot
+    plt.show()
+    plt.savefig(os.path.join(save_path, f"3d_graph_{graph_name}.pdf"), bbox_inches='tight')

@@ -25,7 +25,7 @@ from travel.model.utils import expected_calibration_error
 # Start setting up output directories
 TASK = "ego4d_single"
 timestamp = datetime.datetime.now()
-run_folder_name = f"confidence_analysis_{timestamp.strftime('%Y%m%d%H%M%S')}"
+run_folder_name = f"analysis_{timestamp.strftime('%Y%m%d%H%M%S')}"
 parent_output_dir = os.path.join(RESULTS_DIR, f"analysis", TASK, run_folder_name)
 
 # Load analysis configs from analysis_config.yml
@@ -74,8 +74,8 @@ for results_fnames, results_names, results_colors, analysis_subdir in zip(
     metrics_det = [{float(k): v for k, v in metrics.items() if k not in ["best_metrics", "best_threshold"]} for metrics in metrics_accuracy]
 
 
-    # Analysis 0: Generate DET curves
-    print("(0) Generating DET curves...")
+    # Analysis 1: Generate DET curves
+    print("(1) Generating DET curves...")
     output_fname = f"det_comparison_{analysis_subdir}.pdf"
     save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
     generate_det_curves(metrics_det, results_names, save_paths=save_paths, colors=results_colors)
@@ -134,8 +134,8 @@ for results_fnames, results_names, results_colors, analysis_subdir in zip(
             
             turn_answer_probs[i].append(pred['answer_probs'])
 
-    # Analysis 1: save number of turns spent on each example and other stats about VQG->VQA turns
-    print("(1) Running efficiency analysis...")
+    # Analysis 2: save number of turns spent on each example and other stats about VQG->VQA turns
+    print("(2) Running efficiency analysis...")
     lines = []
     for i in range(len(results_fnames)):
         lines.append(f"{results_names[i]} average number of turns: {np.mean(n_turns[i])}")
@@ -272,134 +272,6 @@ for results_fnames, results_names, results_colors, analysis_subdir in zip(
 
     print("(1) Done!")
 
-    # Analysis 2: Plot confidence and variance for model predictions on success and mistake predictions
-    print("(2) Beginning confidence graph generation...")
-
-    # Bar graph comparing mistake probability for mistake and success examples
-    x = np.arange(len(results_names))  # the label locations
-    width = 0.35  # the width of the bars
-
-    fig, ax = plt.subplots()
-    fig.set_figwidth(10)
-    for i in range(len(results_fnames)):
-        rects1 = ax.bar(
-            x[i] - width/2, 
-            np.mean(mistake_probs[i]), 
-            width, 
-            yerr=np.std(mistake_probs[i]), 
-            label='Mistake Examples' if i == 0 else "", 
-            color='red', 
-            capsize=5
-        )
-        rects2 = ax.bar(
-            x[i] + width/2, 
-            np.mean(success_probs[i]), 
-            width, 
-            yerr=np.std(success_probs[i]), 
-            label='Success Examples' if i == 0 else "", 
-            color='green', 
-            capsize=5
-        )
-
-    # Add some text for labels, title and custom x-axis tick labels, etc.
-    ax.set_xlabel('Result')
-    ax.set_ylabel('Mistake Probability')
-    ax.set_xticks(x)
-    ax.set_xticklabels(results_names)
-    ax.legend()
-
-    fig.tight_layout()
-
-    output_fname = f"confidence_comparison1_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
-    save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
-    for path in save_paths:
-        fig.savefig(path)
-
-    try:
-        # Scatter plot of mistake vs success confidence
-        x = np.arange(len(results_names))  # the label locations
-        fig, ax = plt.subplots()
-        fig.set_figwidth(10)
-        fig.set_figheight(7)
-        for i in range(len(results_fnames)):
-            y_mistake = mistake_confidence[i]
-            y_success = success_confidence[i]
-            x_mistake = np.full(len(y_mistake), x[i] - 0.1)  # slight offset for visual clarity
-            x_success = np.full(len(y_success), x[i] + 0.1)  # slight offset for visual clarity
-            marker_size_mistake = mistake_error[i]
-            marker_size_success = success_error[i]
-
-            ax.scatter(x_mistake, y_success, color='red', label='Mistake Examples' if i == 0 else "")
-            ax.scatter(x_success, y_mistake, color='green', label='Success Examples' if i == 0 else "")
-
-        # Add some text for labels, title and custom x-axis tick labels, etc.
-        ax.set_xlabel('Result')
-        ax.set_ylabel('Confidence')
-        ax.set_xticks(x)
-        ax.set_xticklabels(results_names)
-        ax.legend()
-
-        fig.tight_layout()
-
-        output_fname = f"confidence_comparison2_{eval_partition}_{'_'.join(results_names).replace(' ', '-')}.pdf"
-        save_paths = [os.path.join("/".join(fname.split("/")[:-1]), run_folder_name, output_fname) for fname in results_fnames] + [os.path.join(output_dir, output_fname)]
-        for path in save_paths:
-            fig.savefig(path)
-    except:
-        print("Could not generate mistake vs. success confidence scatter plot due to data being imbalanced.")
-
-    for i, result_fname in enumerate(results_fnames):
-        plt.clf()
-        result_name = results_names[i]
-
-        # Define the bins
-        bins = np.linspace(0, 1.0, 11)
-
-        # Compute histogram data
-        hist1, _ = np.histogram(mistake_probs[i], bins=bins)
-        hist2, _ = np.histogram(success_probs[i], bins=bins)
-
-        # Plot the stacked histogram
-        bars1 = plt.bar(bins[:-1], hist1, width=bins[1]-bins[0], label='Mistake Examples', color="red", align='edge')
-        bars2 = plt.bar(bins[:-1], hist2, width=bins[1]-bins[0], bottom=hist1, label='Success Examples', color="green", align='edge')
-
-        # Add labels with the proportion of mistake vs. success probs
-        for bar1, bar2 in zip(bars1, bars2):
-            total = bar1.get_height() + bar2.get_height()
-            if total > 0:
-                proportion1 = bar1.get_height() / total
-                proportion2 = bar2.get_height() / total
-                plt.text(
-                    bar1.get_x() + bar1.get_width() / 2,
-                    bar1.get_height() / 2,
-                    f'{proportion1:.2f}',
-                    ha='center',
-                    va='center',
-                    color='white'
-                )
-                plt.text(
-                    bar2.get_x() + bar2.get_width() / 2,
-                    bar1.get_height() + bar2.get_height() / 2,
-                    f'{proportion2:.2f}',
-                    ha='center',
-                    va='center',
-                    color='white'
-                )
-
-        # Add labels and title
-        plt.xlabel('Mistake Probability')
-        plt.ylabel('Count')
-        plt.legend()
-
-        # Display the plot
-        plt.show()
-
-        output_fname = f"confidence_histogram_{eval_partition}_{result_name.replace(' ', '-')}.pdf"
-        save_paths = [os.path.join("/".join(result_fname.split("/")[:-1]), run_folder_name, output_fname)] + [os.path.join(output_dir, output_fname)]
-        for path in save_paths:
-            fig.savefig(path)
-
-    print("(2) Confidence graphs generated!")
 
     # Analysis 3: Correlation of confidences with mistake labels, calibration curves, etc.
     print("(3) Beginning correlation analysis of confidences...")
@@ -446,6 +318,7 @@ for results_fnames, results_names, results_colors, analysis_subdir in zip(
         plt.savefig(path)
 
     print("(3) Done!")
+
 
     # Analysis 4: Selective prediction metrics
     print("(4) Running selective prediction metrics...")
