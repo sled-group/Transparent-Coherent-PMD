@@ -150,7 +150,7 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
         readjusted_all_coherence_metrics[k] = this_metrics
     
     # Compile accuracy and coherence metrics
-    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, readjusted_all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, 0.1)
+    accuracy_metrics_by_threshold, coherence_metrics, other_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, readjusted_all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, 0.1)
     coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
     
     performance_by_criteria[str((mi, esd, cd))] = {
@@ -185,7 +185,11 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
 
     json.dump(readjusted_all_coherence_metrics, 
             open(os.path.join(subdir_path, "metrics_coherence_raw_nli_val.json"), "w"),
-            indent=4)            
+            indent=4)          
+
+    json.dump(other_metrics, 
+            open(os.path.join(subdir_path, f"metrics_other_val.json"), "w"),
+            indent=4)              
 
 accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold, all_results_dicts = best_metrics
 
@@ -204,7 +208,11 @@ json.dump(coherence_metrics,
 
 json.dump(readjusted_all_coherence_metrics, 
         open(os.path.join(this_results_dir, f"metrics_coherence_raw_nli_val.json"), "w"),
-        indent=4)            
+        indent=4)        
+
+json.dump(other_metrics, 
+        open(os.path.join(this_results_dir, f"metrics_other_val.json"), "w"),
+        indent=4)              
 
 mi, esd, cd = best_criteria
 json.dump({"max_iterations": mi, "early_stop_delta": esd, "confident_range": cd},

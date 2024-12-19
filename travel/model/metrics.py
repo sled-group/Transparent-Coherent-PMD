@@ -1,20 +1,18 @@
 from collections import defaultdict
+import matplotlib
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D   
 import numpy as np
 import os
 from pprint import pprint
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, auc
-import spacy
 import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
+from tqdm import tqdm
 from typing import Union, Optional, Any
 
-from travel.data.mistake_detection import MistakeDetectionExample
-from travel.data.utils import time_based_exponential_moving_average
-from travel.data.vqa import VQAResponse, VQAOutputs, generate_iterative_vqa_success_prompt
-from travel.data.vqg import VQGOutputs
-from travel.model.nli import NLI_MODEL_PATH, run_nli, NLI_HYPOTHESIS_TEMPLATE
+from travel.model.nli import run_nli, NLI_HYPOTHESIS_TEMPLATE
 from travel.model import simple_lm_prompt
+from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 
 def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str, float]:
     """Accuracy metrics for mistake detection."""
@@ -635,9 +633,10 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
             for results_dict in all_results_dicts.values():
                 this_metrics = []
                 for question_idx in range(results_dict['final_turn'] + 1):
-                    this_metrics.append(max(round(float(all_coherence_metrics[k][parallel_idx]), 6), 0.0)) # If negative, just round up to 0.0 for aggregated metrics
+                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx]), 6)) # NOTE: these numbers can be negative
                     parallel_idx += 1
                 coherence_metrics_by_turn[k + "_by_turn"].append(this_metrics)
+
                 # In metric for full example, don't count informativeness for "unsure" answers - model failed to get new information
                 this_metrics = [this_metrics[question_idx] if np.abs(results_dict['answer_probs'][question_idx][0] - 0.5) >= unsure_range or "informativeness" not in k else 0.0 for question_idx in range(len(this_metrics))]
                 
@@ -648,39 +647,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
                     example_metric = round(float(np.max(this_metrics)), 6)
 
                 coherence_metrics_by_example[k + "_by_example"].append(example_metric)
-                
-    # Reweight informativeness metrics by entropy of VLM's answer to questions
-    for k in ['informativeness', 'informativeness_marginal', 'informativeness_x_relevance_marginal', 'informativeness_marginal_x_relevance_marginal']:
-        if k in all_coherence_metrics:
-            parallel_idx = 0
-            for results_dict in all_results_dicts.values():
-                this_metrics = []
-                for question_idx in range(results_dict['final_turn'] + 1):
-                    question_info = 1.0 - entropy(results_dict['answer_probs'][question_idx][0])
-                    this_metrics.append(round(float(all_coherence_metrics[k][parallel_idx] * question_info), 6))
-                    parallel_idx += 1
-                coherence_metrics_by_example[k + "_vlm_reweight_by_example"].append(round(float(np.mean(this_metrics)), 6))
-                coherence_metrics_by_turn[k + "_vlm_reweight_by_turn"].append(this_metrics)
-            
-    # Add an alternative "information gain" version of informativeness (weighted by relevance);
-    # this metric looks at how much (relevance-weighted) information our answers accrued across the dialog
-    parallel_idx = 0
-    for results_dict in all_results_dicts.values():
-        this_metrics = []
-        max_so_far = 0.0
-        total_info_gain = 0.0
-        for question_idx in range(results_dict['final_turn'] + 1):
-            info = max(all_coherence_metrics['informativeness_marginal_x_relevance_marginal_ref'][parallel_idx], 0.0)
-            info_gain = max(info - max_so_far, 0.0)
-            if info > max_so_far:
-                max_so_far = info
-            this_metrics.append(round(float(info_gain), 6))            
-            parallel_idx += 1
-        coherence_metrics_by_example["informativeness_marginal_x_relevance_marginal_ref_gain_by_example"].append(round(float(np.mean(this_metrics)), 6))
-        coherence_metrics_by_turn["informativeness_marginal_x_relevance_marginal_ref_gain_by_turn"].append(this_metrics)
-
-    # Calculate 
-
+                            
     # Calculate accuracy metrics
     best_metrics = None
     best_threshold = None
@@ -717,280 +684,115 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
         "metrics_by_turn": coherence_metrics_by_turn,
     }
 
-    return accuracy_metrics_by_threshold, coherence_metrics
+    n_iterations = []
+    dialog_info_gain = []
+    for results_dict in all_results_dicts.values():
+        this_n_iterations = results_dict['final_turn'] + 1
+        n_iterations.append(this_n_iterations)
 
-# NOTE: below consistency and verifiability metrics are from legacy results and not in use/maintained
-def effectiveness(is_mistake: bool, mistake_probs: Union[list[float], list[list[float]]]):
-    """
-    Verifiability metric for mistake detection which measures how well a VLM's answer likelihoods for a set of questions captured the mistake/success of a MistakeDetectionExample.
-    
-    :param is_mistake: Whether or not there's a mistake in the example.
-    :param mistake_probs: List of mistake probabilities for each question used to detect a mistake.
-    """
-    return_one = False
-    mistake_probs = np.array(mistake_probs)
-    if len(mistake_probs.shape) == 1:
-        mistake_probs = np.expand_dims(mistake_probs, axis=0)
-        return_one = True
-
-    effectiveness = []
-    for this_mistake_probs in mistake_probs:
-        # It only takes one question to indicate a mistake, so use the maximum mistake probability to score this questions set
-        max_mistake_prob = max(this_mistake_probs)
-
-        # For mistake examples, we want the max mistake probability to be close to 1.0
-        if is_mistake:
-            effectiveness.append(max_mistake_prob)
-
-        # For non-mistake examples, we want the max mistake probability to be 0.0
-        else:
-            effectiveness.append(1.0 - max_mistake_prob)
+        turn_info_gains = []
+        for turn_idx in range(this_n_iterations):
         
-    if not return_one:
-        return effectiveness
-    else:
-        return effectiveness[0]
+            # Get information gain for this turn
+            last_turn_success_prob = results_dict['success_probs'][turn_idx - 1] if turn_idx > 0 else None
+            this_turn_success_prob = results_dict['success_probs'][turn_idx]
 
-def mask_verbs_and_nouns(text, nlp, mask_token):
-    nouns = []
-    for token in nlp(text):
-        if token.pos_.startswith("N") or (token.pos_.startswith("V") and token.text != "is"):
-            nouns.append(token.text)
-    for noun in nouns:
-        text = text.replace(noun, mask_token)
-    return text
+            last_turn_info = (1.0 - entropy(last_turn_success_prob)) if turn_idx > 0 else 0.0
+            this_turn_info = 1.0 - entropy(this_turn_success_prob)
+            turn_info_gain = this_turn_info - last_turn_info            
 
-def consistency_metrics_vqg(vqg_outputs: dict[Union[str, int], VQGOutputs]):
-    """
-    Calculates NLI-based consistency metrics for generated questions, including relevance and informativeness of questions.
-    """
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        llm_int8_threshold=6.0,
-        llm_int8_has_fp16_weight=False,
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-    )
+            turn_info_gains.append(turn_info_gain)
 
-    nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
-    nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
-    nlp = spacy.load("en_core_web_lg")
-
-    # This is just an evaluation at VQG time - base it on each individual procedure
-    procedure_descriptions = [vqg_output.procedure_description for vqg_output in vqg_outputs.values() for _ in vqg_output.questions]
-    hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
-    premises_expected = [f"{question} {answer.name}" for vqg_output in vqg_outputs.values() for question, answer in zip(vqg_output.questions, vqg_output.answers)]
-    premises_unexpected = [f"{question} {VQAResponse(1-answer.value).name}" for vqg_output in vqg_outputs.values() for question, answer in zip(vqg_output.questions, vqg_output.answers)]    
-    # premises_unexpected = [mask_verbs_and_nouns(question, nlp, nli_tokenizer.mask_token) + " " + nli_tokenizer.mask_token for output in vqg_outputs.values() for question, answer in zip(output.questions, output.answers)] # Create "unexpected" premises by masking out all nouns
-
-    probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
-    probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))
-
-    # Relevance: how much mistake probability changes based on answer to question (according to NLI model)
-    relevance = torch.abs(probs_expected[:, 0].unsqueeze(1) - probs_unexpected[:, 0].unsqueeze(1)).numpy()
-
-    # Informativeness: actual success probability for expected answer to question (according to NLI model)
-    informativeness = probs_expected[:, 1].unsqueeze(1).numpy()
-
-    # Combine by multiplying to form a "consistency" metric
-    consistency = relevance * informativeness
-
-    # Take mean informativeness for each question set
-    mean_relevance, mean_informativeness, mean_consistency = round(float(np.mean(relevance)), 3), round(float(np.mean(informativeness)), 3), round(float(np.mean(consistency)), 3)
-
-    metrics_by_output = {}
-    parallel_idx = 0
-    for key, vqg_output in vqg_outputs.items():
-        metrics_by_output[key] = {
-            "relevance": [round(float(relevance[parallel_idx]), 3), round(float(relevance[parallel_idx + 1]), 3)],
-            "informativeness": [round(float(informativeness[parallel_idx]), 3), round(float(informativeness[parallel_idx + 1]), 3)],
-            "consistency": [round(float(consistency[parallel_idx]), 3), round(float(consistency[parallel_idx + 1]), 3)],
-        }
-        parallel_idx += 2
-
-    return {
-        "relevance": mean_relevance,
-        "informativeness": mean_informativeness,
-        "consistency": mean_consistency,
-        "metrics_by_output": metrics_by_output,
-    }
-
-def consistency_metrics_vqg2vqa(vqg_outputs: dict[Union[str, int], VQGOutputs], mistake_labels: list[bool], vqa_outputs: list[list[list[VQAOutputs]]], frame_times: list[list[float]]):
-    """
-    Calculates NLI-based consistency metrics for generated questions, including relevance and informativeness of questions.
-    """
-    # TODO: use actual mistake probabilities from VQA rather than vqa_outputs? This would allow using adjusted probabilities from mistake detection strategies
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        llm_int8_threshold=6.0,
-        llm_int8_has_fp16_weight=False,
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-    )
-
-    nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
-    nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
-    nlp = spacy.load("en_core_web_lg")
-
-    # This is an evaluation at VQA inference time - incorporate mistake detection labels in informativeness
-    # TODO: should we also use predicted yes/no answers to judge this? This would require an overhaul as we'd have to average predictions over frames
-    procedure_descriptions = [vqg_outputs[question_output.procedure_id].procedure_description for example_outputs in vqa_outputs for frame_outputs in example_outputs for question_output in frame_outputs]
-    hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure in procedure_descriptions]
-    premises_expected = [f"{question_output.question} {question_output.predicted_answer.name}" for example_outputs in vqa_outputs for frame_outputs in example_outputs for question_output in frame_outputs]
-    premises_unexpected = [mask_verbs_and_nouns(question_output.question, nlp, nli_tokenizer.mask_token) + " " + nli_tokenizer.mask_token for example_outputs in vqa_outputs for frame_outputs in example_outputs for question_output in frame_outputs] # Create "unexpected" premises by masking out all nouns
-    premises_negated = [f"{question_output.question} {VQAResponse(1-question_output.predicted_answer.value).name}" for example_outputs in vqa_outputs for frame_outputs in example_outputs for question_output in frame_outputs]
-
-    probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
-    probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))
-
-    # Relevance: how much mistake probability changes based on answer to question (according to NLI model)
-    relevance = torch.abs(probs_expected[:, 0].unsqueeze(1) - probs_unexpected[:, 0].unsqueeze(1)).numpy()
-
-    # Informativeness: actual success probability for expected answer to question (according to NLI model)
-    # If mistake_labels were passed, calculate informativeness based on them;
-    # if a success example, we want high entailment probability from the expected answers,
-    # but if a mistake example, we want high contradiction probability from the unexpected answers
-    entailment_prob_indices = torch.tensor([0 if l else 1 for li, l in enumerate(mistake_labels) for _ in range(len(vqa_outputs[li])) for _ in range(2)])
-    informativeness = probs_expected[torch.arange(len([li for li, l in enumerate(mistake_labels) for _ in range(len(vqa_outputs[li])) for _ in range(2)])), entailment_prob_indices]
-    informativeness = informativeness.unsqueeze(1).numpy()
-
-    # Combine by multiplying to form a "consistency" metric
-    consistency = relevance * informativeness
-
-    # Aggregate metrics across frames in each example, using an exponential moving average to ensure earlier frames do not count as much
-    mean_relevance, mean_informativeness, mean_consistency = [], [], []
-    metrics_by_example = {}
-    parallel_idx = 0
-
-    mean_relevance = []
-    mean_informativeness = []
-    mean_consistency = []
-    for example_idx, example_outputs in enumerate(vqa_outputs):
-        example_relevance = []
-        example_informativeness = []
-        example_consistency = []
-        example_frame_times = frame_times[example_idx]
-        
-        for frame_outputs in example_outputs:
-            frame_relevance = []
-            frame_informativeness = []
-            frame_consistency = []
-            for question_output in frame_outputs:
-                frame_relevance.append(round(float(relevance[parallel_idx]), 3))
-                frame_informativeness.append(round(float(informativeness[parallel_idx]), 3))
-                frame_consistency.append(round(float(consistency[parallel_idx]), 3))
-                parallel_idx += 1
-
-            example_relevance.append(frame_relevance)
-            example_informativeness.append(frame_informativeness)
-            example_consistency.append(frame_consistency)
-        
-        metrics_by_example[example_outputs[0][0].example_id] = {
-            "relevance": example_relevance,
-            "informativeness": example_informativeness,
-            "consistency": example_consistency,
-        }
-
-        mean_relevance.append(
-            time_based_exponential_moving_average(
-                [max(frame_relevance) for frame_relevance in example_relevance], 
-                frame_times[example_idx]
-            )[-1]
-        )
-        mean_informativeness.append(
-            time_based_exponential_moving_average(
-                [max(frame_informativeness) for frame_informativeness in example_informativeness], 
-                frame_times[example_idx]
-            )[-1]
-        )
-        mean_consistency.append(
-            time_based_exponential_moving_average(
-                [max(frame_consistency) for frame_consistency in example_consistency], 
-                frame_times[example_idx]
-            )[-1]
-        )
-
-    mean_relevance = np.mean(mean_relevance)
-    mean_informativeness = np.mean(mean_informativeness)
-    mean_consistency = np.mean(mean_consistency)
+        dialog_info_gain.append(np.sum(turn_info_gains))
             
-    return {
-        "relevance": mean_relevance,
-        "informativeness": mean_informativeness,
-        "consistency": mean_consistency,
-        "metrics_by_example": metrics_by_example,
+    other_metrics = {
+        "n_iterations": np.mean(n_iterations),
+        "dialog_info_gain": np.mean(dialog_info_gain)
     }
 
-def consistency_metrics_caption(captions: list[list[str]], procedure_descriptions: list[str], mistake_labels: list[bool], example_ids: list[int], frame_times: list[list[float]]):
-    """
-    Calculates NLI-based consistency metrics for generated captions, including relevance and informativeness of captions.
-    """
-    assert len(captions) == len(procedure_descriptions) == len(mistake_labels) == len(example_ids) == len(frame_times), f"All inputs to consistency_metrics_caption must be the same length! (got {len(captions)} captions, {len(procedure_descriptions)} procedures, {len(mistake_labels)} labels, {len(example_ids)} example IDs, and {len(frame_times)} frame times lists)"
+    return accuracy_metrics_by_threshold, coherence_metrics, other_metrics
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        llm_int8_threshold=6.0,
-        llm_int8_has_fp16_weight=False,
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-    )
+def generate_3d_overview_graph(coherence_metrics, all_results_dicts, dataset, save_path, graph_name="base"):
+    """Generates a 3D scatter plot of decision error, example-level relevance, and example-level (reference-adjusted) informativeness for each example in results."""
+    accuracy = []
+    informativeness = []
+    relevance = []
 
-    nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
-    nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
-    nlp = spacy.load("en_core_web_lg")
-    
-    hypotheses = [NLI_HYPOTHESIS_TEMPLATE.format(procedure=procedure) for procedure_idx, procedure in enumerate(procedure_descriptions) for _ in range(len(captions[procedure_idx]))]
-    premises_expected = [caption for frames_captions in captions for caption in frames_captions]
-    premises_unexpected = [mask_verbs_and_nouns(caption, nlp, nli_tokenizer.mask_token) for frames_captions in captions for caption in frames_captions] # Create "unexpected" premises by masking out all nouns 
-    # premises_unexpected = [caption.replace(" is ", " is not ") for caption in captions]
+    example_ids = []
+    verbs = []
+    nouns = []
+    mistake_types = []
 
-    probs_expected = run_nli(nli_tokenizer, nli_model, list(zip(premises_expected, hypotheses)))
-    probs_unexpected = run_nli(nli_tokenizer, nli_model, list(zip(premises_unexpected, hypotheses)))
+    labels = [] # These have to be filled in later if we want them
+    graph_name = "base"    
+    print("Generating 3D scatter plot...")
+    for (example_id, output), ex_informativeness, ex_relevance in tqdm(zip(all_results_dicts.items(), coherence_metrics['metrics_by_example']['informativeness_marginal_ref_by_example'], coherence_metrics['metrics_by_example']['relevance_marginal_by_example']), total=len(all_results_dicts)):
+        target_success_prob = 0.0 if output['mistake'] else 1.0
+        actual_success_prob = output['success_probs'][output['final_turn']]
+            
+        accuracy.append(np.abs(target_success_prob - actual_success_prob))
+        relevance.append(ex_relevance)
+        informativeness.append(ex_informativeness)
+        
+        example_ids.append(example_id)
+        example = dataset.get_example_by_id(example_id, load_frames=False)
+        verbs.append(example.verb_noun_pair[0].split("_")[0])
+        nouns.append(example.verb_noun_pair[1].split("_")[0])
+        mistake_types.append(output['mistake_type'])
 
-    # Relevance: how much mistake probability changes based on information in caption
-    relevance = torch.abs(probs_expected[:, 0].unsqueeze(1) - probs_unexpected[:, 0].unsqueeze(1)).numpy()
+    matplotlib.use('Agg')
 
-    # Informativeness: actual success probability based on the caption 
-    # (we want this to be high for success examples, low for mistake examples, so look at entailment probability for success and contradiction probability for mistakes)
-    # TODO: is this comparable to VQG metric for informativeness? can we make the VQG metric more comparable?
-    entailment_prob_indices = torch.tensor([0 if l else 1 for li, l in enumerate(mistake_labels) for _ in captions[li]])
-    informativeness = probs_expected[torch.arange(len(hypotheses)), entailment_prob_indices].unsqueeze(1).numpy()
+    # Sample data
+    x = accuracy
+    y = relevance
+    z = informativeness
 
-    # Combine by multiplying to form a "consistency" metric
-    consistency = relevance * informativeness
+    x_norm = x
+    y_norm = y
+    z_norm = (np.array(z) + 1.0) / 2.0
 
-    # Aggregate metrics across frames in each example, using an exponential moving average to ensure earlier frames do not count as much
-    mean_relevance, mean_informativeness, mean_consistency = [], [], []
-    metrics_by_example = {}
-    parallel_idx = 0
-    for example_idx, example_id in enumerate(example_ids):
-        this_relevance = []
-        this_informativeness = []
-        this_consistency = []
-        for _ in frame_times[example_idx]:
-            this_relevance.append(round(float(relevance[parallel_idx]), 3))
-            this_informativeness.append(round(float(informativeness[parallel_idx]), 3))
-            this_consistency.append(round(float(consistency[parallel_idx]), 3))
-            parallel_idx += 1
-        mean_relevance.append(time_based_exponential_moving_average(this_relevance, frame_times[example_idx])[-1])
-        mean_informativeness.append(time_based_exponential_moving_average(this_informativeness, frame_times[example_idx])[-1])
-        mean_consistency.append(time_based_exponential_moving_average(this_consistency, frame_times[example_idx])[-1])
+    # Combine the normalized values to get the colors
+    colors = np.array([x_norm, y_norm, z_norm]).T
 
-        metrics_by_example[example_id] = {
-            "relevance": this_relevance,
-            "informativeness": this_informativeness,
-            "consistency": this_consistency,
-        }
-    mean_relevance = round(float(np.mean(mean_relevance)), 3)
-    mean_informativeness = round(float(np.mean(mean_informativeness)), 3)
-    mean_consistency = round(float(np.mean(mean_consistency)), 3)
+    fig = plt.figure(figsize=(10, 10))  # Increase the figure size
+    ax = fig.add_subplot(111, projection='3d')
 
-    return {
-        "relevance": mean_relevance,
-        "informativeness": mean_informativeness,
-        "consistency": mean_consistency,
-        "metrics_by_example": metrics_by_example,
-    }
+    # Create the scatter plot
+    ax.scatter(x, y, z, c=colors, s=150, edgecolor='k', linewidth=0.25, alpha=0.5)
+
+    # Data labels
+    if len(labels) > 0:
+        for i in range(len(x)):
+            ax.text(x[i], y[i], z[i] + 0.03, labels[i], size=8, zorder=1, color='k')
+
+    # Set custom z-axis tick labels
+    xy_ticks = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    ax.set_xticks(xy_ticks)
+    ax.set_yticks(xy_ticks)
+    ax.set_xticklabels([f'{tick:.1f}' for tick in xy_ticks], fontsize=12)
+    ax.set_yticklabels([f'{tick:.1f}' for tick in xy_ticks], fontsize=12)
+
+    z_ticks = [-1.0, -0.8, -0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    ax.set_zticks(z_ticks)
+    ax.set_zticklabels([f'{tick:.1f}' for tick in z_ticks], fontsize=12)
+            
+    # Set axis labels
+    ax.set_xlabel(f'Decision Error', labelpad=6, fontsize=20, fontweight='bold')
+    ax.set_ylabel(f'Relevance', labelpad=6, fontsize=20, fontweight='bold')
+    ax.set_zlabel(f'Informativeness', labelpad=6, fontsize=20, fontweight='bold')
+
+    ax.xaxis.label.set_color('#AA0000')
+    ax.yaxis.label.set_color('#00AA00')
+    ax.zaxis.label.set_color('#0000AA')
+
+    # Set axis limits
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_zlim(-1, 1)
+    ax.set_box_aspect(aspect=None, zoom=0.94)
+
+    plt.tight_layout()
+
+    # Display the plot
+    plt.show()
+    plt.savefig(os.path.join(save_path, f"3d_graph_{graph_name}.pdf"), bbox_inches='tight')

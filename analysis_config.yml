@@ -238,10 +238,10 @@
 #     - '#C100C1'
 #     - '#0000C1'
 #     - '#00C1C1'
-gpt4o:
-  outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/sstorks-gpt-4o/IterativeVQA_q10_ego4d_single_debug250_sstorks-gpt-4o_nohistory_12345/stopping_criteria_tuning/4_0.4_0.1/outputs_val.json"
-  result_names:
-    - "Likelihood"
-  colors:
-    - '#C10000'
+# gpt4o:
+#   outputs_fnames:
+#     - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/sstorks-gpt-4o/IterativeVQA_q10_ego4d_single_debug250_sstorks-gpt-4o_nohistory_12345/stopping_criteria_tuning/4_0.4_0.1/outputs_val.json"
+#   result_names:
+#     - "Likelihood"
+#   colors:
+#     - '#C10000'

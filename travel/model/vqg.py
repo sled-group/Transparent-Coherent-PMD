@@ -9,7 +9,7 @@ import yaml
 from travel import set_random_seed
 from travel.constants import CACHE_FREQUENCY, RANDOM_SEED, CONFIG_PATH
 from travel.data.vqg import VQGInputs, VQGOutputs, parse_vqg_outputs, save_vqg_outputs
-from travel.model.mistake_detection import NLI_BATCH_SIZE, NLI_RELEVANCE_DELTA
+from travel.model.nli import NLI_BATCH_SIZE, NLI_RELEVANCE_DELTA
 
 # TODO: may need to reform prompts for recipe steps to include more information from the recipe - previous steps, ingredients, or recipe name? - at least for CaptainCook4D
 def run_vqg(lm: TextGenerationPipeline, inputs: list[VQGInputs], input_ids: list[str], batch_size: int=8, save_path: Optional[str]=None, vqg_outputs: dict[str, VQGOutputs]={}, omit_failed_instances: bool=True) -> dict[str, Optional[VQGOutputs]]:

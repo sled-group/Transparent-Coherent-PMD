@@ -24,7 +24,7 @@ from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs,
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_encoder_decoder, compute_completion_log_likelihoods_vlm
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
-from travel.model.metrics import mistake_detection_metrics, question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, generate_tiered_metric_curves, entropy, compile_accuracy_and_coherence_metrics
+from travel.model.metrics import question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, compile_accuracy_and_coherence_metrics, generate_3d_overview_graph
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa_with_visual_filter
@@ -57,7 +57,6 @@ parser.add_argument("--resume_dir", type=str, help="Path to results directory fo
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
 parser.add_argument("--get_negated_success_probs", action="store_true", help="Pass this argument to calculate success probabilities for negated answers to questions.")
-parser.add_argument("--run_allturns_metrics", action="store_true", help="Pass this argument run an additional set of metrics without early stopping.")
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
 parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
 args = parser.parse_args()
@@ -65,8 +64,6 @@ args = parser.parse_args()
 assert torch.cuda.device_count() == 1, "Iterative VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
 if args.cache_vqa_frames and args.visual_filter_mode is None:
     print("Warning: --cache_vqa_frames only applies to frames modified by visual filters (configured through --visual_filter_mode and --visual_filter_strength).")
-if args.run_allturns_metrics and args.coherence_evaluation_strategy != "nli":
-    print("Warning: --run_allturns_metrics only works with NLI-based coherence evaluation. Will not run all-turns metrics.")
 
 # Get parallelization details from srun if any
 if "SLURM_PROCID" in os.environ and "SLURM_NPROCS" in os.environ:
@@ -794,34 +791,13 @@ if worker_index == 0:
                                                 mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)],
                                                 rephrase_batch_size=args.generation_batch_size)
 
-        if args.run_allturns_metrics:
-            # Calculate alternative metrics based on all iterations
-            all_chosen_questions = [question for results_dict in all_results_dicts.values() for question in range(len(results_dict['questions']))]
-            all_previous_questions = [[q for qi, q in enumerate(results_dict['questions'][:question_idx]) if results_dict['answers'][qi] != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(len(results_dict['questions']))]
-
-            label_answer_mapping = {0: "No", 1: "Yes"}
-            all_predicted_answers = [label_answer_mapping[np.argmax(answer_probs)] for results_dict in all_results_dicts.values() for answer_probs in range(len(results_dict['answer_probs']))]
-            all_previous_answers = [[a for a in results_dict['answers'][:question_idx] if a != "Unsure"] for results_dict in all_results_dicts.values() for question_idx in range(len(results_dict['answers']))]
-
-            all_coherence_metrics_allturns = question_coherence_metrics_nli(nli_tokenizer,
-                                                    nli_model,
-                                                    tokenizer,
-                                                    lm,                                         
-                                                    [procedure for results_dict, procedure in zip(all_results_dicts.values(), all_procedures) for _ in range(args.max_iterations)],
-                                                    all_chosen_questions,
-                                                    answers=all_predicted_answers,
-                                                    previous_questions=all_previous_questions,
-                                                    previous_answers=all_previous_answers,
-                                                    mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(args.max_iterations)],
-                                                    rephrase_batch_size=args.generation_batch_size)
-
     elif args.coherence_evaluation_strategy == "vlm":
         all_coherence_metrics = question_coherence_metrics_vlm(all_success_probs, all_success_probs_negated)
     else:
         raise NotImplementedError(f"Coherence evaluation strategy {args.coherence_evaluation_strategy} not supported yet.")
 
     # Get accuracy and coherence metrics
-    accuracy_metrics_by_threshold, coherence_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
+    accuracy_metrics_by_threshold, coherence_metrics, other_metrics = compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_metrics, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
     coherence_metrics_by_threshold = coherence_metrics['metrics_by_threshold']
 
     # Save accuracy and coherence metrics
@@ -835,38 +811,23 @@ if worker_index == 0:
 
     json.dump(all_coherence_metrics, 
             open(os.path.join(this_results_dir, f"metrics_coherence_raw_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
-            indent=4)            
+            indent=4)        
+
+    json.dump(other_metrics, 
+            open(os.path.join(this_results_dir, f"metrics_other_{args.eval_partition}.json"), "w"),
+            indent=4)        
 
     # Generate DET curves for accuracy
     generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
 
-    # Get all-turns form of metrics and save them
-    if args.coherence_evaluation_strategy == 'nli' and args.run_allturns_metrics:
-        all_probs_allturns = [results_dict['success_probs'][-1] for results_dict in all_results_dicts.values()]
-        accuracy_metrics_by_threshold_allturns, coherence_metrics_allturns = compile_accuracy_and_coherence_metrics(all_labels, all_probs_allturns, all_coherence_metrics_allturns, all_results_dicts, MISTAKE_DETECTION_THRESHOLDS, args.unsure_range)
+    # Generate 3D scatter plot of decision error, relevance, and informativeness
+    graph_name = args.question_selection_strategy
+    if args.n_icl_demonstrations > 0:
+        graph_name += f"_icl{args.n_icl_demonstrations}"
+    if args.vqg_adapter_path is not None:
+        graph_name += "_dpo"
+    generate_3d_overview_graph(coherence_metrics, all_results_dicts, dataset, this_results_dir, graph_name=graph_name)
 
-        allturns_results_dir = os.path.join(this_results_dir, "allturns")
-        if not os.path.exists(allturns_results_dir):
-            os.makedirs(allturns_results_dir)
-        json.dump(accuracy_metrics_by_threshold_allturns, 
-                open(os.path.join(allturns_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
-                indent=4)
-        
-        json.dump(coherence_metrics_allturns, 
-                open(os.path.join(allturns_results_dir, f"metrics_coherence_{args.coherence_evaluation_strategy}_{args.eval_partition}.json"), "w"),
-                indent=4)
-        
-        json.dump({k: v | {"final_turn": args.max_iterations - 1} for k, v in all_results_dicts.items()}, 
-                open(os.path.join(allturns_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
-                indent=4)
-
-    # Generate curves for all metrics by threshold
-    generate_tiered_metric_curves(MISTAKE_DETECTION_THRESHOLDS, 
-                                  [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                  [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
-                                  [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                                  [os.path.join(this_results_dir, f"graph_tiered_metrics_{args.coherence_evaluation_strategy}_{args.eval_partition}.pdf")])
-    
     # Save args and config
     shutil.copy(CONFIG_PATH, os.path.join(this_results_dir, "config.yml"))
     json.dump(args.__dict__, open(os.path.join(this_results_dir, "args.json"), "w"), indent=4)
