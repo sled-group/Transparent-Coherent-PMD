@@ -68,7 +68,7 @@ if not args.load_coherence_metrics:
     nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
     nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
-cand_max_iterations = [2, 4, 6, 8, 10]
+cand_max_iterations = [10] # [2, 4, 6, 8, 10]
 cand_early_stop_delta = [0.05, 0.1, 0.2, 0.4]
 cand_confident_range = [0.025, 0.05, 0.1, 0.2]
 cand_criteria = product(cand_max_iterations, cand_early_stop_delta, cand_confident_range)
