@@ -743,6 +743,9 @@ if worker_index == 0:
 
     performance_by_criteria = {}
 
+    # print("Tuning stopping criteria over combinations:")
+    # pprint(list(cand_criteria))
+    
     for mi, esd, cd in tqdm(cand_criteria, desc="tuning stopping criteria"):
         all_probs = []
         all_labels = []
@@ -782,7 +785,7 @@ if worker_index == 0:
             parallel_idx = 0
             this_metrics = []
             for results_dict in all_results_dicts.values():
-                for question_idx in range(10):
+                for question_idx in range(args.max_iterations):
 
                     # Skip over the turns we don't want for this set of criteria
                     if question_idx > results_dict['final_turn']:
