@@ -5,7 +5,8 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import os
 from pprint import pprint
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, auc
+from scipy.stats import spearmanr
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, auc, brier_score_loss
 import torch
 from tqdm import tqdm
 from typing import Union, Optional, Any
@@ -13,6 +14,7 @@ from typing import Union, Optional, Any
 from travel.model.nli import run_nli, NLI_HYPOTHESIS_TEMPLATE
 from travel.model import simple_lm_prompt
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
+from travel.model.utils import expected_calibration_error
 
 def mistake_detection_metrics(labels: list[bool], preds: list[bool]) -> dict[str, float]:
     """Accuracy metrics for mistake detection."""
@@ -686,6 +688,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
 
     n_iterations = []
     dialog_info_gain = []
+    decision_errors = []
     for results_dict in all_results_dicts.values():
         this_n_iterations = results_dict['final_turn'] + 1
         n_iterations.append(this_n_iterations)
@@ -704,10 +707,47 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
             turn_info_gains.append(turn_info_gain)
 
         dialog_info_gain.append(np.sum(turn_info_gains))
-            
+
+        mistake_prob = 1.0 - results_dict['success_probs'][results_dict['final_turn']]
+        decision_errors.append(mistake_prob if not results_dict['mistake'] else 1.0 - mistake_prob)
+
+    # Get ECE with 10 bins            
+    ece_probs = (1.0 - np.expand_dims(np.array(all_probs), 1), np.expand_dims(np.array(all_probs), 1))
+    ece_probs = np.concatenate(ece_probs, axis=1)
+    ece = expected_calibration_error(ece_probs, [1 if l else 0 for l in all_labels])
+
+    # Get Spearman correlations between decision error and relevance/informativeness
+    all_rel = coherence_metrics['metrics_by_example']['relevance_marginal_by_example']
+    all_inf = coherence_metrics['metrics_by_example']['informativeness_marginal_ref_by_example']
+    spearman_error_rel = spearmanr(all_rel, decision_errors)
+    spearman_error_inf = spearmanr(all_inf, decision_errors)
+
+    # Selective prediction analysis
+    penalty = 1
+    thresholds = np.linspace(0.0, 1.0, 101) # [0.0, 0.01, 0.02, 0.03, ..., 0.98, 0.99, 1.0]
+    thresholds = [t for t in thresholds if t >= 0.5] # [0.50, 0.51, ..., 0.98, 0.99, 1.0] (only keep thresholds at least 0.5 because every class is predicted with at least 0.5 likelihood in binary classification)
+
+    coverages, risks, eff_reliabilities, sp_recalls = [], [], [], []
+    for t in tqdm(thresholds, desc="thresholds"):
+        c, r, e, spr, _ = calculate_abstention_metrics(all_probs, [1 if l else 0 for l in all_labels], t, penalty)
+        coverages.append(c)
+        risks.append(r)
+        eff_reliabilities.append(e)
+        sp_recalls.append(spr)    
+
+    coverage_risk_sorted = sorted([(c, r) for c, r in zip(coverages, risks)], key=lambda x: x[0])
+    coverage_sorted = [t[0] for t in coverage_risk_sorted]
+    risk_sorted = [t[1] for t in coverage_risk_sorted]
+    aurc = auc(coverage_sorted, risk_sorted)
+
     other_metrics = {
         "n_iterations": np.mean(n_iterations),
-        "dialog_info_gain": np.mean(dialog_info_gain)
+        "dialog_info_gain": np.mean(dialog_info_gain),
+        "brier_score": float(brier_score_loss([1 if l else 0 for l in all_labels], all_probs, pos_label=1)),
+        "ece10": float(ece),
+        "spearman_relevance_error": [float(spearman_error_rel.statistic), float(spearman_error_rel.pvalue)],
+        "spearman_informativeness_error": [float(spearman_error_inf.statistic), float(spearman_error_inf.pvalue)],
+        "aurc": float(aurc),
     }
 
     return accuracy_metrics_by_threshold, coherence_metrics, other_metrics
