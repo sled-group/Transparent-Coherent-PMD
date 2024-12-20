@@ -68,7 +68,7 @@ if not args.load_coherence_metrics:
     nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
     nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
-cand_max_iterations = [2, 4, 6, 8, 10]
+cand_max_iterations = [10] # [2, 4, 6, 8, 10]
 cand_early_stop_delta = [0.05, 0.1, 0.2, 0.4]
 cand_confident_range = [0.025, 0.05, 0.1, 0.2]
 cand_criteria = product(cand_max_iterations, cand_early_stop_delta, cand_confident_range)
@@ -81,7 +81,7 @@ if args.load_coherence_metrics:
 
 performance_by_criteria = {}
 
-for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
+for mi, esd, cd in tqdm(cand_criteria, desc="tuning stopping criteria"):
     all_probs = []
     all_labels = []
     all_procedures = []
@@ -164,7 +164,7 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
     this_performance = performance_by_criteria[str((mi, esd, cd))]["verifiability"]
     if best_performance is None or this_performance > best_performance:
         best_performance = this_performance
-        best_metrics = (accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_threshold, deepcopy(all_results_dicts))
+        best_metrics = (accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_threshold, other_metrics, deepcopy(all_results_dicts))
         best_criteria = (mi, esd, cd)
 
     # Save info for this combo
@@ -191,7 +191,7 @@ for mi, esd, cd in tqdm(cand_criteria, desc="candidate criteria"):
             open(os.path.join(subdir_path, f"metrics_other_val.json"), "w"),
             indent=4)              
 
-accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold, all_results_dicts = best_metrics
+accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold, other_metrics, all_results_dicts = best_metrics
 
 # Save accuracy and coherence metrics and other outputs for best combo
 json.dump(all_results_dicts, 

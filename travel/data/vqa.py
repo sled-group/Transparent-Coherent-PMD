@@ -10,30 +10,12 @@ import uuid
 
 from travel.data.mistake_detection import MistakeDetectionTasks
 
-COMPLETION_PROMPT_TEMPLATES = {
-    Blip2ForConditionalGeneration: "A photo of",
-    InstructBlipForConditionalGeneration: "A photo of",
-    Kosmos2ForConditionalGeneration: "<grounding> A photo of",
-    LlavaForConditionalGeneration: 'USER: <image>\nWhat is happening in this photo? ASSISTANT: This is a photo of',
-    LlavaNextForConditionalGeneration: '[INST] <image>\nWhat is shown in this image? [/INST] This is a photo of',
-}
-
-SUCCESSVQA_QUESTION_TEMPLATE = 'The current goal is "{step}". Has the person successfully finished doing this?'
-
 VQA_PROMPT_TEMPLATES = {
     Blip2ForConditionalGeneration: "Question: {question} Answer:",
     InstructBlipForConditionalGeneration: "Question: {question} Answer: ",
     Kosmos2ForConditionalGeneration: "<grounding> Question: {question} Answer: ",
     LlavaForConditionalGeneration: "USER: <image>\n{question} ASSISTANT: ",
     LlavaNextForConditionalGeneration: "[INST] <image>\n{question} [/INST]",
-}
-
-CAPTION_VQA_PROMPT_TEMPLATES = {
-    LlavaForConditionalGeneration: "USER: <image>\nWhat is happening in this photo? ASSISTANT: {caption} USER: {question} ASSISTANT: ",
-}
-
-VQG2VQA2SUCCESSVQA_PROMPT_TEMPLATES = {
-    LlavaForConditionalGeneration: "USER: <image>\n{question1} ASSISTANT: {answer1} USER: {question2} ASSISTANT: {answer2} USER: " + f"{SUCCESSVQA_QUESTION_TEMPLATE} ASSISTANT: "
 }
 
 # Important prompt components for iterative VQA
@@ -111,10 +93,7 @@ ASSISTANT_END_TOKENS = {
 }
 
 IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to gather information about the state of the scene, then use it to determine whether the person has successfully completed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions. I will try to ask short and simple questions about physical states and locations that are possible to observe from the photo.'
-IVQA_PREAMBLE_TOPDOWN = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to determine whether the person has successfully completed the procedure, then explain why based on information about the scene. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions.'
-
 IVQA_SUCCESS_QUESTION = 'Based on the image and above information, has the procedure "{procedure}" been successfully completed?'
-IVQA_SUCCESS_QUESTION_TOPDOWN = 'Based on the image, has the procedure "{procedure}" been successfully completed?'
 
 class VQAResponse(int, Enum):
     No = 0
