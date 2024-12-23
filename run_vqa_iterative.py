@@ -177,9 +177,15 @@ question_generation_constraints = [
 ]
 yes_no_q_tokens = [
     vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[0], 
+    # vlm_processor.tokenizer("Was it blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Are they blue?", add_special_tokens=False).input_ids[0], 
+    # vlm_processor.tokenizer("Were they blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Does it look blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Do they look blue?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
+    # vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
 ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
 bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]], 
@@ -869,6 +875,18 @@ if worker_index == 0:
     json.dump(other_metrics, 
             open(os.path.join(this_results_dir, f"metrics_other_{args.eval_partition}.json"), "w"),
             indent=4)        
+    
+    # Grab metrics that go in results tables
+    table_metrics = {
+        "accuracy": accuracy_metrics_by_threshold['best_metrics']['accuracy'],
+        "relevance": coherence_metrics['relevance_marginal'],
+        "informativeness": coherence_metrics['informativeness_marginal'],
+        "n_iterations": other_metrics['n_iterations'],
+        "info_gain": other_metrics['dialog_info_gain'],
+    }
+    json.dump(table_metrics, 
+              open(os.path.join(this_results_dir, f"metrics_table_{args.eval_partition}.json"), "w"),
+              indent=4)
 
     # Generate DET curves for accuracy
     generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
