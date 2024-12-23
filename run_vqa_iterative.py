@@ -736,7 +736,7 @@ if worker_index == 0:
                                             rephrase_batch_size=args.generation_batch_size)
 
     # Tune stopping criteria (early stop delta and confident range) to maximize accuracy and coherence of explanations
-    tuning_results_dir = os.path.join(this_results_dir, "stopping_criteria")
+    tuning_results_dir = os.path.join(this_results_dir, "stopping_criteria_tuning")
     if not os.path.exists(tuning_results_dir):
         os.makedirs(tuning_results_dir)
 
