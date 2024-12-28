@@ -60,7 +60,7 @@ srun --cpus-per-task 4 poetry run torchrun --nnodes=4 --nproc_per_node=1 --rdzv-
 # Iterate over all combinations of dpo_beta and learning_rate
 for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
     # Define a unique run_id for this job
-    run_id = f"{timestamp}_beta{dpo_beta}_lr{learning_rate}"
+    run_id = f"{timestamp}/beta{dpo_beta}_lr{learning_rate}"
     
     # Fill in the template with specific values for this job
     slurm_script = slurm_script_template.format(account_name=args.account_name,
