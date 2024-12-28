@@ -39,7 +39,8 @@ parser.add_argument("--vqg_adapter_path", type=str, help="Name or path to adapte
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
 parser.add_argument("--max_iterations", type=int, default=10, help="Maximum number of questions to generate before making a final mistake detection decision.")
-parser.add_argument("--length_penalty", type=float, default=-1.0, help="Exponential length penalty for generation (> 0.0 promotes long sequences, < 0.0 promotes short sequences).")
+parser.add_argument("--length_penalty", type=float, default=1.0, help="Exponential length penalty for generation (> 0.0 promotes long sequences, < 0.0 promotes short sequences).")
+parser.add_argument("--restrict_q_words", action="store_true", help="Pass this argument to restrict first words of generated questions to 'is', 'are', 'do', and 'does'.")
 parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)), help="Number of beams in beam search.")
 parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
@@ -85,6 +86,10 @@ if args.resume_dir is None:
     this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}"
     this_results_dir += f"_beam{args.num_beams}-{args.num_return_sequences}"
+    if args.length_penalty != 1.0:
+        this_results_dir += f"_lp{args.length_penalty}"
+    if args.restrict_q_words:
+        this_results_dir += "_qw"
     this_results_dir += f"_{args.question_selection_strategy}"
     if args.condition_questions_with_frames:
         this_results_dir += f"_cqframe"    
@@ -175,18 +180,26 @@ question_generation_constraints = [
         [vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[-1]]
     ),
 ]
-yes_no_q_tokens = [
-    vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[0], 
-    # vlm_processor.tokenizer("Was it blue?", add_special_tokens=False).input_ids[0],
-    vlm_processor.tokenizer("Are they blue?", add_special_tokens=False).input_ids[0], 
-    # vlm_processor.tokenizer("Were they blue?", add_special_tokens=False).input_ids[0],
-    vlm_processor.tokenizer("Does it look blue?", add_special_tokens=False).input_ids[0],
-    vlm_processor.tokenizer("Do they look blue?", add_special_tokens=False).input_ids[0],
-    # vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
-    # vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
-    # vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
-    # vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
-]
+if not args.restrict_q_words:
+    yes_no_q_tokens = [
+        vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[0], 
+        vlm_processor.tokenizer("Was it blue?", add_special_tokens=False).input_ids[0],
+        vlm_processor.tokenizer("Are they blue?", add_special_tokens=False).input_ids[0], 
+        vlm_processor.tokenizer("Were they blue?", add_special_tokens=False).input_ids[0],
+        vlm_processor.tokenizer("Does it look blue?", add_special_tokens=False).input_ids[0],
+        vlm_processor.tokenizer("Do they look blue?", add_special_tokens=False).input_ids[0],
+        vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
+        vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
+        vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
+        vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
+    ]
+else:
+    yes_no_q_tokens = [
+        vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[0], 
+        vlm_processor.tokenizer("Are they blue?", add_special_tokens=False).input_ids[0], 
+        vlm_processor.tokenizer("Does it look blue?", add_special_tokens=False).input_ids[0],
+        vlm_processor.tokenizer("Do they look blue?", add_special_tokens=False).input_ids[0],
+    ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
 bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]], 
                  vlm_processor.tokenizer("successful", add_special_tokens=False).input_ids, 
@@ -736,7 +749,7 @@ if worker_index == 0:
                                             rephrase_batch_size=args.generation_batch_size)
 
     # Tune stopping criteria (early stop delta and confident range) to maximize accuracy and coherence of explanations
-    tuning_results_dir = os.path.join(this_results_dir, "stopping_criteria")
+    tuning_results_dir = os.path.join(this_results_dir, "stopping_criteria_tuning")
     if not os.path.exists(tuning_results_dir):
         os.makedirs(tuning_results_dir)
 
