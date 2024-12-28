@@ -721,6 +721,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
     all_inf = coherence_metrics['metrics_by_example']['informativeness_marginal_ref_by_example']
     spearman_error_rel = spearmanr(all_rel, decision_errors)
     spearman_error_inf = spearmanr(all_inf, decision_errors)
+    spearman_rel_inf = spearmanr(all_rel, all_inf)
 
     # Selective prediction analysis
     penalty = 1
@@ -747,6 +748,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
         "ece10": float(ece),
         "spearman_relevance_error": [float(spearman_error_rel.statistic), float(spearman_error_rel.pvalue)],
         "spearman_informativeness_error": [float(spearman_error_inf.statistic), float(spearman_error_inf.pvalue)],
+        "spearman_relevance_informativeness": [float(spearman_rel_inf.statistic), float(spearman_rel_inf.pvalue)],
         "aurc": float(aurc),
     }
 
