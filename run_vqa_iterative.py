@@ -179,15 +179,15 @@ question_generation_constraints = [
 ]
 yes_no_q_tokens = [
     vlm_processor.tokenizer("Is it blue?", add_special_tokens=False).input_ids[0], 
-    # vlm_processor.tokenizer("Was it blue?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Was it blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Are they blue?", add_special_tokens=False).input_ids[0], 
-    # vlm_processor.tokenizer("Were they blue?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Were they blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Does it look blue?", add_special_tokens=False).input_ids[0],
     vlm_processor.tokenizer("Do they look blue?", add_special_tokens=False).input_ids[0],
-    # vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
-    # vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
-    # vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
-    # vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Did they look blue?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Has the oven turned on?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Have the eggs boiled?", add_special_tokens=False).input_ids[0],
+    vlm_processor.tokenizer("Had the eggs boiled?", add_special_tokens=False).input_ids[0],
 ]
 begin_suppress_tokens = [t for t in list(range(vlm_processor.tokenizer.vocab_size)) if t not in yes_no_q_tokens]
 bad_words_ids = [[vlm_processor.tokenizer("Yes or no?", add_special_tokens=False).input_ids[1]], 
