@@ -39,7 +39,7 @@ parser.add_argument("--vqg_adapter_path", type=str, help="Name or path to adapte
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
 parser.add_argument("--max_iterations", type=int, default=10, help="Maximum number of questions to generate before making a final mistake detection decision.")
-parser.add_argument("--length_penalty", type=float, default=-1.0, help="Exponential length penalty for generation (> 0.0 promotes long sequences, < 0.0 promotes short sequences).")
+parser.add_argument("--length_penalty", type=float, default=1.0, help="Exponential length penalty for generation (> 0.0 promotes long sequences, < 0.0 promotes short sequences).")
 parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)), help="Number of beams in beam search.")
 parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
@@ -85,6 +85,8 @@ if args.resume_dir is None:
     this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}"
     this_results_dir += f"_beam{args.num_beams}-{args.num_return_sequences}"
+    if args.length_penalty != 1.0:
+        this_results_dir += f"_lp{args.length_penalty}"
     this_results_dir += f"_{args.question_selection_strategy}"
     if args.condition_questions_with_frames:
         this_results_dir += f"_cqframe"    
