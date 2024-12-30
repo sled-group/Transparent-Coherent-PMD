@@ -324,6 +324,15 @@ class GPT:
         print(rephrased_texts)
         print("===================")
         return filtered_out_prompts, rephrased_texts
+    
+    def rephrase_past_questions(self, questions: list[str], answers: list[str], rephrased_questions: dict):
+        rephrased_texts = []
+        for question, answer in zip(questions, answers):
+            # Index to pick either the yes rephrased or no rephrased version from the dict
+            ans_index = 0 if answer == "Yes" else 1
+            rephrased_texts.append(rephrased_questions[question][ans_index])
+        return rephrased_texts
+
 
     def question_coherence_metrics_nli_GPT(self, nli_tokenizer, nli_model, procedures: list[str], questions: list[str], 
                                     answers: Optional[list[str]]=None, 
@@ -381,14 +390,18 @@ class GPT:
         if previous_questions:
             assert len(previous_questions) == len(previous_answers), "Expected same number of questions and answers!"
 
+            # Construct dict of the form dict["question"] = ("rephrased question with yes", "rephrased question with no")
+            # Based on the previous two rephrased run with GPT, used to construct the rephrased previous questions array
+            rephrased_questions = {}
+            for question, r_yes, r_no in zip(questions, rephrased_yes, rephrased_no):
+                rephrased_questions[question] = (r_yes, r_no)
+
             # Flatten and rephrase past questions and answers into statements, then un-flatten
-            filtered_out_prompts, rephrased_past = self.rephrase_question_answer_GPT(
+            rephrased_past = self.rephrase_past_questions(
                 [question for p_questions in previous_questions for question in p_questions],
                 [answer for p_answers in previous_answers for answer in p_answers],
-                temperature,
-                max_tokens
+                rephrased_questions
             )
-            all_filtered_out_prompts += filtered_out_prompts
             parallel_idx = 0
             new_rephrased_past = []
             for p_questions in previous_questions:
@@ -398,6 +411,16 @@ class GPT:
                     parallel_idx += 1
                 new_rephrased_past.append(this_rephrased_past)
             rephrased_past = new_rephrased_past
+
+            #TODO: Remove
+            print("\n\n\n coherence rephrasing with dict")
+            print("\n\nquestions:", questions)
+            print("\n\nanswers:", answers)
+            print("\n\nrephrased_yes:", rephrased_yes)
+            print("\n\nrephrased_no:", rephrased_no)
+            print("\n\npast_questions:", previous_questions)
+            print("\n\nprevious_answers:", previous_answers)
+            print("\n\npast rephrased:", rephrased_past)
 
             premise_past = [" ".join(past_qs_rephrased) for past_qs_rephrased in rephrased_past]
             
