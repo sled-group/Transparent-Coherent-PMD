@@ -1,5 +1,7 @@
 from io import BytesIO
 from PIL import Image
+import os
+import pickle
 from typing import Optional
 import base64
 import torch
@@ -245,7 +247,7 @@ class GPT:
         return all_filtered_out, all_probs
 
 
-    def rephrase_question_answer_GPT(self, questions: list[str], answers: list[str], temperature: float=0, max_tokens: int=20):
+    def rephrase_question_answer_GPT(self, questions: list[str], answers: list[str], temperature: float=0, max_tokens: int=20, cache_path: str="", cache_frequency: int=1):
         assert all(a == "Yes" or a == "No" for a in answers), "Expected all answers to be 'Yes' or 'No', but got " + str(answers)
         examples = [
             "Question: Is there a bowl on the table?\nAnswer: Yes\nStatement: There is a bowl on the table.",
@@ -262,10 +264,16 @@ class GPT:
         prompts = ["\n\n".join(examples) + f"\n\nQuestion: {question}\nAnswer: {answer}\nStatement: " for question, answer in zip(questions, answers)]
         rephrased_texts = []
         filtered_out_prompts = []
+        if os.path.exists(cache_path):
+            filtered_out_prompts, rephrased_texts = pickle.load(open(cache_path, "rb"))
+        start_idx = len(rephrased_texts)
         for idx, prompt in tqdm(enumerate(prompts), desc="rephrasing"):
             filtered_out, api_response = self.prompt_gpt(prompt_text=prompt,
                                                         temperature=temperature,
                                                         max_tokens=max_tokens)
+            # If already in cahce, skip
+            if idx < start_idx:
+                continue
             backup_text = questions[idx] + " " + answers[idx] + "."
             text = api_response.choices[0].message.content if not filtered_out else backup_text
             if text == None:
@@ -289,6 +297,9 @@ class GPT:
             rephrased_texts.append(text)
             if filtered_out:
                 filtered_out_prompts.append(prompt)
+            if idx % cache_frequency == 0 and idx != 0:
+                pickle.dump((filtered_out_prompts, rephrased_texts), open(cache_path, "wb"))
+        pickle.dump((filtered_out_prompts, rephrased_texts), open(cache_path, "wb"))
         rephrased_texts = [text.split(".")[0] + "." for text in rephrased_texts]
         rephrased_texts = [text.strip() for text in rephrased_texts]
         return filtered_out_prompts, rephrased_texts
@@ -341,7 +352,9 @@ class GPT:
                                     mistake_labels: Optional[list[bool]]=None,
                                     temperature: float=0.0,
                                     max_tokens: int=20, 
-                                    rephrase_success=False):
+                                    rephrase_success=False,
+                                    cache_dir="",
+                                    rephrase_cache_frequency: int=1):
         """
         Calculates coherence metrics for candidate questions about procedures in iterative VQA.
         Uses GPT as LM for rephrasing.
@@ -361,9 +374,11 @@ class GPT:
             all_filtered_out_prompts += filtered_out_prompts
 
         # Rephrase question with a yes and no answer as statements to compare their entailment probability of success
-        filtered_out_prompts, rephrased_yes = self.rephrase_question_answer_GPT(questions, ["Yes"] * len(questions), temperature, max_tokens)
+        cache_path_yes = os.path.join(cache_dir, f"cached_rephrase_outputs_yes.pkl")
+        cache_path_no = os.path.join(cache_dir, f"cached_rephrase_outputs_no.pkl")
+        filtered_out_prompts, rephrased_yes = self.rephrase_question_answer_GPT(questions, ["Yes"] * len(questions), temperature, max_tokens, cache_path_yes, rephrase_cache_frequency)
         all_filtered_out_prompts += filtered_out_prompts
-        filtered_out_prompts, rephrased_no = self.rephrase_question_answer_GPT(questions, ["No"] * len(questions), temperature, max_tokens)
+        filtered_out_prompts, rephrased_no = self.rephrase_question_answer_GPT(questions, ["No"] * len(questions), temperature, max_tokens, cache_path_no, rephrase_cache_frequency)
         all_filtered_out_prompts += filtered_out_prompts
         metrics['rephrased_questions_yes'] = rephrased_yes
         metrics['rephrased_questions_no'] = rephrased_no
@@ -411,16 +426,6 @@ class GPT:
                     parallel_idx += 1
                 new_rephrased_past.append(this_rephrased_past)
             rephrased_past = new_rephrased_past
-
-            #TODO: Remove
-            print("\n\n\n coherence rephrasing with dict")
-            print("\n\nquestions:", questions)
-            print("\n\nanswers:", answers)
-            print("\n\nrephrased_yes:", rephrased_yes)
-            print("\n\nrephrased_no:", rephrased_no)
-            print("\n\npast_questions:", previous_questions)
-            print("\n\nprevious_answers:", previous_answers)
-            print("\n\npast rephrased:", rephrased_past)
 
             premise_past = [" ".join(past_qs_rephrased) for past_qs_rephrased in rephrased_past]
             
