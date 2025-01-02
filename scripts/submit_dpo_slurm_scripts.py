@@ -14,7 +14,7 @@ parser.add_argument("--dpo_beta", nargs='+', type=float, default=[0.05, 0.1, 0.5
                     help="List of --dpo_beta values to use, separated by spaces. Default: [0.05, 0.1, 0.5]")
 parser.add_argument("--learning_rate", nargs='+', type=float, default=[1e-6, 2.5e-6, 5e-6, 7.5e-6, 1e-5],
                     help="List of --learning_rate values to use, separated by spaces. Default: [1e-6, 2.5e-6, 5e-6, 7.5e-6, 1e-5]")
-
+parser.add_argument("--timestamp_suffix", type=str, default=None, help="This argument will be concatenated to the subdirectory where DPO results are saved.")
 
 # Parse arguments
 args = parser.parse_args()
@@ -60,7 +60,10 @@ srun --cpus-per-task 4 poetry run torchrun --nnodes=4 --nproc_per_node=1 --rdzv-
 # Iterate over all combinations of dpo_beta and learning_rate
 for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
     # Define a unique run_id for this job
-    run_id = f"{timestamp}/beta{dpo_beta}_lr{learning_rate}"
+    if args.timestamp_suffix is not None:
+        run_id = f"{timestamp}/beta{dpo_beta}_lr{learning_rate}"
+    else:
+        run_id = f"{timestamp}_{args.timestamp_suffix}/beta{dpo_beta}_lr{learning_rate}"
     
     # Fill in the template with specific values for this job
     slurm_script = slurm_script_template.format(account_name=args.account_name,
