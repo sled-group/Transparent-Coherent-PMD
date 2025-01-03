@@ -58,6 +58,7 @@ srun --cpus-per-task 4 poetry run torchrun --nnodes=4 --nproc_per_node=1 --rdzv-
 """
 
 # Iterate over all combinations of dpo_beta and learning_rate
+first_job = True
 for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
     # Define a unique run_id for this job
     if args.timestamp_suffix is not None:
@@ -73,6 +74,12 @@ for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
                                                 train_data_path=args.train_data_path,
                                                 val_data_path=args.val_data_path,
                                                 vlm_name=args.vlm_name)
+    
+    # Only the first submitted job will be responsible for preprocessing data
+    if not first_job:
+        slurm_script += " --wait_for_data"
+    else:
+        first_job = True
     
     # Write the script to the output directory
     script_filename = os.path.join(output_dir, f"slurm_job_{run_id.replace('/','_')}.sh")
