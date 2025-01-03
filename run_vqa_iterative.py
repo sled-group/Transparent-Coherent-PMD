@@ -845,23 +845,23 @@ if worker_index == 0:
         if not os.path.exists(subdir_path):
             os.makedirs(subdir_path)
         json.dump(all_results_dicts, 
-                open(os.path.join(subdir_path, "outputs_val.json"), "w"),
+                open(os.path.join(subdir_path, f"outputs_{args.eval_partition}.json"), "w"),
                 indent=4)    
         
         json.dump(accuracy_metrics_by_threshold, 
-                open(os.path.join(subdir_path, "metrics_accuracy_val.json"), "w"),
+                open(os.path.join(subdir_path, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
                 indent=4)
 
         json.dump(coherence_metrics, 
-                open(os.path.join(subdir_path, "metrics_coherence_nli_val.json"), "w"),
+                open(os.path.join(subdir_path, f"metrics_coherence_nli_{args.eval_partition}.json"), "w"),
                 indent=4)
 
         json.dump(readjusted_all_coherence_metrics, 
-                open(os.path.join(subdir_path, "metrics_coherence_raw_nli_val.json"), "w"),
+                open(os.path.join(subdir_path, f"metrics_coherence_raw_nli_{args.eval_partition}.json"), "w"),
                 indent=4)          
 
         json.dump(other_metrics, 
-                open(os.path.join(subdir_path, f"metrics_other_val.json"), "w"),
+                open(os.path.join(subdir_path, f"metrics_other_{args.eval_partition}.json"), "w"),
                 indent=4)              
 
     # Save tuning results
