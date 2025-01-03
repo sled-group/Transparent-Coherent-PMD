@@ -876,6 +876,10 @@ if worker_index == 0:
     # Grab best metrics and save them in main results directory
     accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold, other_metrics, all_results_dicts = best_metrics
 
+    json.dump(all_results_dicts, 
+            open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
+            indent=4)
+
     json.dump(accuracy_metrics_by_threshold, 
             open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
             indent=4)
