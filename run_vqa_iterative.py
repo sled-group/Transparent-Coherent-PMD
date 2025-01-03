@@ -34,7 +34,7 @@ from travel.model.vqg import cleanup_generated_question
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default=None, help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--vqg_adapter_path", type=str, help="Name or path to adapter of VLM's LM to be used for VQG. This is for fine-tuned VQG models. Adapter base model should match the model used by the VLM specified in `vlm_name`.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
@@ -63,6 +63,9 @@ parser.add_argument("--get_negated_success_probs", action="store_true", help="Pa
 parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this argument to cache frames in VQA outputs (e.g., to inspect visual filter resuilts). This consumes a lot of disk space for large datasets.")
 parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
 args = parser.parse_args()
+
+if args.vlm_name is None:
+    raise ValueError("You must pass an HF VLM name.")
 
 assert torch.cuda.device_count() == 1, "Iterative VQA requires exactly 1 GPU per process; use `srun` to enable multi-GPU parallelization."
 if args.cache_vqa_frames and args.visual_filter_mode is None:

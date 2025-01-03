@@ -31,12 +31,13 @@ parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parame
 parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
 parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha (weight update scaling coefficient).")
 parser.add_argument("--lora_dropout", type=float, default=0.1, help="LoRA dropout regularization probability.")
-parser.add_argument("--unsure_range", type=int, default=0.0, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
+parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
 parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
 parser.add_argument("--eval_batch_size", type=int, default=24, help="Batch size for evaluation.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
 parser.add_argument("--resume_dir", type=str, help="Path to output directory from previous run to resume from (starts from last checkpoint).")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
+parser.add_argument("--wait_for_data", action="store_true", help="Pass this argument to make this worker wait for preprocessed data to appear rather than preprocessing data itself.")
 parser.add_argument("--save_strategy", type=str, choices=["no", "epoch"], default="epoch", help="Save strategy for DPO (either none or epochs). For initial hyperparameter search, can use none to save space.")
 args = parser.parse_args()
 
@@ -140,6 +141,9 @@ for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path
     n_loading_failures = 0
     while True:
         if not os.path.exists(processed_data_path):
+            if args.wait_for_data:
+                # Don't preprocess the data ourselves, wait for another job to do it
+                continue
             if worker_index == 0:
                 print(f"({worker_index}) Preprocessing model outputs at {args.train_data_path} for {p} data...")
                 dataset = []
@@ -200,6 +204,9 @@ for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path
             except Exception as e:
                 print(f"{worker_index} Encountered error while loading data. Retrying.")
                 print(e)
+                if args.wait_for_data:
+                    # Just keep waiting - another process is (hopefully) working on it
+                    continue
                 if n_loading_failures < 5:
                     n_loading_failures += 1
                     time.sleep(10)
