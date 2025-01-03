@@ -75,7 +75,7 @@ for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
                                                 vlm_name=args.vlm_name)
     
     # Write the script to the output directory
-    script_filename = os.path.join(output_dir, f"slurm_job_{run_id}.sh")
+    script_filename = os.path.join(output_dir, f"slurm_job_{run_id.replace('/','_')}.sh")
     with open(script_filename, "w") as f:
         f.write(slurm_script)
     
