@@ -65,7 +65,7 @@ srun --cpus-per-task 4 poetry run torchrun --nnodes=4 --nproc_per_node=1 --rdzv-
 first_job = True
 for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
     # Define a unique run_id for this job
-    if args.timestamp_suffix is not None:
+    if args.timestamp_suffix is None:
         run_id = f"{timestamp}/beta{dpo_beta}_lr{learning_rate}"
     else:
         run_id = f"{timestamp}_{args.timestamp_suffix}/beta{dpo_beta}_lr{learning_rate}"
