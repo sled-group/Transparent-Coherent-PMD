@@ -14,6 +14,7 @@ parser.add_argument("--dpo_beta", nargs='+', type=float, default=[0.05, 0.1, 0.5
                     help="List of --dpo_beta values to use, separated by spaces. Default: [0.05, 0.1, 0.5]")
 parser.add_argument("--learning_rate", nargs='+', type=float, default=[1e-6, 2.5e-6, 5e-6, 7.5e-6, 1e-5],
                     help="List of --learning_rate values to use, separated by spaces. Default: [1e-6, 2.5e-6, 5e-6, 7.5e-6, 1e-5]")
+parser.add_argument("--timestamp", type=str, default=None, help="This argument is a string that will replace the timestamp string used to identify results.")
 parser.add_argument("--timestamp_suffix", type=str, default=None, help="This argument will be concatenated to the subdirectory where DPO results are saved.")
 
 # Parse arguments
@@ -26,7 +27,10 @@ output_dir = "dpo_slurm_scripts"
 os.makedirs(output_dir, exist_ok=True)
 
 # Generate a common timestamp for all jobs
-timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+if args.timestamp is None:
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+else:
+    timestamp = args.timestamp
 
 # Template for the Slurm script
 slurm_script_template = """#!/bin/bash
