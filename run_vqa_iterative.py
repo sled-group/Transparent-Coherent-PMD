@@ -35,6 +35,7 @@ from travel.model.vqg import cleanup_generated_question
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vlm_name", type=str, default=None, help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--hf_hub_revision", type=str, default=None, help="Optional revision ID for VLM in Hugging Face Hub.")
 parser.add_argument("--vqg_adapter_path", type=str, help="Name or path to adapter of VLM's LM to be used for VQG. This is for fine-tuned VQG models. Adapter base model should match the model used by the VLM specified in `vlm_name`.")
 parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
@@ -125,13 +126,13 @@ bnb_config = BitsAndBytesConfig(
 
 # Load VLM - some VLMs may be under AutoModelForVision2Seq, some may be under AutoModelForCausalLM
 try:
-    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)   
+    vlm = AutoModelForVision2Seq.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN, revision=args.hf_hub_revision)   
 except Exception as e:
     print("Encountered exception when trying to load model with AutoModelForVision2Seq:")
     pprint(e)
     
-    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN)
-vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True, token=HF_TOKEN)
+    vlm = AutoModelForCausalLM.from_pretrained(args.vlm_name, quantization_config=bnb_config, trust_remote_code=True, token=HF_TOKEN, revision=args.hf_hub_revision)
+vlm_processor = AutoProcessor.from_pretrained(args.vlm_name, trust_remote_code=True, token=HF_TOKEN, revision=args.hf_hub_revision)
 vlm_processor.tokenizer.padding_side = "left"
 response_token_ids = get_vqa_response_token_ids(vlm_processor.tokenizer)
 
