@@ -22,8 +22,12 @@ args = parser.parse_args()
 dpo_betas = args.dpo_beta
 learning_rates = args.learning_rate
 
+# Create the directory to store Slurm output files if it doesn't exist
+log_dir = "slurm_logs"
+os.makedirs(log_dir, exist_ok=True)
+
 # Create the directory to store Slurm scripts if it doesn't exist
-output_dir = "dpo_slurm_scripts"
+output_dir = "slurm_scripts"
 os.makedirs(output_dir, exist_ok=True)
 
 # Generate a common timestamp for all jobs
@@ -43,6 +47,7 @@ slurm_script_template = """#!/bin/bash
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=10g
 #SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --output=~/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/slurm_logs/dpo-%j.out
 
 cd ~/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl
 bash prepare_great_lakes.sh
