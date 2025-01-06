@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser(description="Submit Slurm jobs for fine-tuning 
 parser.add_argument("--account_name", type=str, help="Slurm billing account name.", default="chaijy2")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["Salesforce/instructblip-vicuna-7b", "llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--hf_hub_revision", type=str, default=None, help="Optional revision ID for VLM in Hugging Face Hub.")
 parser.add_argument("--vqg_adapter_path", type=str, help="Name or path to adapter of VLM's LM to be used for VQG. This is for fine-tuned VQG models. Adapter base model should match the model used by the VLM specified in `vlm_name`.")
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "relevance", "informativeness", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
