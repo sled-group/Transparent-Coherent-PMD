@@ -901,7 +901,7 @@ if worker_index == 0:
     table_metrics = {
         "accuracy": accuracy_metrics_by_threshold['best_metrics']['accuracy'],
         "relevance": coherence_metrics['relevance_marginal'],
-        "informativeness": coherence_metrics['informativeness_marginal'],
+        "informativeness": coherence_metrics['informativeness_marginal_ref'],
         "n_iterations": other_metrics['n_iterations'],
         "info_gain": other_metrics['dialog_info_gain'],
     }

@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser(description="Submit Slurm jobs for fine-tuning 
 parser.add_argument("--account_name", type=str, help="Slurm billing account name.", default="chaijy2")
 parser.add_argument("--train_data_path", type=str, help="Path to `outputs_<partition>.json` file which will be used to train LM.")
 parser.add_argument("--val_data_path", type=str, help="Path to `outputs_<partition>.json` file which will be used to validate LM.")
-parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", choices=["Salesforce/instructblip-vicuna-7b", "llava-hf/llava-1.5-7b-hf"], help="Name or path to Hugging Face model for VLM.")
+parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--dpo_beta", nargs='+', type=float, default=[0.05, 0.1, 0.5],
                     help="List of --dpo_beta values to use, separated by spaces. Default: [0.05, 0.1, 0.5]")
 parser.add_argument("--learning_rate", nargs='+', type=float, default=[1e-6, 2.5e-6, 5e-6, 7.5e-6, 1e-5],
