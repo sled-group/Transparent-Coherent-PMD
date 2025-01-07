@@ -47,7 +47,7 @@ slurm_script_template = """#!/bin/bash
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=10g
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --output=~/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/slurm_logs/dpo-%j.out
+#SBATCH --output=/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/slurm_logs/dpo-%j.out
 
 cd ~/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl
 bash prepare_great_lakes.sh
@@ -64,7 +64,7 @@ srun --cpus-per-task 4 poetry run torchrun --nnodes=4 --nproc_per_node=1 --rdzv-
      --val_data_path "{val_data_path}" \
      --vlm_name "{vlm_name}" \
      --run_id "{run_id}" --n_epochs 10 --learning_rate {learning_rate} --dpo_beta {dpo_beta}
-"""
+"""[:-1]
 
 # Iterate over all combinations of dpo_beta and learning_rate
 first_job = True
@@ -91,7 +91,7 @@ for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
         first_job = True
     
     # Write the script to the output directory
-    script_filename = os.path.join(output_dir, f"slurm_job_{run_id.replace('/','_')}.sh")
+    script_filename = os.path.join(output_dir, f"slurm_job_dpo_{run_id.replace('/','_')}.sh")
     with open(script_filename, "w") as f:
         f.write(slurm_script)
     
