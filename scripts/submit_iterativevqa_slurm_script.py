@@ -5,7 +5,7 @@ from datetime import datetime
 import argparse
 
 # Set up argument parser
-parser = argparse.ArgumentParser(description="Submit Slurm jobs for fine-tuning a language model with different --dpo_beta and --learning_rate combinations.")
+parser = argparse.ArgumentParser()
 parser.add_argument("--account_name", type=str, help="Slurm billing account name.", default="chaijy2")
 parser.add_argument("--eval_partition", type=str, default="val", choices=["train", "val", "test"])
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
@@ -20,6 +20,7 @@ parser.add_argument("--length_penalty", type=float, default=1.0, help="Exponenti
 parser.add_argument("--restrict_q_words", action="store_true", help="Pass this argument to restrict first words of generated questions to 'is', 'are', 'do', and 'does'.")
 parser.add_argument("--timestamp", type=str, default=None, help="This argument is a string that will replace the timestamp string used to identify results.")
 parser.add_argument("--timestamp_suffix", type=str, default=None, help="This argument will be concatenated to the subdirectory where DPO results are saved.")
+parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA.")
 
 # Parse arguments
 args = parser.parse_args()
@@ -49,7 +50,7 @@ slurm_script_template = """#!/bin/bash
 #SBATCH --account={account_name}
 #SBATCH --partition=spgpu
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --output=~/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/slurm_logs/iterativevqa-%j.out
+#SBATCH --output=/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/slurm_logs/iterativevqa-%j.out
 
 cd ~/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl
 bash prepare_great_lakes.sh
@@ -64,7 +65,7 @@ srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "{run_id}
      --debug --debug_n_examples {debug_n_examples} --eval_partition {eval_partition} \
      --vlm_name "{vlm_name}" \
      --max_iterations 10 --early_stop_delta {early_stop_delta} --confident_range {confident_range} --length_penalty "{length_penalty}"
-"""
+"""[:-1]
 
 # Define a unique run_id for this job
 if args.timestamp_suffix is None:
@@ -90,15 +91,17 @@ if args.vqg_adapter_path is not None:
     slurm_script += f' --vqg_adapter_path "{args.vqg_adapter_path}"'
 if args.restrict_q_words:
     slurm_script += " --restrict_q_words"
+if args.resume_dir is not None:
+    slurm_script += f' --resume_dir "{args.resume_dir}"'
 
 # Write the script to the output directory
-script_filename = os.path.join(output_dir, f"slurm_job_{run_id.replace('/','_')}.sh")
+script_filename = os.path.join(output_dir, f"slurm_job_iterativevqa_{run_id.replace('/','_')}.sh")
 with open(script_filename, "w") as f:
     f.write(slurm_script)
 
 # Submit the job using sbatch
 try:
     subprocess.run(["sbatch", script_filename], check=True)
-    print(f"Submitted job!")
+    print(f"Submitted job with run ID {run_id}!")
 except subprocess.CalledProcessError as e:
-    print(f"Failed to submit job. Error: {e}")
+    print(f"Failed to submit job with run ID {run_id}. Error: {e}")
