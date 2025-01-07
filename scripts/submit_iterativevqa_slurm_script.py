@@ -20,6 +20,7 @@ parser.add_argument("--length_penalty", type=float, default=1.0, help="Exponenti
 parser.add_argument("--restrict_q_words", action="store_true", help="Pass this argument to restrict first words of generated questions to 'is', 'are', 'do', and 'does'.")
 parser.add_argument("--timestamp", type=str, default=None, help="This argument is a string that will replace the timestamp string used to identify results.")
 parser.add_argument("--timestamp_suffix", type=str, default=None, help="This argument will be concatenated to the subdirectory where DPO results are saved.")
+parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA.")
 
 # Parse arguments
 args = parser.parse_args()
@@ -90,6 +91,8 @@ if args.vqg_adapter_path is not None:
     slurm_script += f' --vqg_adapter_path "{args.vqg_adapter_path}"'
 if args.restrict_q_words:
     slurm_script += " --restrict_q_words"
+if args.resume_dir is not None:
+    slurm_script += f' --resume_dir "{args.resume_dir}"'
 
 # Write the script to the output directory
 script_filename = os.path.join(output_dir, f"slurm_job_iterativevqa_{run_id.replace('/','_')}.sh")
