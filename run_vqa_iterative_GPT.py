@@ -550,7 +550,9 @@ if worker_index == 0:
                                                                     answers=all_predicted_answers,
                                                                     previous_questions=all_previous_questions,
                                                                     previous_answers=all_previous_answers,
-                                                                    mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts_eval.values() for _ in range(results_dict['final_turn'] + 1)])
+                                                                    mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts_eval.values() for _ in range(results_dict['final_turn'] + 1)],
+                                                                    cache_dir=this_results_dir,
+                                                                    rephrase_cache_frequency=1)
         all_filtered_out_rephrase += filtered_out
 
         if len(all_filtered_out_rephrase) > 0:
