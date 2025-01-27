@@ -22,12 +22,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--vlm_name", type=str, default="llava-hf/llava-1.5-7b-hf", help="Name or path to Hugging Face model for VLM.")
 parser.add_argument("--this_results_dir", type=str, help="Path to results directory for approach to re-tune.")
 parser.add_argument("--load_coherence_metrics", action="store_true", help="Whether to just directly use saved coherence metrics in --this_results_dir. This option should be used when running GPT results (which cache coherence metrics for all iterations).")
+parser.add_argument("--eval_partition", type=str, default='val', help="Partition of data to tune criteria for. If 'test' is passed, this should only be to get access to other criteria than were originally passed when evaluation was run.")
 args = parser.parse_args()
 
 VLM_NAME = args.vlm_name
 this_results_dir = args.this_results_dir
 
-with open(os.path.join(this_results_dir, "outputs_val.json"), "r") as f:
+with open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "r") as f:
     all_results_dicts = json.load(f)
 
 this_results_dir = os.path.join(this_results_dir, "stopping_criteria_tuning")
@@ -77,7 +78,7 @@ best_performance = None
 
 all_coherence_metrics = None
 if args.load_coherence_metrics:
-    all_coherence_metrics = json.load(open(os.path.join(args.this_results_dir, f"metrics_coherence_raw_nli_val.json"), "r"))
+    all_coherence_metrics = json.load(open(os.path.join(args.this_results_dir, f"metrics_coherence_raw_nli_{args.eval_partition}.json"), "r"))
 
 performance_by_criteria = {}
 
@@ -172,46 +173,46 @@ for mi, esd, cd in tqdm(cand_criteria, desc="tuning stopping criteria"):
     if not os.path.exists(subdir_path):
         os.makedirs(subdir_path)
     json.dump(all_results_dicts, 
-            open(os.path.join(subdir_path, "outputs_val.json"), "w"),
+            open(os.path.join(subdir_path, f"outputs_{args.eval_partition}.json"), "w"),
             indent=4)    
     
     json.dump(accuracy_metrics_by_threshold, 
-            open(os.path.join(subdir_path, "metrics_accuracy_val.json"), "w"),
+            open(os.path.join(subdir_path, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
             indent=4)
 
     json.dump(coherence_metrics, 
-            open(os.path.join(subdir_path, "metrics_coherence_nli_val.json"), "w"),
+            open(os.path.join(subdir_path, f"metrics_coherence_nli_{args.eval_partition}.json"), "w"),
             indent=4)
 
     json.dump(readjusted_all_coherence_metrics, 
-            open(os.path.join(subdir_path, "metrics_coherence_raw_nli_val.json"), "w"),
+            open(os.path.join(subdir_path, f"metrics_coherence_raw_nli_{args.eval_partition}.json"), "w"),
             indent=4)          
 
     json.dump(other_metrics, 
-            open(os.path.join(subdir_path, f"metrics_other_val.json"), "w"),
+            open(os.path.join(subdir_path, f"metrics_other_{args.eval_partition}.json"), "w"),
             indent=4)              
 
 accuracy_metrics_by_threshold, readjusted_all_coherence_metrics, coherence_metrics, coherence_metrics_by_theshold, other_metrics, all_results_dicts = best_metrics
 
 # Save accuracy and coherence metrics and other outputs for best combo
 json.dump(all_results_dicts, 
-        open(os.path.join(this_results_dir, f"outputs_val.json"), "w"),
+        open(os.path.join(this_results_dir, f"outputs_{args.eval_partition}.json"), "w"),
         indent=4)
 
 json.dump(accuracy_metrics_by_threshold, 
-        open(os.path.join(this_results_dir, f"metrics_accuracy_val.json"), "w"),
+        open(os.path.join(this_results_dir, f"metrics_accuracy_{args.eval_partition}.json"), "w"),
         indent=4)
 
 json.dump(coherence_metrics, 
-        open(os.path.join(this_results_dir, f"metrics_coherence_nli_val.json"), "w"),
+        open(os.path.join(this_results_dir, f"metrics_coherence_nli_{args.eval_partition}.json"), "w"),
         indent=4)
 
 json.dump(readjusted_all_coherence_metrics, 
-        open(os.path.join(this_results_dir, f"metrics_coherence_raw_nli_val.json"), "w"),
+        open(os.path.join(this_results_dir, f"metrics_coherence_raw_nli_{args.eval_partition}.json"), "w"),
         indent=4)        
 
 json.dump(other_metrics, 
-        open(os.path.join(this_results_dir, f"metrics_other_val.json"), "w"),
+        open(os.path.join(this_results_dir, f"metrics_other_{args.eval_partition}.json"), "w"),
         indent=4)              
 
 mi, esd, cd = best_criteria
@@ -223,11 +224,11 @@ json.dump({"max_iterations": mi, "early_stop_delta": esd, "confident_range": cd}
 json.dump(performance_by_criteria, open(os.path.join(this_results_dir, "performance_by_criteria.json"), "w"), indent=4)
 
 # Generate DET curves for accuracy
-generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_val.pdf"))
+generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
 
 # Generate curves for all metrics by threshold
 generate_tiered_metric_curves(MISTAKE_DETECTION_THRESHOLDS, 
                               [accuracy_metrics_by_threshold[t]['accuracy'] for t in MISTAKE_DETECTION_THRESHOLDS],
                               [coherence_metrics_by_threshold[t]['consistency'] for t in MISTAKE_DETECTION_THRESHOLDS], 
                               [coherence_metrics_by_threshold[t]['verifiability'] for t in MISTAKE_DETECTION_THRESHOLDS],
-                              [os.path.join(this_results_dir, f"graph_tiered_metrics_nli_val.pdf")])
+                              [os.path.join(this_results_dir, f"graph_tiered_metrics_nli_{args.eval_partition}.pdf")])

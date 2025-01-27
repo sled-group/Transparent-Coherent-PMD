@@ -65,6 +65,10 @@ parser.add_argument("--cache_vqa_frames", action="store_true", help="Pass this a
 parser.add_argument("--print_prompts", action="store_true", help="Pass this argument to print some sample prompts during execution (for debugging purposes).")
 args = parser.parse_args()
 
+print("ARGUMENTS:")
+pprint(args)
+print('\n')
+
 if args.vlm_name is None:
     raise ValueError("You must pass an HF VLM name.")
 
@@ -643,7 +647,7 @@ if worker_index == 0:
         print(f"({worker_index}) Gathering results from worker {other_worker_index}...")
         delay_per_try = 10
         delay_so_far = 0
-        max_delay = 7200 if args.resume_dir is not None else 1800 # Allow a longer delay in case some processes are already finished in resumed run
+        max_delay = 7200 if args.resume_dir is not None else 7200 # Allow a longer delay in case some processes are already finished in resumed run
         while True:
             other_cache_path = os.path.join(this_results_dir, f"cached_outputs{other_worker_index}.pkl")
             if os.path.exists(other_cache_path):

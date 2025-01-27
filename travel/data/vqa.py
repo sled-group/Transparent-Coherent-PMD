@@ -95,6 +95,10 @@ ASSISTANT_END_TOKENS = {
 IVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}". I will ask a series of different yes/no questions to gather information about the state of the scene, then use it to determine whether the person has successfully completed the procedure. The goal is to extract as much relevant information as possible from the scene, so I will not repeat questions. I will try to ask short and simple questions about physical states and locations that are possible to observe from the photo.'
 IVQA_SUCCESS_QUESTION = 'Based on the image and above information, has the procedure "{procedure}" been successfully completed?'
 
+SVQA_PREAMBLE = 'This is a photo of someone working on the procedure "{procedure}".'
+SVQA_SUCCESS_QUESTION = 'Based on the image, has the procedure "{procedure}" been successfully completed?'
+
+
 class VQAResponse(int, Enum):
     No = 0
     Yes = 1
