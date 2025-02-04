@@ -717,6 +717,7 @@ def compile_accuracy_and_coherence_metrics(all_labels, all_probs, all_coherence_
     ece = expected_calibration_error(ece_probs, [1 if l else 0 for l in all_labels])
 
     # Get Spearman correlations between decision error and relevance/informativeness
+    # NOTE: using reference-adjusted informativeness confounds the correlation, since the number will be negative when model is leaning the wrong way (inflating the correlation)
     all_rel = coherence_metrics['metrics_by_example']['relevance_marginal_by_example']
     all_inf = coherence_metrics['metrics_by_example']['informativeness_marginal_ref_by_example']
     spearman_error_rel = spearmanr(all_rel, decision_errors)
