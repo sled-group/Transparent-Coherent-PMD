@@ -167,29 +167,28 @@ if not is_complete:
         if filtered_out[0]:
             filtered = True
             trigger_prompt = prompts_success[0]
-            break
-        
-        success_vqa_outputs = [
-            VQAOutputs(
-                task_name=MistakeDetectionTasks(args.task),
-                example_id=example.example_id,
-                procedure_id=example.procedure_id,
-                frame=example.frames[0],
-                prompt=prompt,
-                expected_answer=None,
-                response_token_ids=response_token_ids,
-                logits=torch.tensor([]),
-                question=question,
-                answer_probs=probs,
-                predicted_answer=VQAResponse.Yes if probs[VQAResponse.Yes] > 0.5 else VQAResponse.No
-            ) for probs, example, prompt, question in zip(answer_probs, batch_examples, prompts_success, questions_success)
-        ]               
+        else:
+            success_vqa_outputs = [
+                VQAOutputs(
+                    task_name=MistakeDetectionTasks(args.task),
+                    example_id=example.example_id,
+                    procedure_id=example.procedure_id,
+                    frame=example.frames[0],
+                    prompt=prompt,
+                    expected_answer=None,
+                    response_token_ids=response_token_ids,
+                    logits=torch.tensor([]),
+                    question=question,
+                    answer_probs=probs,
+                    predicted_answer=VQAResponse.Yes if probs[VQAResponse.Yes] > 0.5 else VQAResponse.No
+                ) for probs, example, prompt, question in zip(answer_probs, batch_examples, prompts_success, questions_success)
+            ]               
 
-        # Save success probability for this turn
-        for batch_sub_idx in range(this_batch_size):
-            success_probs[batch_sub_idx].append(
-                round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
-            )
+            # Save success probability for this turn
+            for batch_sub_idx in range(this_batch_size):
+                success_probs[batch_sub_idx].append(
+                    round(float(success_vqa_outputs[batch_sub_idx].answer_probs[VQAResponse.Yes]), 6)
+                )
 
         # Update global lists of tracked outputs
         all_success_probs += success_probs
