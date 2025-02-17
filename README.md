@@ -1,6 +1,6 @@
-# TRAVEl
+# Coherent Reasoning for Procedural Mistake Detection
 
-Development code for work on creating **T**iered **R**easoning for **A**ction-**V**ideo **E**quiva**l**ence (**TRAVEl**) for action mistake detection perceptually-enabled task guidance (PTG).
+This is the code and data release for the paper "[Coherent Reasoning for Procedural Mistake Detection](https://arxiv.org/abs/2412.11927)," originally code-named `TRAVEl` (Tiered Reasoning for Action-Video Equivalence) during development.
 
 ## Setup
 
@@ -10,13 +10,7 @@ Clone the repo:
 git clone git@github.com:shanestorks/TRAVEl.git
 ```
 
-**Reconfigure `cache.model_cache_dir` in `config.yml` to point to a directory you own. If you're using Great Lakes, you should be able to replace `sstorks` with your own uniqname to use `scratch` storage.**
-
-Install [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) if needed, and ensure a CUDA installation is available which is compatible with both `bitsandbytes` and `torch`. On Great Lakes, you will need to load an appropriate module before installing the dependencies. For example:
-
-```
-module load cuda/12.1.1
-```
+Install [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) if needed, and ensure a CUDA installation is available which is compatible with both `bitsandbytes` and `torch`. 
 
 In some environments, you may have issues getting Poetry to use the correct Python interpreter (also during installation of Poetry itself). You can consider creating a `conda` environment before installing Poetry and dependencies for this project:
 
@@ -40,7 +34,7 @@ poetry install
 poetry shell
 ```
 
-Note that the same CUDA installation must be available whenever you activate the environment using `poetry shell`. The script `prepare_great_lakes.sh` provides the set of commands to run to prepare the Great Lakes environment after initial setup; run it from this repo.
+Note that the same CUDA installation must be available whenever you activate the environment using `poetry shell` or `poetry run`.
 
 ### Jupyter Notebook Support
 
@@ -56,11 +50,17 @@ Also ensure that the same CUDA installation is available in your notebook enviro
 
 In a Slurm script, ensure you prepend commands with `poetry run` to activate the virtual environment.
 
+## Preparing Ego4D-PMD Data
+
+TODO: add explanation for generating ego4d data. Also add a note that CaptainCook4D support is available but not maintained, since we didn't use it in the final paper
+
 ## Running Experiments
 
 ### Configuration
 
-Make a copy of `sample_config.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the cache directories). If you ever need multiple config files in the same environment (e.g., to run multiple experiments with different settings at the same time), you can set the environment variable `TRAVEl_config_path` to an appropriate specialized `config_xxx.yml` file before running a script. Keep the random seed as 222 to replicate results presented in Shane's dissertation.
+Make a copy of `sample_config.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the Hugging Face token `hf_token` and cache directories). If you ever need multiple config files in the same environment (e.g., to run multiple experiments with different settings at the same time), you can set the environment variable `TRAVEl_config_path` to an appropriate specialized `config_xxx.yml` file before running a script. Keep the random seed as 222 to replicate results presented in the paper.
+
+TODO: need to overhaul all remaining commands
 
 ### Iterative VQA
 
@@ -152,3 +152,7 @@ There are several analysis scripts and notebooks which must be manually configur
 2. `analyze_IterativeVQA.py` runs several kinds of analysis on the iterative VQA results.
 3. `notebooks/generate_overview_graphs.ipynb` can be used to generate 3D graphs of error and coherence metrics.
 4. `notebooks/visualize_results_IterativeVQA.ipynb` can be used to extract sample mistake detection outputs from the iterative VQA.
+
+# Citation
+
+TODO: add citation

@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "travel"
 version = "0.1.0"
-description = "Development code for Tiered Reasoning for Action-Video Equivalence (TRAVEl) project."
+description = "Code for the Tiered Reasoning for Action-Video Equivalence (TRAVEl) project and Coherent Reasoning for Procedural Mistake Detection paper."
 authors = ["shanestorks <shanestorks@gmail.com>"]
 readme = "README.md"
 

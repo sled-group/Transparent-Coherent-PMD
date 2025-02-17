@@ -19,7 +19,6 @@ class MistakeDetectionTasks(str, Enum):
     CaptainCook4D_Single = "captaincook4d_single"
     Ego4D = "ego4d" # Ego4D following SuccessVQA format augmented with additional sampled mismatch examples for more easy negatives
     Ego4D_Single = "ego4d_single" # Ego4D with only annotated effect frames from video clips
-    EpicKitchens_Single = "epickitchens_single"
 
 @dataclass
 class MistakeDetectionExample:
