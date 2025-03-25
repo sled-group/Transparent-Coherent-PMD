@@ -9,7 +9,7 @@ import os
 from collections import defaultdict
 from tqdm import tqdm
 
-DATASET_PATH = "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl_generated_data_0808/ego4d_train_seed222_mismatch/dataset.json"
+DATASET_PATH = "/path/to/ego4d_train_seed222_mismatch/dataset.json"
 d = json.load(open(DATASET_PATH, "r"))
 seen_so_far = []
 seen_so_far_ids = []

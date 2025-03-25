@@ -1,6 +1,6 @@
 # Coherent Reasoning for Procedural Mistake Detection
 
-This is the code and data release for the paper "[Coherent Reasoning for Procedural Mistake Detection](https://arxiv.org/abs/2412.11927)," originally code-named `TRAVEl` (Tiered Reasoning for Action-Video Equivalence) during development.
+This is the code and data release for the paper "[Explainable Procedural Mistake Detection](https://arxiv.org/abs/2412.11927)," originally code-named `TRAVEl` (Tiered Reasoning for Action-Video Equivalence) during development.
 
 ## Setup
 
@@ -72,7 +72,9 @@ python run_generate_ego4d.py --partition val --mismatch_augmentation
 python run_generate_ego4d.py --partition test --mismatch_augmentation
 ```
 
-This can take several CPU days. We recommend running these commands as Slurm jobs using Slurm's `srun` command. Note that progress is intermittently saved.
+When generating the training data, a small number of duplicate records may be generated. Configure `scripts/utils/remove_duplicates_in_ego4d.py` then run it to remove them.
+
+This can take several CPU days. We recommend running these commands as Slurm jobs using Slurm's `srun` command to enable data parallelism. Note that progress is intermittently saved.
 
 Then generate our randomly sampled subsets (this is much quicker):
 
@@ -84,100 +86,68 @@ python run_generate_ego4d.py --partition test --mismatch_augmentation --debug --
 
 ## Running Experiments
 
-# TODO: overhaul below commands to match paper experiments
+### Open-Source VLM Inference and Evaluation
 
-### Iterative VQA
-
-The below commands can reproduce the iterative VQA results presented in Shane's dissertation. These are example commands for LLaVA evaluated on the validation data subset. You can configure the VLM type using the choices specified for `--vlm_name` in `run_vqa_iterative.py`. You can evaluate on the testing data subset by adding `--eval_partition test` and changing `--debug_n_examples` to `1000`.
-
-#### Base Job Script
-
-All commands are run on the Great Lakes Slurm cluster using srun. A job script typically starts like this, followed by one of the later commands:
+Use the `scripts/run_vqa_iterative.py` script to run inference with VLMs as shown below. This script supports data parallelism with Slurm's `srun` command.
 
 ```
-#!/bin/bash
-# JOB HEADERS HERE
-
-#SBATCH --job-name vqa_mistake_detection
-#SBATCH --ntasks=4
-#SBATCH --gpus-per-task=1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=10g
-#SBATCH --time=24:00:00
-#SBATCH --account=chaijy2
-#SBATCH --partition=spgpu
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-cd ~/path/to/TRAVEl
-bash prepare_great_lakes.sh
+python scripts/run_vqa_iterative.py --run_id "<unique ID>" --max_iterations 10 --question_selection_strategy <coherence|likelihood> --exclude_history_from_vqa \
+     --eval_partition val --debug --debug_n_examples 250 \
+     --vlm_name <vlm_name_or_path> --hf_hub_revision <revision_id>
 ```
 
-#### Likelihood-Based Ranking
+Several notes about configuring the command:
 
-Without in-context learning:
+* For the validation set, use the above `--eval_partition` and `--debug_n_examples` arguments. For testing, use `--eval_partition test` and `--debug_n_examples 1000`, and additionally provide the arguments `--early_stop_delta` and `--confident_range` as tuned in `stopping_criteria_tuning/tuned_stopping_criteria.json` in the output directory from the corresponding validation run. For inference on the training data (i.e., to generate training data for coherence-based fine-tuning), use `eval_partition train` and `--debug_n_examples 5000`.
 
-```
-srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "$timestamp" --max_iterations 10 --question_selection_strategy likelihood --generation_batch_size 20 --vqa_batch_size 20 --debug --debug_n_examples 250 --coherence_evaluation_strategy nli --exclude_history_from_vqa --vlm_name "llava-hf/llava-1.5-7b-hf"
-```
+* To evaluate the VLMs studied in the paper, configure `--vlm_name` and `--hf_hub_revision` as follows:
+     * InstructBLIP: `--vlm_name "Salesforce/instructblip-vicuna-7b" --hf_hub_revision "52ba0cb2c44d96b2fcceed4e84141dc40d2b6a92"`
+     * LLaVA 1.5: `--vlm_name "llava-hf/llava-1.5-7b-hf" --hf_hub_revision "12e054b30e8e061f423c7264bc97d4248232e965"`
+     * Llama 3: `--vlm_name "meta-llama/Llama-3.2-11B-Vision-Instruct" --hf_hub_revision "cee5b78e6faed15d5f2e6d8a654fd5b247c0d5ca"`
 
-With in-context learning:
+* Configure `--question_selection_strategy` for `likelihood`- or `coherence`-based question selection.
 
-```
-srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "$timestamp" --max_iterations 10 --question_selection_strategy likelihood --generation_batch_size 20 --vqa_batch_size 20 --debug --debug_n_examples 250 --n_icl_demonstrations 20 --coherence_evaluation_strategy nli --exclude_history_from_vqa --vlm_name "llava-hf/llava-1.5-7b-hf"
-```
+* For experiments with in-context learning, add `--n_icl_demonstrations 20`.
 
-#### Coherence-Based Ranking
+* For experiments utilizing a trained VQG adapter, add `vqg_adapter_path <path/to/vqg/adapter/output/director>`.
 
-Without in-context learning:
+* For experiments with length penalty, add --length_penalty "-1.0".
 
-```
-srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "$timestamp" --max_iterations 10 --question_selection_strategy coherence --generation_batch_size 20 --vqa_batch_size 20 --debug --debug_n_examples 250 --coherence_evaluation_strategy nli --get_negated_success_probs --exclude_history_from_vqa --vlm_name "llava-hf/llava-1.5-7b-hf"
-```
+* Note that any `batch_size` args for the script can be maximized for your GPU memory; the default arguments were configured for NVIDIA A40 GPUs (48GB VRAM).
 
-With in-context learning:
+If your environment uses Slurm, feel free to use `scripts/slurm/submit_iterativevqa_slurm_script.py` to submit jobs (or create a Bash script to easily submit several jobs). 
 
-```
-srun --cpus-per-task 4 poetry run python run_vqa_iterative.py --run_id "$timestamp" --max_iterations 10 --question_selection_strategy coherence --generation_batch_size 20 --vqa_batch_size 20 --debug --debug_n_examples 250 --n_icl_demonstrations 20 --coherence_evaluation_strategy nli --get_negated_success_probs --exclude_history_from_vqa --vlm_name "llava-hf/llava-1.5-7b-hf"
-```
+After completing, you can view `metrics_table_<partition>.json`, which includes the metrics in the paper's result's tables. Please note that for testing, you should not use the `accuracy` metric there, and instead identify the accuracy value in `metrics_accuracy_<partition>.json` for the mistake confidence threshold selected on the validation data. You can also see a 3D scatter plot of evaluation metrics at `3d_graph_base.pdf`.
 
-#### Visual Strategies
+### Coherence-Based VLM Fine-Tuning
 
-To add visual strategies, add one of the following groups of arguments to your command from above.
+Before running training, you'll need to run the above inference script on the training and validation data, and note the output directories for each run. To reproduce the main results in the paper, use arguments `--question_selection_strategy coherence` and `--n_icl_demonstrations 20`. To reproduce the additional fine-tuning results in the appendices, remove `--n_icl_demonstrations 20` for no in-context learning, or add `--length_penalty "-1.0"` to include a length penalty.
 
-Contrastive Region Guidance (CRG):
+Use the `scripts/train_vqa_iterative_dpo.py` script to run coherence-based fine-tuning. We use `srun` and `torchrun` to enable GPU parallelism, but the script should also run on a single GPU.
 
 ```
---visual_filter_mode contrastive_region --visual_filter_strength 1.0
+srun --cpus-per-task 4 poetry run torchrun --nnodes=4 --nproc_per_node=1 --rdzv-id=$RDZV_ID --rdzv-backend=c10d --rdzv-endpoint="$HOST_NODE:25703" scripts/train_vqa_iterative_dpo.py \
+     --train_data_path "/path/to/training/outputs/outputs_train.json" \
+     --val_data_path "/path/to/val/outputs/outputs_val.json" \
+     --run_id "<unique ID>" --n_epochs 10 --learning_rate <lr> --dpo_beta <beta>
 ```
 
-Visual Contrastive Decoding (VCD):
+Batch size arguments can again be maximized for your environment. The script `scripts/slurm/submit_dpo_slurm_scripts.py` can be used to initiate hyperparameter tuning through Slurm.
 
-```
---visual_filter_mode visual_contrastive --visual_filter_strength 1.0
-```
+### DET Curves
 
-Assembling Global and Local Attention (AGLA):
-
-```
---visual_filter_mode agla --visual_filter_strength 2.0
-```
-
-Proposed "spatial" filter (using Gaussian blur):
-
-```
---visual_filter_mode spatial_blur --visual_filter_strength 55.0
-```
-
-### Analysis of Results
-
-There are several analysis scripts and notebooks which must be manually configured to point to results you want to analyze:
-
-1. `graph_classification_curves.py` graphs DET and ROC curves.
-2. `analyze_IterativeVQA.py` runs several kinds of analysis on the iterative VQA results.
-3. `notebooks/generate_overview_graphs.ipynb` can be used to generate 3D graphs of error and coherence metrics.
-4. `notebooks/visualize_results_IterativeVQA.ipynb` can be used to extract sample mistake detection outputs from the iterative VQA.
+To generate DET curves and other various metrics for multiple compared results, configure `analysis_config.yml` to point to your desired configurations of output directories, then run `scripts/analyze_IterativeVQA.py`.
 
 ## Citation
 
-TODO: add citation
-
+```
+@misc{storks2024explainableproceduralmistakedetection,
+      title={Explainable Procedural Mistake Detection}, 
+      author={Shane Storks and Itamar Bar-Yossef and Yayuan Li and Zheyuan Zhang and Jason J. Corso and Joyce Chai},
+      year={2024},
+      eprint={2412.11927},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2412.11927}, 
+}
+```
