@@ -13,12 +13,12 @@ data:
     video_frame_keep_frequency: 1.0
     video_frame_min_brightness: 0.2
     annotation_path: "/path/to/ego4d/v2/annotations/fho_main.json"
-    split_path: "/path/to/ego4d/v2/splits"
+    split_path: "./ego4d_splits"
     video_path: "/path/to/videos/in/ego4d/v2/full_scale"
     misalignsrl_path: "/path/to/ego4d/misalignsrl_more_samples_same_split_combinedwords_wohand_objectstatesafe.parquet"
   captaincook4d:
-    annotations_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/annotations"
-    video_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/data/captain_cook_4d/hololens/sync/pv"
+    annotations_dir: "/path/to/captaincook4d/annotations"
+    video_dir: "/path/to/captaincook4d/data/captain_cook_4d/hololens/sync/pv"
     video_frame_sampling_frequency: 10
     video_frame_keep_frequency: 2.0    
 vqg:

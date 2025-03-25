@@ -10,17 +10,9 @@ Clone the repo:
 git clone git@github.com:shanestorks/TRAVEl.git
 ```
 
-Install [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) if needed, and ensure a CUDA installation is available which is compatible with both `bitsandbytes` and `torch`. 
+Install [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) if needed, and ensure a CUDA installation is available which is compatible with both `bitsandbytes` and `torch`. We used CUDA 12.1.1.
 
-In some environments, you may have issues getting Poetry to use the correct Python interpreter (also during installation of Poetry itself). You can consider creating a `conda` environment before installing Poetry and dependencies for this project:
-
-```
-module load python3.10-anaconda/2023.03
-conda create --name python310 python=3.10.9
-conda activate python310
-```
-
-Before running any other `poetry` commands, run the following:
+If needed, before running any other `poetry` commands, run the following to make sure Poetry has access to an instance of Python 3.10:
 
 ```
 poetry env use ~/.conda/envs/python310/bin/python
@@ -34,7 +26,7 @@ poetry install
 poetry shell
 ```
 
-Note that the same CUDA installation must be available whenever you activate the environment using `poetry shell` or `poetry run`.
+Note that you should run the above `poetry env use` command before activating the environment using `poetry shell` or `poetry run`. Also, the same CUDA installation must be available whenever you activate the environment.
 
 ### Jupyter Notebook Support
 
@@ -44,23 +36,55 @@ For Jupyter notebook support, run this when the `travel` environment is activate
 python -m ipykernel install --user --name=travel
 ```
 
-Also ensure that the same CUDA installation is available in your notebook environment; for example, in a Great Lakes JupyterLab session, you can add `load cuda/12.1.1` under "Module commands". Then use the `travel` kernel in Jupyter.
+Ensure that the same CUDA installation is available in your notebook environment.
 
-### Slurm Script Support
+## Configuration
 
-In a Slurm script, ensure you prepend commands with `poetry run` to activate the virtual environment.
+Make a copy of `sample_config.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the Hugging Face token `hf_token` and cache directories). Note that for the results presented in the paper, we configured `random_seed` to 222.
+
+If you ever need multiple config files in the same environment (e.g., to run multiple experiments with different settings at the same time), you can set the environment variable `TRAVEl_config_path` to an appropriate specialized `config_xxx.yml` file before running a script. Keep the random seed as 222 to replicate results presented in the paper.
 
 ## Preparing Ego4D-PMD Data
 
-TODO: add explanation for generating ego4d data. Also add a note that CaptainCook4D support is available but not maintained, since we didn't use it in the final paper
+The below steps cover how to regenerate the Ego4D-PMD data. Note that while this repo contains some code for using [CaptainCook4D](https://github.com/CaptainCook4D), this code is not maintained. 
+
+### Gathering Required Artifacts
+
+Download the Ego4D v2 data from [here](https://visualize.ego4d-data.org/), configuring `data.ego4d.video_path` accordingly.
+
+Next, download the `.parquet` file for mismatching Ego4D examples.
+
+```
+mkdir ego4d_mismatch_srl_files
+cd ego4d_mismatch_srl_files
+wget https://prism.eecs.umich.edu/yayuanli/z_web/dataset/Ego4D_Mistake/misalignsrl_more_samples_same_split_combinedwords_wohand_objectstatesafe.parquet
+```
+
+Configure `data.ego4d.misalignsrl_path` to the full path to the downloaded `.parquet` file.
+
+### Generating Data
+
+First, generate the full Ego4D-PMD data:
+
+```
+python run_generate_ego4d.py --partition train --mismatch_augmentation
+python run_generate_ego4d.py --partition val --mismatch_augmentation
+python run_generate_ego4d.py --partition test --mismatch_augmentation
+```
+
+This can take several CPU days. We recommend running these commands as Slurm jobs using Slurm's `srun` command. Note that progress is intermittently saved.
+
+Then generate our randomly sampled subsets (this is much quicker):
+
+```
+python run_generate_ego4d.py --partition train --mismatch_augmentation --debug --debug_n_examples 5000
+python run_generate_ego4d.py --partition val --mismatch_augmentation --debug --debug_n_examples 250
+python run_generate_ego4d.py --partition test --mismatch_augmentation --debug --debug_n_examples 1000
+```
 
 ## Running Experiments
 
-### Configuration
-
-Make a copy of `sample_config.yml` and name it `config.yml`. Configure the arguments in `config.yml` as needed (especially the Hugging Face token `hf_token` and cache directories). If you ever need multiple config files in the same environment (e.g., to run multiple experiments with different settings at the same time), you can set the environment variable `TRAVEl_config_path` to an appropriate specialized `config_xxx.yml` file before running a script. Keep the random seed as 222 to replicate results presented in the paper.
-
-TODO: need to overhaul all remaining commands
+# TODO: overhaul below commands to match paper experiments
 
 ### Iterative VQA
 
@@ -153,6 +177,7 @@ There are several analysis scripts and notebooks which must be manually configur
 3. `notebooks/generate_overview_graphs.ipynb` can be used to generate 3D graphs of error and coherence metrics.
 4. `notebooks/visualize_results_IterativeVQA.ipynb` can be used to extract sample mistake detection outputs from the iterative VQA.
 
-# Citation
+## Citation
 
 TODO: add citation
+

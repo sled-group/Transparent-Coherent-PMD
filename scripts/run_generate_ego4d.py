@@ -11,7 +11,7 @@ import os
 from travel.data.ego4d import Ego4DMistakeDetectionDataset, combine_ego4d_partitions
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--partition", type=str, default="train", help="Dataset partition name to generate from.")
+parser.add_argument("--partition", type=str, default="train", choices=["train", "val", "test"], help="Dataset partition name to generate from.")
 parser.add_argument("--mismatch_augmentation", action="store_true", help="Pass this argument to generate extra negative examples for training purposes.")
 parser.add_argument("--multi_frame", action="store_true", help="Pass this argument to sample multiple frames from 8-second clips in Ego4D rather than single frames.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
