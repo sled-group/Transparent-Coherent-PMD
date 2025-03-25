@@ -1,4 +1,4 @@
-# Coherent Reasoning for Procedural Mistake Detection
+# Explainable Procedural Mistake Detection
 
 This is the code and data release for the paper "[Explainable Procedural Mistake Detection](https://arxiv.org/abs/2412.11927)," originally code-named `TRAVEl` (Tiered Reasoning for Action-Video Equivalence) during development.
 
