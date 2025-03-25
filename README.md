@@ -67,9 +67,9 @@ Configure `data.ego4d.misalignsrl_path` to the full path to the downloaded `.par
 First, generate the full Ego4D-PMD data:
 
 ```
-python run_generate_ego4d.py --partition train --mismatch_augmentation
-python run_generate_ego4d.py --partition val --mismatch_augmentation
-python run_generate_ego4d.py --partition test --mismatch_augmentation
+python scripts/data/run_generate_ego4d.py --partition train --mismatch_augmentation
+python scripts/data/run_generate_ego4d.py --partition val --mismatch_augmentation
+python scripts/data/run_generate_ego4d.py --partition test --mismatch_augmentation
 ```
 
 When generating the training data, a small number of duplicate records may be generated. Configure `scripts/utils/remove_duplicates_in_ego4d.py` then run it to remove them.
@@ -79,9 +79,9 @@ This can take several CPU days. We recommend running these commands as Slurm job
 Then generate our randomly sampled subsets (this is much quicker):
 
 ```
-python run_generate_ego4d.py --partition train --mismatch_augmentation --debug --debug_n_examples 5000
-python run_generate_ego4d.py --partition val --mismatch_augmentation --debug --debug_n_examples 250
-python run_generate_ego4d.py --partition test --mismatch_augmentation --debug --debug_n_examples 1000
+python scripts/data/run_generate_ego4d.py --partition train --mismatch_augmentation --debug --debug_n_examples 5000
+python scripts/data/run_generate_ego4d.py --partition val --mismatch_augmentation --debug --debug_n_examples 250
+python scripts/data/run_generate_ego4d.py --partition test --mismatch_augmentation --debug --debug_n_examples 1000
 ```
 
 ## Running Experiments
