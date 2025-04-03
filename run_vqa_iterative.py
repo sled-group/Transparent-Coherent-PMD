@@ -46,6 +46,7 @@ parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)),
 parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
 parser.add_argument("--condition_questions_with_frames", action="store_true", help="Pass this argument to pass frame into VLM while generating questions (usually off by default since this hurts performance).")
+parser.add_argument("--blind_success_vqa", action="store_true", help="Pass this argument to exclude the frame from the SuccessVQA step (i.e., judging whether the procedure succeeded). This can be an alternative measure for explanation quality.")
 parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "relevance", "informativeness", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
 parser.add_argument("--exclude_history_from_vqa", action="store_true", help="Pass this argument to exclude the dialog history from VQA, and instead directly ask only questions.")
 parser.add_argument("--early_stop_delta", nargs='+', type=float, default=[0.05, 0.1, 0.2, 0.4], help="List of early_stop_delta values to consider, separated by spaces. If success probability changes less than this over 3 turns, stop generating questions.")
@@ -101,6 +102,8 @@ if args.resume_dir is None:
     this_results_dir += f"_{args.question_selection_strategy}"
     if args.condition_questions_with_frames:
         this_results_dir += f"_cqframe"    
+    if args.blind_success_vqa:
+        this_results_dir += "_blind_svqa"        
     if args.n_icl_demonstrations > 0:
         this_results_dir += f"_icl{args.n_icl_demonstrations}"
     if args.exclude_history_from_vqa:
@@ -539,7 +542,8 @@ if not is_complete:
                                                              nlp=nlp,
                                                              visual_filter_mode=VisualFilterTypes(args.visual_filter_mode) if visual_filter else None,
                                                              frame_cache_dir=this_results_dir if args.cache_vqa_frames else None,
-                                                             is_encoder_decoder="-t5-" in args.vlm_name.lower())
+                                                             is_encoder_decoder="-t5-" in args.vlm_name.lower(),
+                                                             ignore_frames=args.blind_success_vqa)
             success_vqa_outputs = [
                 VQAOutputs(
                     task_name=MistakeDetectionTasks(args.task),

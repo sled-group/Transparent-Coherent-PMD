@@ -52,7 +52,7 @@ parser.add_argument("--exclude_history_from_vqa", action="store_true", help="Pas
 parser.add_argument("--early_stop_delta", nargs='+', type=float, default=[0.05, 0.1, 0.2, 0.4], help="List of early_stop_delta values to consider, separated by spaces. If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--confident_range", nargs='+', type=float, default=[0.025, 0.05, 0.1, 0.2], help="List of confident_range values to consider, separated by spaces. If success probability is within this from 0.0 or 1.0, stop early due to high confidence.")
 parser.add_argument("--unsure_range", type=float, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
-parser.add_argument("--div_weight", type=float, default=0.5, help="Number between 0 and 1 that represents how much diversity will be considered in the ranking (as opposed to coherence metrics).")
+parser.add_argument("--div_weight", type=float, default=0.25, help="Number between 0 and 1 that represents how much diversity will be considered in the ranking (as opposed to coherence metrics).")
 parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t.value for t in VisualFilterTypes], help="Visual attention filter mode.")
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
 parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch size for question generation with LM.")
@@ -449,13 +449,14 @@ if not is_complete:
                     # Compute cosine similarity: (M, N)
                     cos_sim = torch.matmul(beam_search_embeddings_norm, prev_question_embeddings.T)
 
-                    # Convert cosine similarity to cosine distance
-                    cos_dist = 1 - cos_sim  # (M, N)
+                    # Convert cosine similarity to cosine distance and change range to [0,1]
+                    cos_dist = (1 - cos_sim) / 2.0  # (M, N)
 
                     # Compute average cosine distance for each row in A
                     avg_cos_dist = cos_dist.mean(dim=1)  # (M,)
 
                     # Multiply by the coherence scores
+                    assert avg_cos_dist.shape[-1] == avg_cos_dist.shape[-1]
                     combined_score = args.div_weight * avg_cos_dist + (1 - args.div_weight) * torch.tensor(beam_search_scores)
 
                     # Get the index of the row in A with the maximum average cosine distance
