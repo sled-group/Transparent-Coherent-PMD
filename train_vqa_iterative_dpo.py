@@ -32,6 +32,7 @@ parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimen
 parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha (weight update scaling coefficient).")
 parser.add_argument("--lora_dropout", type=float, default=0.1, help="LoRA dropout regularization probability.")
 parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
+parser.add_argument("--top_half", action='store_true', help="Pass this to select good questions from the top half of scored questions (rather than always using top 1).")
 parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
 parser.add_argument("--eval_batch_size", type=int, default=24, help="Batch size for evaluation.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
@@ -66,6 +67,7 @@ if worker_index == 0:
         "hyperparameters/lora_alpha": args.lora_alpha,
         "hyperparameters/lora_dropout": args.lora_dropout,
         "hyperparameters/unsure_range": args.unsure_range,
+        "hyperparameters/top_half": args.top_half,
     }
     print("HYPERPARAMETERS FOR THIS RUN:")
     pprint(hparam_dict)
@@ -137,6 +139,8 @@ for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path
     processed_data_path = data_path.replace(".json", "_processed_dpo")
     if args.unsure_range > 0.0:
         processed_data_path += f"_ur{args.unsure_range}"
+    if args.top_half:
+        processed_data_path += f"_tophalf"
         
     n_loading_failures = 0
     while True:
@@ -167,9 +171,22 @@ for p, data_path in [("train", args.train_data_path), ("val", args.val_data_path
 
                         instance_info = {"example_id": example_id, "turn": turn_idx, "prompt": prompt}
 
-                        # Generate an instance from the top question choice and one of the worst ones (picked from the bottom half of scores)
+                        # Select a good and bad question to generate an instance
                         candidate_questions_sorted = sorted(list(range(len(candidate_questions))), key=lambda qi: candidate_questions_scores[qi])
-                        good_question = candidate_questions[candidate_questions_sorted[-1]]
+                        if not args.top_half:
+                            good_question = candidate_questions[candidate_questions_sorted[-1]]
+                        else:
+                            # Select good question from top half of scored questions
+                            if len(candidate_questions_sorted) > 2:
+                                best_candidate_questions = [candidate_questions[qi] for qi in candidate_questions_sorted[len(candidate_questions_sorted) // 2:]]                     
+                                good_question = random.choice(best_candidate_questions)
+                            elif len(candidate_questions_sorted) == 2:
+                                good_question = candidate_questions[candidate_questions_sorted[-1]]
+                            else:
+                                # There was only one candidate question, so we don't have a rejected
+                                continue
+
+                        # Select bad question from bottom half of scored questions
                         if len(candidate_questions_sorted) > 2:
                             worst_candidate_questions = [candidate_questions[qi] for qi in candidate_questions_sorted[:len(candidate_questions_sorted) // 2]]                     
                             bad_question = random.choice(worst_candidate_questions)

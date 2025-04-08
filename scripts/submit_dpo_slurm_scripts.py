@@ -14,6 +14,8 @@ parser.add_argument("--dpo_beta", nargs='+', type=float, default=[0.05, 0.1, 0.5
                     help="List of --dpo_beta values to use, separated by spaces. Default: [0.05, 0.1, 0.5]")
 parser.add_argument("--learning_rate", nargs='+', type=float, default=[1e-6, 2.5e-6, 5e-6, 7.5e-6, 1e-5],
                     help="List of --learning_rate values to use, separated by spaces. Default: [1e-6, 2.5e-6, 5e-6, 7.5e-6, 1e-5]")
+parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
+parser.add_argument("--top_half", action='store_true', help="Pass this to select good questions from the top half of scored questions (rather than always using top 1).")
 parser.add_argument("--timestamp", type=str, default=None, help="This argument is a string that will replace the timestamp string used to identify results.")
 parser.add_argument("--timestamp_suffix", type=str, default=None, help="This argument will be concatenated to the subdirectory where DPO results are saved.")
 
@@ -63,7 +65,7 @@ srun --cpus-per-task 4 poetry run torchrun --nnodes=4 --nproc_per_node=1 --rdzv-
      --train_data_path "{train_data_path}" \
      --val_data_path "{val_data_path}" \
      --vlm_name "{vlm_name}" \
-     --run_id "{run_id}" --n_epochs 10 --learning_rate {learning_rate} --dpo_beta {dpo_beta}
+     --run_id "{run_id}" --n_epochs 10 --learning_rate {learning_rate} --dpo_beta {dpo_beta} --unsure_range {unsure_range}
 """[:-1]
 
 # Iterate over all combinations of dpo_beta and learning_rate
@@ -82,7 +84,11 @@ for dpo_beta, learning_rate in itertools.product(dpo_betas, learning_rates):
                                                 learning_rate=learning_rate, 
                                                 train_data_path=args.train_data_path,
                                                 val_data_path=args.val_data_path,
-                                                vlm_name=args.vlm_name)
+                                                vlm_name=args.vlm_name,
+                                                unsure_range=args.unsure_range)
+    
+    if args.top_half:
+        slurm_script += " --top_half"
     
     # Only the first submitted job will be responsible for preprocessing data
     if not first_job:
