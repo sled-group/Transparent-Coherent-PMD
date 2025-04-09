@@ -31,7 +31,7 @@ parser.add_argument("--dpo_beta", type=float, default=0.1, help="DPO beta parame
 parser.add_argument("--lora_r", type=int, default=16, help="LoRA r (matrix dimension).")
 parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha (weight update scaling coefficient).")
 parser.add_argument("--lora_dropout", type=float, default=0.1, help="LoRA dropout regularization probability.")
-parser.add_argument("--unsure_range", type=int, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
+parser.add_argument("--unsure_range", type=float, default=0.1, help="A VQA output will be considered unsure if the probability of yes and no are within this range of 50 percent (exclusive).")
 parser.add_argument("--top_half", action='store_true', help="Pass this to select good questions from the top half of scored questions (rather than always using top 1).")
 parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size for training.")
 parser.add_argument("--eval_batch_size", type=int, default=24, help="Batch size for evaluation.")
