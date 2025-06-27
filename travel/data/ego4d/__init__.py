@@ -973,9 +973,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                                                                                            "remove"]:
                         continue
 
-                    # Ensure that whatever we matched on is in line with the structured verb/noun annotation for the clip
-                    # (in rare cases, e.g., "rub paint onto wall", the structured annotation, i.e., paint, will not match 
-                    # the actual verb in the annotation, causing incorrect matches)
+                    # NOTE: in very rare cases, e.g., "rub painbrush onto wall", the structured annotation, i.e., paint, will not match the actual verb in the annotation, causing incorrect matches
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
                     frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']
