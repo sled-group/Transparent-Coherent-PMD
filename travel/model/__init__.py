@@ -1,6 +1,7 @@
 import numpy as np
 from pprint import pprint
 import torch
+import torch.nn.functional as F
 from tqdm import tqdm
 from transformers import InstructBlipForConditionalGeneration
 from transformers.models.encoder_decoder.modeling_encoder_decoder import shift_tokens_right
@@ -366,3 +367,25 @@ def compute_completion_log_likelihoods_vlm(model, processor, prompts: list[str],
     
     return results
     
+
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[0] #First element of model_output contains all token embeddings
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
+# repr_cache = {}
+def get_embeddings(model, tokenizer, texts, batch_size=16):
+    """Gets sentence embeddings given a sentence transformer model and tokenizer."""
+    model.eval()
+    embeddings = []
+    with torch.no_grad():
+        for i in range(0, len(texts), batch_size):
+            inputs = tokenizer(texts[i:i+batch_size], padding=True, truncation=True, return_tensors="pt")
+            outputs = model(**inputs)
+            # Use [CLS] token or mean pooling
+            pooled = mean_pooling(outputs, inputs['attention_mask'])
+            embeddings.append(pooled.cpu())
+        embeddings = torch.stack(embeddings).squeeze(0)
+        # embeddings = F.normalize(embeddings, p=2, dim=1)
+    
+    return embeddings

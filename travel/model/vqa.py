@@ -25,7 +25,8 @@ def run_vqa(vlm: PreTrainedModel,
             batch_size: int=1,
             cache_path: Optional[str]=None,
             return_attention: bool=False,
-            is_encoder_decoder: bool=False) -> torch.FloatTensor:
+            is_encoder_decoder: bool=False,
+            ignore_frames: bool=False,) -> torch.FloatTensor:
     """
     Runs VQA for given prompts and frames in batches with a given VLM and its processor.
 
@@ -88,7 +89,10 @@ def run_vqa(vlm: PreTrainedModel,
                 # For encoder-decoder, move "A:" part of prompt to decoder input IDs
                 inputs['decoder_input_ids'] = processor.tokenizer([f"{processor.tokenizer.pad_token} A: "] * len(batch_prompts), return_tensors="pt")['input_ids'].to(vlm.device) # NOTE: this only works for encoder-decoder models whose decoder_start_token is the pad token
 
-            outputs = vlm(**inputs)
+            if not ignore_frames:
+                outputs = vlm(**inputs)
+            else:
+                outputs = vlm.language_model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'])
             this_logits = outputs.logits
             inputs = inputs.to('cpu')
             this_logits = this_logits[:, -1].detach().cpu()
@@ -110,7 +114,7 @@ def run_vqa(vlm: PreTrainedModel,
 
     return logits
 
-def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, question_idx, batch_size, visual_filter=None, nlp=None, visual_filter_mode=None, frame_cache_dir=None, is_encoder_decoder=False):
+def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames, prompts_a, new_questions, question_idx, batch_size, visual_filter=None, nlp=None, visual_filter_mode=None, frame_cache_dir=None, is_encoder_decoder=False, ignore_frames=False):
     """
     VQA and visual filter wrapper method for iterative VQA experiments.
 
@@ -153,14 +157,14 @@ def run_vqa_with_visual_filter(vlm_processor, vlm, batch_examples, batch_frames,
 
     # Run VQA on base image (yes/no)
     if not (visual_filter and visual_filter_mode in [VisualFilterTypes.Spatial_NoRephrase, VisualFilterTypes.Spatial_Blur]):
-        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=batch_size, is_encoder_decoder=is_encoder_decoder)
+        new_answers_logits = run_vqa(vlm, vlm_processor, prompts_a, batch_frames, batch_size=batch_size, is_encoder_decoder=is_encoder_decoder, ignore_frames=ignore_frames)
     else:
         # Spatial filter doesn't need original image logits, so don't get them for efficiency
         new_answers_logits = None
 
     # Run VQA on filtered image if needed and combine logits as proposed in approaches' papers
     if visual_filter:
-        new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=batch_size, is_encoder_decoder=is_encoder_decoder)
+        new_answers_logits_filtered = run_vqa(vlm, vlm_processor, prompts_a, batch_frames_filtered, batch_size=batch_size, is_encoder_decoder=is_encoder_decoder, ignore_frames=ignore_frames)
         new_answers_logits = visual_filter.combine_logits(new_answers_logits, new_answers_logits_filtered)
 
     return new_answers_logits
