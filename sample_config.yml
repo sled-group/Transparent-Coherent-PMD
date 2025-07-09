@@ -38,3 +38,4 @@ mistake_detection_strategies:
   nli_relevance_delta: 0.2
   nli_rerun_on_relevant_evidence: false
   nli_replace_probs: false
+  diversity_model_path: "sentence-transformers/all-MiniLM-L6-v2"

@@ -12,11 +12,13 @@ import pickle
 from PIL import Image
 from pprint import pprint
 import shutil
+from sklearn.cluster import KMeans
 import spacy
 import time
 import torch
+import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint           
+from transformers import AutoModelForVision2Seq, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer, PhrasalConstraint, AutoModel
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, HF_TOKEN, CONFIG_PATH
 from travel.data.captaincook4d import CaptainCook4DDataset
@@ -24,10 +26,10 @@ from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, DIALOG_START_TOKENS, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
 from travel.data.vqg import generate_vqg_prompt_icl
-from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_encoder_decoder, compute_completion_log_likelihoods_vlm
+from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_encoder_decoder, compute_completion_log_likelihoods_vlm, get_embeddings
 from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
 from travel.model.metrics import question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, compile_accuracy_and_coherence_metrics, generate_3d_overview_graph
-from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
+from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS, DIV_MODEL_PATH
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
 from travel.model.vqa import run_vqa_with_visual_filter
 from travel.model.vqg import cleanup_generated_question
@@ -46,8 +48,7 @@ parser.add_argument("--num_beams", type=int, default=8, choices=list(range(21)),
 parser.add_argument("--num_return_sequences", type=int, default=4, choices=list(range(21)), help="Number of generation candidates to return from beam search. Recommend setting this to be less than number of beams due to generation constraints.")
 parser.add_argument("--n_icl_demonstrations", type=int, default=0, choices=list(range(21)), help="Pass this argument to generate an extra pool of candidate questions using n in-context VQG examples (doesn't incorporate answers to previous questions).")
 parser.add_argument("--condition_questions_with_frames", action="store_true", help="Pass this argument to pass frame into VLM while generating questions (usually off by default since this hurts performance).")
-parser.add_argument("--blind_success_vqa", action="store_true", help="Pass this argument to exclude the frame from the SuccessVQA step (i.e., judging whether the procedure succeeded).")
-parser.add_argument("--question_selection_strategy", type=str, default="likelihood", choices=["likelihood", "relevance", "informativeness", "coherence"], help="Strategy to use to choose question to generate from beam search candidates.")
+parser.add_argument("--blind_success_vqa", action="store_true", help="Pass this argument to exclude the frame from the SuccessVQA step (i.e., judging whether the procedure succeeded). This can be an alternative measure for explanation quality.")
 parser.add_argument("--exclude_history_from_vqa", action="store_true", help="Pass this argument to exclude the dialog history from VQA, and instead directly ask only questions.")
 parser.add_argument("--early_stop_delta", nargs='+', type=float, default=[0.05, 0.1, 0.2, 0.4], help="List of early_stop_delta values to consider, separated by spaces. If success probability changes less than this over 3 turns, stop generating questions.")
 parser.add_argument("--confident_range", nargs='+', type=float, default=[0.025, 0.05, 0.1, 0.2], help="List of confident_range values to consider, separated by spaces. If success probability is within this from 0.0 or 1.0, stop early due to high confidence.")
@@ -56,7 +57,7 @@ parser.add_argument("--visual_filter_mode", type=str, required=False, choices=[t
 parser.add_argument("--visual_filter_strength", type=float, required=False, default=1.0, help="Float strength for masks used in visual filters. Depending on the visual filter type, this may be interpreted as a percentage darkness or a Gaussian blur kernel size.")
 parser.add_argument("--generation_batch_size", type=int, default=10, help="Batch size for question generation with LM.")
 parser.add_argument("--vqa_batch_size", type=int, default=10, help="Batch size for VQA with VLM.")
-parser.add_argument("--nli_batch_size", type=int, default=NLI_BATCH_SIZE, help="Batch size for scoring candidate questions with NLI model.")
+parser.add_argument("--nli_batch_size", type=int, default=NLI_BATCH_SIZE, help="Batch size for scoring candidate questions with NLI model. Also used for sentence embeddings for diversity-based ranking.")
 parser.add_argument("--run_id", type=str, required=False, help="Unique ID for this run, which will be used to create the output directory (and should be shared across any parallel processes).")
 parser.add_argument("--resume_dir", type=str, help="Path to results directory for previous incomplete run of iterative VQA.")
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
@@ -99,11 +100,11 @@ if args.resume_dir is None:
         this_results_dir += f"_lp{args.length_penalty}"
     if args.restrict_q_words:
         this_results_dir += "_qw"
-    this_results_dir += f"_{args.question_selection_strategy}"
+    this_results_dir += f"_diversity"
     if args.condition_questions_with_frames:
         this_results_dir += f"_cqframe"    
     if args.blind_success_vqa:
-        this_results_dir += "_blind_svqa"        
+        this_results_dir += "_blind_svqa"
     if args.n_icl_demonstrations > 0:
         this_results_dir += f"_icl{args.n_icl_demonstrations}"
     if args.exclude_history_from_vqa:
@@ -233,6 +234,9 @@ generation_kwargs = {
 nli_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_PATH, quantization_config=bnb_config)
 nli_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_PATH)
 
+# Bring in sentence transformer if using diversity-based ranking
+div_tokenizer = AutoTokenizer.from_pretrained(DIV_MODEL_PATH, quantization_config=bnb_config)
+div_model = AutoModel.from_pretrained(DIV_MODEL_PATH)
 
 # Load approopriate evaluation dataset
 dataset = None
@@ -259,7 +263,9 @@ if dataset is None:
 
 print(f"({worker_index}) Beginning iterative VQA inference...")
 all_questions = []
+all_questions_embeddings = []
 all_candidate_questions = []
+all_candidate_questions_embeddings = []
 all_candidate_questions_scores = []
 all_candidate_questions_sources = []
 all_scores = []
@@ -276,7 +282,7 @@ cache_path = os.path.join(this_results_dir, f"cached_outputs{worker_index}.pkl")
 is_complete = False
 last_batch_idx = -1
 if os.path.exists(cache_path):
-    is_complete, last_batch_idx, all_questions, all_candidate_questions, all_candidate_questions_scores, all_candidate_questions_sources, all_scores, all_answers, all_answer_probs, all_success_probs, all_success_probs_negated, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
+    is_complete, last_batch_idx, all_questions, all_questions_embeddings, all_candidate_questions, all_candidate_questions_embeddings, all_candidate_questions_scores, all_candidate_questions_sources, all_scores, all_answers, all_answer_probs, all_success_probs, all_success_probs_negated, all_example_ids, all_procedures, all_labels = pickle.load(open(cache_path, "rb"))
 
 batch_idx = None
 if not is_complete:
@@ -303,8 +309,10 @@ if not is_complete:
         if args.print_prompts:
             pprint(prompts[0])
         questions = [[] for _ in range(this_batch_size)]
+        questions_embeddings = [[] for _ in range(this_batch_size)]
         frames = [[] for _ in range(this_batch_size)]
         candidate_questions = [[] for _ in range(this_batch_size)]
+        candidate_questions_embeddings = [[] for _ in range(this_batch_size)]
         candidate_questions_scores = [[] for _ in range(this_batch_size)]
         candidate_questions_sources = [[] for _ in range(this_batch_size)]
         scores = [[] for _ in range(this_batch_size)]
@@ -380,23 +388,49 @@ if not is_complete:
                 candidate_questions[batch_sub_idx].append(new_questions[batch_sub_idx])
                 candidate_questions_sources[batch_sub_idx].append(new_questions_sources[batch_sub_idx])
 
-            # Select best candidate question from pool
-            if args.question_selection_strategy == "likelihood":
+            # Select best candidate question from pool using diversity-based ranking
 
-                # First recalculate likelihood of each cleaned up question in iterative VQA context
+            # Embed all candidate questions
+            embeddings_cand = [
+                get_embeddings(div_model, 
+                                div_tokenizer, 
+                                beam_search_questions,
+                                batch_size=args.nli_batch_size) for beam_search_questions in new_questions
+            ]
 
-                # (this is mostly important when we're using ICL injected questions)
-                # NOTE: for some (unknown at this time) reason, LLaVA's LM likelihoods calculated during beam search (returned by output.scores) do not
-                # match the likelihoods we get from a forward pass (which is unlike other models, e.g., T5). As such, we need to recompute completion
-                # log likelihoods no matter what when using the "likelihood" candidate selection strategy. 
-                # 
-                # While this doesn't seem to affect the ordering of contextually generated candidates, the scores used here are slightly different. It's also 
-                # worth noting that this step is especially important when ranking ICL-generated candidates among contextually generated candidates, as they may 
-                # reasonably have higher likelihood than beam search candidates, but we need to be sure scores are calculated consistently. Further, since 
-                # questions aren't "cleaned up" in initial generation, scores can be affected by this and at minimum need to be clipped at "?" token that ends
-                # each question.
-                # 
-                # Some relevant discussion on this issue here: https://discuss.huggingface.co/t/compute-log-probabilities-of-any-sequence-provided/11710/10
+            if question_idx > 0:
+                # For later turns, use diversity-based ranking by selecting the candidate question that has
+                # the largest average cosine distance from previous questions
+            
+                selected_questions = []
+                selected_questions_embeddings = []            
+                new_scores = []
+                for batch_sub_idx, (beam_search_questions, beam_search_embeddings, beam_search_scores) in enumerate(zip(new_questions, embeddings_cand, generation_scores)):                    
+                    prev_question_embeddings = torch.stack(questions_embeddings[batch_sub_idx])
+
+                    # Normalize A and B for cosine similarity
+                    beam_search_embeddings_norm = F.normalize(beam_search_embeddings, p=2, dim=1) # A: (M, D)
+                    prev_question_embeddings = F.normalize(prev_question_embeddings, p=2, dim=1) # B: (N, D)
+
+                    # Compute cosine similarity: (M, N)
+                    cos_sim = torch.matmul(beam_search_embeddings_norm, prev_question_embeddings.T)
+
+                    # Convert cosine similarity to cosine distance
+                    cos_dist = 1 - cos_sim  # (M, N)
+
+                    # Compute average cosine distance for each row in A
+                    avg_cos_dist = cos_dist.mean(dim=1)  # (M,)
+
+                    # Get the index of the row in A with the maximum average cosine distance
+                    max_idx = torch.argmax(avg_cos_dist)
+
+                    candidate_questions_embeddings[batch_sub_idx].append(beam_search_embeddings)
+                    selected_questions.append(beam_search_questions[max_idx])
+                    selected_questions_embeddings.append(beam_search_embeddings[max_idx])
+                    new_scores.append(float(avg_cos_dist[max_idx].numpy()))
+
+            else:
+                # For first turn, fall back to likelihood-based ranking
                 if not args.condition_questions_with_frames:
                     if "-t5-" not in args.vlm_name:
                         generation_scores = compute_completion_log_likelihoods(lm, tokenizer, [prompt.replace(IMAGE_TOKENS[args.vlm_name], "") for prompt in prompts_q], new_questions, batch_size=max(args.generation_batch_size // max(args.n_icl_demonstrations, 1), 1))
@@ -407,11 +441,13 @@ if not is_complete:
 
                 # Select most likely question (first one in list)
                 selected_questions = []
+                selected_questions_embeddings = []
                 new_scores = []
-                for batch_sub_idx, (beam_search_questions, beam_search_scores) in enumerate(zip(new_questions, generation_scores)):                    
+                for batch_sub_idx, (beam_search_questions, beam_search_embeddings, beam_search_scores) in enumerate(zip(new_questions, embeddings_cand, generation_scores)):                    
                     assert len(beam_search_questions) == len(beam_search_scores), "Expected candidate questions and their scores to have the same shape!"
 
-                    # Save all candidate scores
+                    # Save all candidate scores and embeddings
+                    candidate_questions_embeddings[batch_sub_idx].append(beam_search_embeddings)
                     candidate_questions_scores[batch_sub_idx].append(beam_search_scores)
 
                     candidate_idxs = list(range(len(beam_search_questions)))
@@ -419,56 +455,19 @@ if not is_complete:
                     # Then pick candidate with highest score
                     best_candidate = max(candidate_idxs, key=lambda x: beam_search_scores[x] == max(beam_search_scores))
                     selected_questions.append(beam_search_questions[best_candidate])
+                    selected_questions_embeddings.append(beam_search_embeddings[best_candidate])
                     new_scores.append(beam_search_scores[best_candidate])
 
-                new_questions = selected_questions
-
-            elif args.question_selection_strategy in ["relevance", "informativeness", "coherence"]:
-                # Calculate coherence metrics for each candidate question
-                nli_outputs = question_coherence_metrics_nli(
-                    nli_tokenizer, 
-                    nli_model,
-                    tokenizer,
-                    lm,
-                    [procedure for procedure, beam_search_questions in zip(batch_procedures, new_questions) for _ in beam_search_questions],
-                    [question for beam_search_questions in new_questions for question in beam_search_questions],
-                    previous_questions=[[q for qi, q in enumerate(batch_idx_questions) if batch_idx_answers[qi] != "Unsure"] for batch_idx_questions, batch_idx_answers, beam_search_questions in zip(questions, answers, new_questions) for _ in beam_search_questions],
-                    previous_answers=[[a for a in batch_idx_answers if a != "Unsure"] for batch_idx_answers, beam_search_questions in zip(answers, new_questions) for _ in beam_search_questions],
-                    rephrase_batch_size=args.generation_batch_size
-                )
-
-                # Select best candidate based on coherence metrics
-                selected_questions = []
-                new_scores = []
-                parallel_idx = 0
-                ranking_key_mapping = {
-                    "relevance": "relevance_marginal",
-                    "informativeness": "informativeness_marginal",
-                    "coherence": "informativeness_marginal_x_relevance_marginal",
-                }
-                for batch_sub_idx, beam_search_questions in enumerate(new_questions):
-                    this_nli_outputs = [{k: round(float(nli_outputs[k][i]), 3) if type(nli_outputs[k][i]) != str else nli_outputs[k][i] for k in nli_outputs} for i in range(parallel_idx, parallel_idx + len(beam_search_questions))]
-                    candidate_questions_scores[batch_sub_idx].append(this_nli_outputs)
-                    parallel_idx += len(beam_search_questions)
-
-                    # Use marginal relevance (consistency) and expected informativeness (verifiability) to rank candidates
-                    candidate_scores = np.array(
-                        [candidate_metrics[ranking_key_mapping[args.question_selection_strategy]] for candidate_metrics in this_nli_outputs]
-                    )
-
-                    best_candidate = np.argmax(candidate_scores)
-                    selected_questions.append(beam_search_questions[best_candidate])
-                    new_scores.append(round(float(candidate_scores[best_candidate]), 6))
-                
-                new_questions = selected_questions
+            new_questions = selected_questions
                     
             # Save scores for best questions
             for batch_sub_idx in range(this_batch_size):
                 scores[batch_sub_idx].append(new_scores[batch_sub_idx])
 
-            # Save generated questions
+            # Save generated questions and embeddings
             for batch_sub_idx in range(this_batch_size):
                 questions[batch_sub_idx].append(new_questions[batch_sub_idx])
+                questions_embeddings[batch_sub_idx].append(selected_questions_embeddings[batch_sub_idx])
 
             # Run VQA with generated questions (and optional spatial filter)
             prompts_a = [prompt + f' {question}{USER_END_TOKENS[args.vlm_name]}{ASSISTANT_START_TOKENS[args.vlm_name]}A:' for prompt, question in zip(prompts_q, new_questions)]
@@ -571,7 +570,9 @@ if not is_complete:
 
         # Update global lists of tracked outputs
         all_questions += questions
+        all_questions_embeddings += questions_embeddings
         all_candidate_questions += candidate_questions
+        all_candidate_questions_embeddings += candidate_questions_embeddings
         all_candidate_questions_scores += candidate_questions_scores
         all_candidate_questions_sources += candidate_questions_sources
         all_scores += scores
@@ -592,7 +593,9 @@ if not is_complete:
             False,
             batch_idx,
             all_questions, 
+            all_questions_embeddings,
             all_candidate_questions, 
+            all_candidate_questions_embeddings,
             all_candidate_questions_scores, 
             all_candidate_questions_sources,
             all_scores, 
@@ -608,7 +611,9 @@ if not is_complete:
 # Verify we got correct number of outputs
 all_results = [
     all_questions, 
+    all_questions_embeddings,
     all_candidate_questions, 
+    all_candidate_questions_embeddings,
     all_candidate_questions_scores, 
     all_candidate_questions_sources,
     all_scores, 
@@ -628,7 +633,9 @@ if batch_idx is not None:
         True,
         batch_idx,
         all_questions, 
+        all_questions_embeddings,
         all_candidate_questions, 
+        all_candidate_questions_embeddings,
         all_candidate_questions_scores, 
         all_candidate_questions_sources,
         all_scores, 
@@ -658,7 +665,9 @@ if worker_index == 0:
                 is_complete, \
                 _, \
                 other_questions, \
+                _, \
                 other_candidate_questions, \
+                _, \
                 other_candidate_questions_scores, \
                 other_candidate_questions_sources, \
                 other_scores, \
@@ -760,7 +769,7 @@ if worker_index == 0:
                                             mistake_labels=[results_dict['mistake'] for results_dict in all_results_dicts.values() for _ in range(results_dict['final_turn'] + 1)],
                                             rephrase_batch_size=args.generation_batch_size)
 
-    # Tune stopping criteria (early stop delta and confident range) to maximize accuracy and coherence of rationales
+    # Tune stopping criteria (early stop delta and confident range) to maximize accuracy and coherence of explanations
     tuning_results_dir = os.path.join(this_results_dir, "stopping_criteria_tuning")
     if not os.path.exists(tuning_results_dir):
         os.makedirs(tuning_results_dir)
@@ -921,7 +930,7 @@ if worker_index == 0:
     generate_det_curve(accuracy_metrics_by_threshold, os.path.join(this_results_dir, f"det_accuracy_{args.eval_partition}.pdf"))
 
     # Generate 3D scatter plot of decision error, relevance, and informativeness
-    graph_name = args.question_selection_strategy
+    graph_name = "diversity"
     if args.n_icl_demonstrations > 0:
         graph_name += f"_icl{args.n_icl_demonstrations}"
     if args.vqg_adapter_path is not None:

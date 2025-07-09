@@ -462,7 +462,7 @@ class SpatialVisualFilter(AdaptiveVisualFilter):
         if return_visible_target_objects:
             object_parse_results = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, questions)
             counting_results, _ = self.run_detection(object_parse_results, frames)
-            object_counts_old = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results) # TODO: rename this back to object_counts
+            object_counts_old = TargetObjectCounterFilter.count_objects_in_detection_results(counting_results)
             object_counts = [{object_parse_results[object_count_idx][label_idx]: object_count[label_idx] if label_idx in object_count else 0 for label_idx in range(len(object_parse_results[object_count_idx]))} for object_count_idx, object_count in enumerate(object_counts_old)]
 
         # Parse spatial dependencies from questions and use them to detect objects
