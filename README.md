@@ -14,7 +14,7 @@ This project uses a Poetry virtual environment. This project was originally code
 
 [Install Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) if needed, and ensure a CUDA installation is available which is compatible with both `bitsandbytes` and `torch`. We used CUDA 12.1.1.
 
-If needed, before running any other `poetry` commands, run the following to make sure Poetry has access to an instance of Python 3.10:
+If needed, before running any other `poetry` commands, run a command like the following to make sure Poetry has access to an instance of Python 3.10:
 
 ```bash
 poetry env use ~/.conda/envs/python310/bin/python
