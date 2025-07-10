@@ -13,10 +13,6 @@ from transformers import Owlv2Processor, Owlv2ForObjectDetection, BitsAndBytesCo
 from typing import Optional, Any, Union
 import yaml
 
-sys.path.append("AGLA")
-from AGLA.lavis.models import load_model_and_preprocess
-from AGLA.eval.augmentation import augmentation
-
 from travel.constants import CONFIG_PATH
 from travel.data.mistake_detection import MistakeDetectionDataset
 from travel.data.utils.image import get_preprocessed_image, BoundingBoxCluster, BoundingBox
@@ -805,60 +801,11 @@ class VisualContrastiveFilter(AdaptiveVisualFilter):
         # VCD combines logits using alpha hyperparameter
         return (1 + self.alpha) * original_frame_logits - self.alpha * new_frame_logits
 
-class AGLAFilter(AdaptiveVisualFilter):
-    def __init__(self, alpha: float=2.0, beta: float=0.5, **kwargs: dict[str, Any]):
-        """
-        Initializes `AGLAFilter`.
-
-        :param alpha: Alpha hyperparameter of AGLA (determines how much augmented image factors into prediction compared to original image).
-        :param beta: Beta hyperparameter of AGLA (controls adaptive plausibility constraint; higher beta meeans only higher probability tokens will be preserved from the original image output distribution).
-        """        
-        self.alpha = alpha
-        self.beta = beta
-        
-        # Get image-text matcher modules
-        model_itm, vis_processors, text_processors = load_model_and_preprocess("blip_image_text_matching", "large", device="cuda", is_eval=True)
-        self.model_itm = model_itm
-        self.vis_processors = vis_processors
-        self.text_processors = text_processors
-        
-        super().__init__(need_detector=False, **kwargs)
-        
-    def __call__(self, frames: list[Image.Image], questions: list[str]) -> list[Image.Image]:
-        loader = transforms.Compose([transforms.ToTensor()])
-        
-        original_sizes = [frame.size for frame in frames]
-        
-        tensor_images = [loader(frame.resize((384,384))) for frame in frames]
-        images = [self.vis_processors["eval"](frame).unsqueeze(0).to('cuda') for frame in frames]
-        questions = [self.text_processors["eval"](question) for question in questions]
-        tokenized_texts = [self.model_itm.tokenizer(question, padding='longest', truncation=True, return_tensors="pt").to('cuda') for question in questions]
-        augmented_images = []
-        for raw_image, tensor_image, image, question, tokenized_text in zip(frames, tensor_images, images, questions, tokenized_texts):
-            try:
-                augmented_images.append(augmentation(image, question, tensor_image, self.model_itm, tokenized_text, raw_image)) 
-            except:
-                # In rare cases this line fails due to size mismatch error - just fall back to using original image
-                augmented_images.append(raw_image)
-        augmented_images = [frame.resize(original_size) for frame, original_size in zip(augmented_images, original_sizes)]
-        
-        return augmented_images
-
-    def combine_logits(self, original_frame_logits, new_frame_logits):
-        # NOTE: We disable the step in AGLA to preserve only high probability tokens from original frame, since this may cause NaNs in probability distribution over "yes" and "no" tokens
-        # AGLA combines logits using alpha, preserving highest-probability tokens from original frame using probability cutoff beta
-        # cutoff = torch.log(torch.tensor(self.beta)) + original_frame_logits.max(dim=-1, keepdim=True).values
-        diffs = original_frame_logits + self.alpha * new_frame_logits
-        # cd_logits = diffs.masked_fill(original_frame_logits < cutoff, -float("inf"))
-        # return cd_logits
-        return diffs
-
 class VisualFilterTypes(Enum):
     Spatial = "spatial" # Default spatial filter that crops and masks images in black based on target objects and spatial relations mentioned in questions, then rephrases questions based on the information that has been abstracted away
     Spatial_NoRephrase = "spatial_norephrase" # Same spatial filter but does not rephrase questions
     Spatial_Blur = "spatial_blur" # Spatial filter that blurs rather than blacks out unimportant regions (also doesn't crop images or rephrase questions)
     Contrastive_Region = "contrastive_region" # Contrastive region guidance https://contrastive-region-guidance.github.io/
     Visual_Contrastive = "visual_contrastive" # Visual contrastive decoding https://arxiv.org/pdf/2311.16922
-    AGLA = "agla"
     Target_Object_Counter = "target_object_counter" # Filter that identifies objects mentioned in visual questions and counts their occurrences in frames
     # Don't include target object counter here because it won't be used in the same way as other filters

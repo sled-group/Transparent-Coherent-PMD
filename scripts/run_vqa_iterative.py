@@ -25,7 +25,7 @@ from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse, get_vqa_response_token_ids, VQAOutputs, DIALOG_START_TOKENS, IMAGE_TOKENS, USER_START_TOKENS, USER_END_TOKENS, ASSISTANT_START_TOKENS, ASSISTANT_END_TOKENS, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
 from travel.data.vqg import generate_vqg_prompt_icl
 from travel.model import simple_lm_prompt_beam_search, simple_vlm_prompt_beam_search, compute_completion_log_likelihoods, compute_completion_log_likelihoods_encoder_decoder, compute_completion_log_likelihoods_vlm
-from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, AGLAFilter, ImageMaskTypes
+from travel.model.grounding import VisualFilterTypes, ContrastiveRegionFilter, VisualContrastiveFilter, SpatialVisualFilter, ImageMaskTypes
 from travel.model.metrics import question_coherence_metrics_nli, question_coherence_metrics_vlm, generate_det_curve, compile_accuracy_and_coherence_metrics, generate_3d_overview_graph
 from travel.model.mistake_detection import MISTAKE_DETECTION_THRESHOLDS
 from travel.model.nli import NLI_MODEL_PATH, NLI_BATCH_SIZE
@@ -177,9 +177,6 @@ if args.visual_filter_mode is not None:
     elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.Visual_Contrastive:
         visual_filter = VisualContrastiveFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
         nlp = spacy.load('en_core_web_lg')            
-    elif VisualFilterTypes(args.visual_filter_mode) == VisualFilterTypes.AGLA:
-        visual_filter = AGLAFilter(alpha=args.visual_filter_strength, device=f"cuda:0")
-        nlp = None
     else:
         raise NotImplementedError(f"Visual filter type {args.visual_filter_mode} is not compatible with iterative VQA!")
 
