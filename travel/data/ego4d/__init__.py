@@ -410,8 +410,6 @@ def preprocess_actions(actions: list[dict]) -> list[dict]:
         action['previous_occurrences'] = sum([1 if structured_action == (previous_action['structured_verb'], previous_action['structured_noun']) else 0 for previous_action in actions[:action_idx - 1]])
         action['future_occurrences'] = sum([1 if structured_action == (future_action['structured_verb'], future_action['structured_noun']) else 0 for future_action in actions[action_idx + 1:]])
 
-    # TODO: Combine repeated actions? Can look at initial data and see if this is needed
-    # don't want to change number of actions here or will have to re-extract frames
     return actions
 
 class MisalignSRLEncoder(json.JSONEncoder):
@@ -444,7 +442,7 @@ class MisalignSRL:
         return cls(misalignsrl, type_name_col_name_map)
     
     def get_misaligned_samples(self, clip, random_seed, split_video_info, multi_frame=False):     
-        # TODO: we should probably apply some of the blurriness/brightness filtering steps we do for positive video clips here 
+        # NOTE: we do not apply the blurriness/brightness filtering steps we do for positive video clips here, so some clips could be lower quality
         mistake_example_meta_dict = {_: None for _ in self.type_name_col_name_map}
         
         video_uid_narration_timestamp_sec = clip["video_uid"] + "_" + str(clip["narration_timestamp_sec"])
@@ -709,7 +707,11 @@ class Ego4dFHOMainDataset:
                                         "post_times": post_frame_times,
                                         "post_frames": post_frames}
             finally:
-                video_cap.release()
+                # Always release video if possible (we might not have been able to load it in the first place)
+                try:
+                    video_cap.release()
+                except:
+                    pass
     
     def __len__(self) -> int:
         return self.num_narrated_actions    
@@ -782,7 +784,6 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
     def ego4d_narration_to_instruction(self, narration_text: str, nlp: English) -> str:
         instruction_text = clean_narration_text(narration_text) # Replace symbols in narration text with words
         instruction_text = simple_present_to_imperative(nlp, instruction_text)
-        # TODO: consider removing "another" and "more" here in a later iteration
         for original_text, replaced_text in [("in your left hand", "in your hand"),
                                                 ("in your right hand", "in your hand"),
                                                 ("with your left hand", "with your hand"),
@@ -885,7 +886,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
             # there to be an observable state change (e.g., "move tomatoes into bowl" rather than "move tomatoes")
             if clip['structured_verb'] in ["move_(transfer,_pass,_exchange)"]:
                 mentioned_objects = TargetObjectCounterFilter.parse_sentences_for_target_objects(nlp, [instruction_text])[0]
-                # TODO: this still may not be enough, e.g., "reposition the water color on the table with your hand" has enough mentioned objects but not in the right places
+                # NOTE: this still doesn't cover all cases, e.g., "reposition the water color on the table with your hand" has enough mentioned objects but not in the right places
                 if len(mentioned_objects) < 2:
                     continue
 
@@ -973,7 +974,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                                                                                            "remove"]:
                         continue
 
-                    # NOTE: in very rare cases, e.g., "rub painbrush onto wall", the structured annotation, i.e., paint, will not match the actual verb in the annotation, causing incorrect matches
+                    # NOTE: in very rare cases, e.g., "rub paintbrush onto wall", the structured annotation, i.e., paint, will not match the actual verb in the annotation, causing incorrect matches
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
                     frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']

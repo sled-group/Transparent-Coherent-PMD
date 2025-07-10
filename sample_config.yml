@@ -1,31 +1,26 @@
-hf_token: "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"
+hf_token: "hf_XXXXXXXX"
 random_seed: 222
 cache:
-  data_cache_dir: "/nfs/turbo/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl_generated_data_0808"
-  model_cache_dir: "/scratch/chaijy_root/chaijy0/sstorks/.cache/huggingface"
+  data_cache_dir: "/path/to/cached/ego4d_pmd_data"
+  model_cache_dir: "/path/to/custom/hf/cache/dir/.cache/huggingface"
   cache_frequency: 50
-  results_dir: "saved_results_222_dpo1028"
+  results_dir: "saved_results_222"
 data:
   video_frame_dimension: 600
   video_frame_dimension_cache: 300
   images_chunk_size: 200
-  captaincook4d:
-    annotations_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/annotations"
-    video_dir: "/nfs/turbo/coe-chaijy-unreplicated/datasets/captaincook4d/data/captain_cook_4d/hololens/sync/pv"
-    video_frame_sampling_frequency: 10
-    video_frame_keep_frequency: 2.0
   ego4d:
     video_frame_keep_frequency: 1.0
     video_frame_min_brightness: 0.2
-    annotation_path: "/nfs/turbo/coe-chaijy-unreplicated/datasets/ego4d/v2/annotations/fho_main.json"
-    split_path: "/nfs/turbo/coe-chaijy/generated-data/ego4d/v2/splits"
-    video_path: "/nfs/turbo/coe-chaijy-unreplicated/datasets/ego4d/v2/full_scale"
-    misalignsrl_path: "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/ego4d_mismatch_srl_files/misalignsrl_more_samples_same_split_combinedwords_wohand_objectstatesafe.parquet"
-  epickitchens:
-    annotation_path_train: "/nfs/turbo/coe-chaijy-unreplicated/datasets/EPIC-KITCHENS/epic-kitchens-100-annotations/EPIC_100_train.csv"
-    annotation_path_val: "/nfs/turbo/coe-chaijy-unreplicated/datasets/EPIC-KITCHENS/epic-kitchens-100-annotations/EPIC_100_validation.csv"
-    annotation_path_test: "/nfs/turbo/coe-chaijy-unreplicated/datasets/EPIC-KITCHENS/epic-kitchens-100-annotations/EPIC_100_test.csv"
-    video_path: "/nfs/turbo/coe-chaijy-unreplicated/datasets/EPIC-KITCHENS/EPIC-KITCHENS/"
+    annotation_path: "/path/to/ego4d/v2/annotations/fho_main.json"
+    split_path: "./ego4d_splits"
+    video_path: "/path/to/videos/in/ego4d/v2/full_scale"
+    misalignsrl_path: "/path/to/ego4d/misalignsrl_more_samples_same_split_combinedwords_wohand_objectstatesafe.parquet"
+  captaincook4d:
+    annotations_dir: "/path/to/captaincook4d/annotations"
+    video_dir: "/path/to/captaincook4d/data/captain_cook_4d/hololens/sync/pv"
+    video_frame_sampling_frequency: 10
+    video_frame_keep_frequency: 2.0    
 vqg:
   nli_correction_minimum_confidence: 0.8
 grounding:

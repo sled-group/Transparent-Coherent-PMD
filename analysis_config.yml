@@ -1,9 +1,9 @@
 instructblip_selection_val:
   outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_likelihood_nohistory_20250104121531/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_likelihood_icl20_nohistory_20250104121458/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_nohistory_20250104121458/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/instructblip-vicuna-7b/IterativeVQA_q10_ego4d_single_debug250_instructblip-vicuna-7b_beam8-4_coherence_icl20_nohistory_20250104121458/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
   result_names:
     - "Likelihood"
     - "Likelihood + ICL"
@@ -16,10 +16,10 @@ instructblip_selection_val:
     - '#00C1C1'
 llava_selection_val:
   outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_20250102112745/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_20250102113037/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_20250102113032/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_20250102112753/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
   result_names:
     - "Likelihood"
     - "Likelihood + ICL"
@@ -32,10 +32,10 @@ llava_selection_val:
     - '#00C1C1'
 llama3_selection_val:
   outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/Llama-3.2-11B-Vision-Instruct/IterativeVQA_q10_ego4d_single_debug250_Llama-3.2-11B-Vision-Instruct_beam8-4_likelihood_nohistory_20250105151156/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/Llama-3.2-11B-Vision-Instruct/IterativeVQA_q10_ego4d_single_debug250_Llama-3.2-11B-Vision-Instruct_beam8-4_likelihood_icl20_nohistory_20250105112422/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/Llama-3.2-11B-Vision-Instruct/IterativeVQA_q10_ego4d_single_debug250_Llama-3.2-11B-Vision-Instruct_beam8-4_coherence_nohistory_20250105112422/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/Llama-3.2-11B-Vision-Instruct/IterativeVQA_q10_ego4d_single_debug250_Llama-3.2-11B-Vision-Instruct_beam8-4_coherence_icl20_nohistory_20250105112422/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
   result_names:
     - "Likelihood"
     - "Likelihood + ICL"
@@ -48,10 +48,10 @@ llama3_selection_val:
     - '#00C1C1'
 llava_generation_icl_val:
   outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20250109083816_icl/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_dpo_20250109083816_icl/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_dpo_20250109083816_icl/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_dpo_20250110081313_icl/outputs_val.json"    
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"    
   result_names:
     - "Likelihood"
     - "Likelihood + ICL"
@@ -64,10 +64,10 @@ llava_generation_icl_val:
     - '#00C1C1'
 llava_generation_base_val:
   outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_nohistory_dpo_20250109083817_base/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_likelihood_icl20_nohistory_dpo_20250109083817_base/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_nohistory_dpo_20250109083817_base/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_coherence_icl20_nohistory_dpo_20250112112939_base/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
   result_names:
     - "Likelihood"
     - "Likelihood + ICL"
@@ -80,10 +80,10 @@ llava_generation_base_val:
     - '#00C1C1'
 llava_generation_icl_lp_val:
   outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_lp-1.0_likelihood_nohistory_dpo_20250110081314_icl_lp/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_lp-1.0_likelihood_icl20_nohistory_dpo_20250110081314_icl_lp/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_lp-1.0_coherence_nohistory_dpo_20250110081314_icl_lp/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_lp-1.0_coherence_icl20_nohistory_dpo_20250111122822_icl_lp/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
   result_names:
     - "Likelihood"
     - "Likelihood + ICL"
@@ -96,10 +96,10 @@ llava_generation_icl_lp_val:
     - '#00C1C1'    
 llava_generation_base_lp_val:
   outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_lp-1.0_likelihood_nohistory_dpo_20250110081314_base_lp/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_lp-1.0_likelihood_icl20_nohistory_dpo_20250110081314_base_lp/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_lp-1.0_coherence_nohistory_dpo_20250110081314_base_lp/outputs_val.json"
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/llava-1.5-7b-hf/IterativeVQA_q10_ego4d_single_debug250_llava-1.5-7b-hf_beam8-4_lp-1.0_coherence_icl20_nohistory_dpo_20250110081314_base_lp/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
   result_names:
     - "Likelihood"
     - "Likelihood + ICL"
@@ -112,7 +112,7 @@ llava_generation_base_lp_val:
     - '#00C1C1'
 gpt4o_val:
   outputs_fnames:
-    - "/home/sstorks/coe-chaijy/sstorks/simulation_informed_pcr4nlu/TRAVEl/saved_results_222_final_typofix/vqa_mistake_detection/ego4d_single_debug250/sstorks-gpt-4o/IterativeVQA_q10_ego4d_single_debug250_sstorks-gpt-4o_nohistory_12345/stopping_criteria_tuning/outputs_val.json"
+    - "/path/to/corresponding/results/directory/outputs_val.json"
   result_names:
     - "Likelihood"
   colors:

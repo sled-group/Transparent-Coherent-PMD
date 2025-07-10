@@ -21,7 +21,8 @@ mprofile_*.dat
 TRAVEl_cache_dir/
 *.out
 temp*
-AGLA
 dpo_slurm_scripts
 slurm_scripts
 slurm_logs
+*/__pycache__
+ego4d_pmd_data
