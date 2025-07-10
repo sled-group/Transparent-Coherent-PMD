@@ -16,7 +16,6 @@ from tqdm import tqdm
 from transformers import BitsAndBytesConfig, AutoModelForSequenceClassification, AutoTokenizer           
 
 from travel.constants import RESULTS_DIR, CONFIG_PATH, IMAGES_CHUNK_SIZE
-from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse, VQAOutputs, IVQA_PREAMBLE, IVQA_SUCCESS_QUESTION
@@ -74,7 +73,7 @@ if args.resume_dir is None:
     vlm_name = args.vlm_name.split('/')[-1]
     task_name = args.task
     if args.debug:
-        task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
+        task_name += f"_debug{args.debug_n_examples}"
     this_results_dir = os.path.join(task_name, vlm_name, f"IterativeVQA_q{args.max_iterations}_{task_name}")
     this_results_dir += f"_{vlm_name}" 
     if args.exclude_history_from_vqa:
@@ -106,9 +105,7 @@ dataset = None
 for retry in range(5):
     print(f"({worker_index}) Loading evaluation dataset (try {retry})...")
     try:
-        if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
-            dataset = CaptainCook4DDataset(data_split=args.eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-        elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
+        if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
             dataset = Ego4DMistakeDetectionDataset(data_split=args.eval_partition, 
                                                    mismatch_augmentation=True,
                                                    multi_frame=False,

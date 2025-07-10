@@ -194,9 +194,15 @@ class MistakeDetectionDataset:
         :param example_id: Unique example ID.
         :return: Directory name.
         """
-        example_dir = [d for d in self.example_dirs if example_id in d]
-        assert len(example_dir) == 1, "Found more than one example with this ID - are you sure you passed a unique example ID?"
-        example_dir = example_dir[0]
+        example_dir = [d for d in self.example_dirs if example_id in d] # First, in case example directories are spread across partitions of the dataset, check the list
+        if len(example_dir) > 1:
+            # If we find more than one, that's weird
+            raise ValueError("Found more than one example with this ID - are you sure you passed a unique example ID?")
+        elif len(example_dir) == 0:
+            # If we find none, this is a new example - give it a new directory based on example ID
+            example_dir = os.path.join(self.cache_dir, example_id)
+        else:
+            example_dir = example_dir[0]
         return example_dir
 
     def save_example_to_file(self, example: MistakeDetectionExample):

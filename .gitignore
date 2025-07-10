@@ -25,3 +25,4 @@ dpo_slurm_scripts
 slurm_scripts
 slurm_logs
 */__pycache__
+ego4d_pmd_data

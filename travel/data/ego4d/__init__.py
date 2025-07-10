@@ -707,7 +707,11 @@ class Ego4dFHOMainDataset:
                                         "post_times": post_frame_times,
                                         "post_frames": post_frames}
             finally:
-                video_cap.release()
+                # Always release video if possible (we might not have been able to load it in the first place)
+                try:
+                    video_cap.release()
+                except:
+                    pass
     
     def __len__(self) -> int:
         return self.num_narrated_actions    
@@ -970,7 +974,7 @@ class Ego4DMistakeDetectionDataset(MistakeDetectionDataset):
                                                                                            "remove"]:
                         continue
 
-                    # NOTE: in very rare cases, e.g., "rub painbrush onto wall", the structured annotation, i.e., paint, will not match the actual verb in the annotation, causing incorrect matches
+                    # NOTE: in very rare cases, e.g., "rub paintbrush onto wall", the structured annotation, i.e., paint, will not match the actual verb in the annotation, causing incorrect matches
                     
                     video_id = mismatch_examples[misalignsrl_type]['video_uid']
                     frame_time = mismatch_examples[misalignsrl_type]['narration_timestamp_sec']

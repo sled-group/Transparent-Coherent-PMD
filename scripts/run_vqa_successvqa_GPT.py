@@ -14,7 +14,6 @@ import torch
 from tqdm import tqdm
 
 from travel.constants import RESULTS_DIR, IMAGES_CHUNK_SIZE, HF_TOKEN, CONFIG_PATH
-from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 from travel.data.mistake_detection import MistakeDetectionTasks
 from travel.data.vqa import VQAResponse, VQAOutputs, SVQA_PREAMBLE, SVQA_SUCCESS_QUESTION
@@ -60,7 +59,7 @@ if args.resume_dir is None:
     vlm_name = args.vlm_name.split('/')[-1]
     task_name = args.task
     if args.debug:
-        task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
+        task_name += f"_debug{args.debug_n_examples}"
     this_results_dir = os.path.join(task_name, vlm_name, f"SuccessVQA_{task_name}")
     this_results_dir += f"_{vlm_name}"
     this_results_dir += f"_{args.run_id}"
@@ -81,9 +80,7 @@ dataset = None
 for retry in range(5):
     print(f"({worker_index}) Loading evaluation dataset (try {retry})...")
     try:
-        if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
-            dataset = CaptainCook4DDataset(data_split=args.eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-        elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
+        if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D_Single:
             dataset = Ego4DMistakeDetectionDataset(data_split=args.eval_partition, 
                                                    mismatch_augmentation=True,
                                                    multi_frame=False,

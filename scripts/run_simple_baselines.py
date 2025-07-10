@@ -16,11 +16,10 @@ from travel.constants import RESULTS_DIR, CONFIG_PATH
 from travel.model.metrics import generate_det_curve
 from travel.model.mistake_detection import mistake_detection_metrics, MISTAKE_DETECTION_THRESHOLDS
 from travel.data.mistake_detection import MistakeDetectionTasks
-from travel.data.captaincook4d import CaptainCook4DDataset
 from travel.data.ego4d import Ego4DMistakeDetectionDataset
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", type=str, default="captaincook4d", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
+parser.add_argument("--task", type=str, default="ego4d_single", choices=[task.value for task in MistakeDetectionTasks], help="Target mistake detection task.")
 parser.add_argument("--eval_partitions", nargs='+', type=str, default=["val", "test"])
 parser.add_argument("--debug", action="store_true", help="Pass this argument to run on only a small amount of data for debugging purposes.")
 parser.add_argument("--debug_n_examples", type=int, default=250, help="Configure the number of examples per class to generate for debugging purposes.")
@@ -29,7 +28,7 @@ args = parser.parse_args()
 timestamp = datetime.datetime.now()
 task_name = args.task
 if args.debug:
-    task_name += f"_debug{args.debug_n_examples}" if args.task != "captaincook4d" else "_debug"
+    task_name += f"_debug{args.debug_n_examples}"
 this_results_dir = os.path.join(task_name, f"simple_baselines_{task_name}")
 this_results_dir += f"_{timestamp.strftime('%Y%m%d%H%M%S')}"
 this_results_dir = os.path.join(RESULTS_DIR, "vqa_mistake_detection", this_results_dir)
@@ -37,9 +36,7 @@ os.makedirs(this_results_dir)
 
 for eval_partition in args.eval_partitions:
     # Load mistake detection dataset
-    if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.CaptainCook4D:
-        eval_dataset = CaptainCook4DDataset(data_split=eval_partition, debug_n_examples_per_class=args.debug_n_examples if args.debug else None)
-    elif MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
+    if MistakeDetectionTasks(args.task) == MistakeDetectionTasks.Ego4D:
         eval_dataset = Ego4DMistakeDetectionDataset(data_split=eval_partition, 
                                                     mismatch_augmentation=True,
                                                     multi_frame=True,

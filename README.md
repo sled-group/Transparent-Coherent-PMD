@@ -86,6 +86,8 @@ python scripts/data/run_generate_ego4d.py --partition val --mismatch_augmentatio
 python scripts/data/run_generate_ego4d.py --partition test --mismatch_augmentation --debug --debug_n_examples 1000
 ```
 
+Note: We noticed later that some videos were missing or corrupted on our system, which may cause slight variations in the videos that end up in your generated version of Ego4D-PMD. If you run into this issue while trying to reproduce results, contact Shane Storks and he'll share our generated data subsets directly with you.
+
 ## Running Experiments
 
 ### Self-Dialog Inference and Evaluation
@@ -104,7 +106,7 @@ Several notes about configuring the command:
 
 * To evaluate the VLMs studied in the paper, configure `--vlm_name` and `--hf_hub_revision` as follows:
      * InstructBLIP: `--vlm_name "Salesforce/instructblip-vicuna-7b" --hf_hub_revision "52ba0cb2c44d96b2fcceed4e84141dc40d2b6a92"`
-     * LLaVA 1.5: `--vlm_name "llava-hf/llava-1.5-7b-hf" --hf_hub_revision "12e054b30e8e061f423c7264bc97d4248232e965"`
+     * LLaVA 1.5: `--vlm_name "llava-hf/llava-1.5-7b-hf" --hf_hub_revision "8c85e9a4d626b7b908448be32c1ba5ad79b95e76"`
      * Llama 3: `--vlm_name "meta-llama/Llama-3.2-11B-Vision-Instruct" --hf_hub_revision "cee5b78e6faed15d5f2e6d8a654fd5b247c0d5ca"`
 
 * Configure `--question_selection_strategy` for `likelihood`- or `coherence`-based question selection.
