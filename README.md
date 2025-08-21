@@ -1,6 +1,6 @@
 # Transparent and Coherent Procedural Mistake Detection
 
-This is the code and data release for the paper "[Transparent and Coherent Procedural Mistake Detection](https://arxiv.org/abs/2412.11927)."
+This is the code and data release for the EMNLP 2025 paper "[Transparent and Coherent Procedural Mistake Detection](https://arxiv.org/abs/2412.11927)."
 
 ## Setup
 
