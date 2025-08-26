@@ -9,6 +9,8 @@ data:
   video_frame_dimension: 600
   video_frame_dimension_cache: 300
   images_chunk_size: 200
+  qualtrics_api_token: ""
+  qualtrics_data_center: ""
   ego4d:
     video_frame_keep_frequency: 1.0
     video_frame_min_brightness: 0.2
