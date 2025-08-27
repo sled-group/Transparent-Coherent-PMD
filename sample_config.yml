@@ -11,6 +11,7 @@ data:
   images_chunk_size: 200
   qualtrics_api_token: ""
   qualtrics_data_center: ""
+  qualtrics_library_name: ""
   ego4d:
     video_frame_keep_frequency: 1.0
     video_frame_min_brightness: 0.2
